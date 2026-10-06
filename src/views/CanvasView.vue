@@ -230,6 +230,30 @@
         ref="hud"
         class="absolute bottom-2 right-2 text-[10px] leading-tight text-gray-500 bg-black/40 rounded px-1.5 py-0.5 pointer-events-none font-mono"
       ></div>
+
+      <div
+        v-if="store.savedSession"
+        class="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/70 border border-white/15 text-xs text-gray-200 select-none"
+        role="dialog"
+        aria-label="Önceki oturum"
+      >
+        <span>
+          Önceki oturum ({{ store.savedSession.when }}, {{ store.savedSession.pages }} sayfa,
+          {{ store.savedSession.strokes }} çizgi)
+        </span>
+        <button
+          @click="restoreSession"
+          class="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
+        >
+          Geri yükle
+        </button>
+        <button
+          @click="store.dismissSavedSession()"
+          class="px-2 py-0.5 rounded hover:bg-white/10 text-gray-300"
+        >
+          Yeni başlat
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -425,6 +449,12 @@ const askDeletePage = () => {
   }
 }
 
+const restoreSession = async () => {
+  const ok = await store.loadPersisted()
+  if (!ok) showPdfError('Oturum yüklenemedi')
+  updateHud(true)
+}
+
 const sizeCanvas = () => {
   if (!baseCanvas.value || !overlayCanvas.value) return
   store.resizeCanvas()
@@ -439,8 +469,8 @@ onMounted(() => {
   store.setOverlayRef(overlayCanvas.value)
   // DPR-aware backing store + ilk redraw store üzerinden
   store.setupCanvas()
-  // Kayıtlı sahne varsa yükle (repaint içeride), sonra HUD'u tazele
-  store.loadPersisted().then(() => updateHud(true))
+  // Otomatik yükleme YOK: kayıtlı oturum varsa banner çıkar, seçim kullanıcıda.
+  store.checkSavedSession().then(() => updateHud(true))
   updateHud(true)
 
   window.addEventListener('resize', sizeCanvas)
