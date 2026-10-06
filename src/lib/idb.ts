@@ -1,9 +1,10 @@
-import type { Stroke } from '../stores/drawing'
+import type { Stroke, Tool } from '../stores/drawing'
 
 export interface PersistedDoc {
   v: 1
   savedAt: number
   strokes: Stroke[]
+  widths?: Record<Tool, number>
 }
 
 const DB_NAME = 'calem'

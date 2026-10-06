@@ -39,7 +39,14 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Aktif çizginin kirli kutusu (CSS px) — overlay fullscreen değil, bu kutu temizlenir.
   let bb: { x0: number; y0: number; x1: number; y1: number } | null = null
   const color = ref('#ffffff')
-  const strokeWidth = ref(3)
+  // Araç başına kalınlık hafızası: kalem ince, silgi kocaman olabilir; araç değişince geri gelir.
+  const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5 }
+  const WIDTH_MAX: Record<Tool, number> = { pen: 20, highlighter: 50, eraser: 120 }
+  const widths = ref<Record<Tool, number>>({ pen: 3, highlighter: 10, eraser: 24 })
+  // Mevcut aracın kalınlığı — template ve çizim buradan okur (eski strokeWidth ile aynı isim).
+  const strokeWidth = computed(() => widths.value[currentTool.value])
+  const widthMin = computed(() => WIDTH_MIN[currentTool.value])
+  const widthMax = computed(() => WIDTH_MAX[currentTool.value])
   const currentTool = ref<Tool>('pen')
   // 0 = basınç kapalı, 2 = çok hassas. UI slider'dan ayarlanır.
   const pressureSensitivity = ref(1)
@@ -73,9 +80,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     color.value = col
   }
 
-  // Stroke width change
+  // Stroke width change — ilgili araca yazılır, aralığına kelepçelenir.
   const setStrokeWidth = (w: number) => {
-    strokeWidth.value = w
+    const t = currentTool.value
+    widths.value[t] = Math.min(WIDTH_MAX[t], Math.max(WIDTH_MIN[t], Math.round(w)))
   }
 
   const setRejectTouch = (v: boolean) => {
@@ -514,7 +522,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const persistNow = async (): Promise<void> => {
     try {
       const now = Date.now()
-      const doc: PersistedDoc = { v: 1, savedAt: now, strokes: snapshot() }
+      const doc: PersistedDoc = { v: 1, savedAt: now, strokes: snapshot(), widths: { ...widths.value } }
       await idbSet(doc)
       lastSavedAt.value = fmtTime(now)
     } catch {
@@ -538,7 +546,17 @@ export const useDrawingStore = defineStore('drawing', () => {
     } catch {
       return false
     }
-    if (!doc || doc.v !== 1 || !Array.isArray(doc.strokes) || doc.strokes.length === 0) return false
+    if (!doc || doc.v !== 1 || !Array.isArray(doc.strokes)) return false
+    // Araç kalınlıkları stroke'lardan bağımsızdır: kayıt boş olsa bile uygulanır.
+    if (doc.widths) {
+      for (const t of ['pen', 'highlighter', 'eraser'] as const) {
+        const v = doc.widths[t]
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          widths.value[t] = Math.min(WIDTH_MAX[t], Math.max(WIDTH_MIN[t], Math.round(v)))
+        }
+      }
+    }
+    if (doc.strokes.length === 0) return false
     const clean: Stroke[] = []
     for (const s of doc.strokes) {
       if (!s || !Array.isArray(s.points)) continue
@@ -611,6 +629,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     isDrawing,
     color,
     strokeWidth,
+    widths,
+    widthMin,
+    widthMax,
     currentTool,
     pressureSensitivity,
     rejectTouch,

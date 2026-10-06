@@ -53,8 +53,8 @@
         <span class="text-sm text-gray-400">Kalınlık:</span>
         <input
           type="range"
-          min="1"
-          max="20"
+          :min="store.widthMin"
+          :max="store.widthMax"
           :value="store.strokeWidth"
           @input="store.setStrokeWidth(Number(($event.target as HTMLInputElement).value))"
           class="w-24 accent-indigo-600"
