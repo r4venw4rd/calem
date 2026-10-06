@@ -39,13 +39,22 @@
         </button>
       </div>
 
-      <div class="flex items-center gap-2">
-        <span class="text-sm text-gray-400">Renk:</span>
+      <div class="flex items-center gap-1.5" role="toolbar" aria-label="Renk paleti">
+        <button
+          v-for="hex in PALETTE"
+          :key="hex"
+          @click="store.setColor(hex)"
+          :title="hex"
+          class="w-6 h-6 rounded-full border transition"
+          :class="store.color.toLowerCase() === hex ? 'border-white scale-110' : 'border-white/25 hover:border-white/60'"
+          :style="{ background: hex }"
+        ></button>
         <input
           type="color"
           :value="store.color"
           @input="store.setColor(($event.target as HTMLInputElement).value)"
-          class="w-8 h-8 rounded bg-white/20 border border-white/30 cursor-pointer"
+          class="w-6 h-6 rounded-full bg-transparent border border-dashed border-white/30 cursor-pointer p-0"
+          title="Özel renk"
         />
       </div>
 
@@ -61,30 +70,6 @@
         />
         <span class="text-xs text-gray-300 w-6 text-right">{{ store.strokeWidth }}</span>
       </div>
-
-      <div class="flex items-center gap-2">
-        <span class="text-sm text-gray-400">Basınç:</span>
-        <input
-          type="range"
-          min="0"
-          max="2"
-          step="0.1"
-          :value="store.pressureSensitivity"
-          @input="store.setPressureSensitivity(Number(($event.target as HTMLInputElement).value))"
-          class="w-20 accent-indigo-600"
-          title="0=kapalı, 2=çok hassas"
-        />
-      </div>
-
-      <label class="flex items-center gap-1 text-xs text-gray-400 cursor-pointer" title="Açıkken parmakla çizim engellenir">
-        <input
-          type="checkbox"
-          :checked="store.rejectTouch"
-          @change="store.setRejectTouch(($event.target as HTMLInputElement).checked)"
-          class="accent-indigo-600"
-        />
-        Avuç reddi
-      </label>
 
       <button
         @click="undo"
@@ -104,54 +89,66 @@
         Yinele
       </button>
 
-      <button
-        @click="exportPng"
-        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition"
-        title="PNG indir"
-      >
-        PNG
-      </button>
-
-      <span
-        v-if="store.lastSavedAt"
-        class="text-[10px] text-gray-500 font-mono"
-        title="Otomatik kayıt (IndexedDB)"
-      >
-        kayıtlı {{ store.lastSavedAt }}
-      </span>
-
-      <span class="w-px h-4 bg-white/10"></span>
-
-      <label
-        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition cursor-pointer"
-        :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
-        title="PDF aç — sayfalar PDF sayfalarıyla değişir"
-      >
-        PDF Aç
-        <input
-          type="file"
-          accept="application/pdf,.pdf"
-          class="hidden"
-          :disabled="store.pdfBusy"
-          @change="onPdfFile"
-        />
-      </label>
-
-      <button
-        @click="exportPdfDoc"
-        :disabled="store.pdfBusy"
-        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
-        title="Konum + isim seçerek PDF olarak indir"
-      >
-        PDF Yaz
-      </button>
-
-      <span v-if="store.pdfName" class="flex items-center gap-1 text-[10px] text-gray-400 font-mono max-w-40 truncate" :title="store.pdfName">
-        {{ store.pdfName }}
-        <button @click="askClosePdf" class="text-gray-500 hover:text-white" title="PDF'i kapat">
-          Kapat
+      <div class="relative">
+        <button
+          @click="showFile = !showFile"
+          class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition"
+          :class="{ 'bg-white/10 text-white': showFile }"
+          title="Dosya işlemleri"
+        >
+          Dosya
         </button>
-      </span>
+        <div
+          v-if="showFile"
+          class="absolute left-0 top-full mt-1 z-20 w-56 rounded-lg bg-gray-900 border border-white/15 p-1.5 text-xs shadow-xl"
+          role="menu"
+          aria-label="Dosya"
+        >
+          <label
+            class="block w-full text-left px-3 py-1.5 rounded text-gray-200 hover:bg-white/10 transition cursor-pointer"
+            :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
+            title="PDF aç — sayfalar PDF sayfalarıyla değişir"
+          >
+            PDF Aç…
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              class="hidden"
+              :disabled="store.pdfBusy"
+              @change="onPdfFile"
+            />
+          </label>
+          <button
+            @click="exportPdfDoc"
+            :disabled="store.pdfBusy"
+            class="block w-full text-left px-3 py-1.5 rounded text-gray-200 hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Konum + isim seçerek PDF olarak indir"
+          >
+            PDF Yaz…
+          </button>
+          <button
+            @click="exportPng"
+            class="block w-full text-left px-3 py-1.5 rounded text-gray-200 hover:bg-white/10 transition"
+            title="Aktif sayfayı PNG indir"
+          >
+            PNG İndir
+          </button>
+          <div
+            v-if="store.pdfName || store.lastSavedAt"
+            class="mt-1 pt-1 border-t border-white/10 px-3 py-1 text-[10px] text-gray-500 font-mono truncate"
+          >
+            <span v-if="store.pdfName" :title="store.pdfName">
+              {{ store.pdfName }}
+              <button @click="askClosePdf" class="text-gray-400 hover:text-white underline" title="PDF'i kapat">
+                Kapat
+              </button>
+            </span>
+            <span v-if="store.lastSavedAt" :title="`Otomatik kayıt (IndexedDB)`">
+              {{ store.pdfName ? ' · ' : '' }}kayıtlı {{ store.lastSavedAt }}
+            </span>
+          </div>
+        </div>
+      </div>
 
       <span v-if="store.pdfBusy" class="text-[10px] text-yellow-400/80 font-mono">işleniyor…</span>
       <span v-if="pdfError" class="text-[10px] text-red-400 font-mono">{{ pdfError }}</span>
@@ -240,6 +237,29 @@
               @change="store.setCustomSize(store.customW, Number(($event.target as HTMLInputElement).value))"
               class="w-full px-2 py-1 rounded bg-white/10 border border-white/15 text-gray-100"
             />
+          </label>
+        </div>
+
+        <div class="mt-3 pt-2 border-t border-white/10">
+          <div class="mb-1 text-gray-400">Kalem basıncı <span class="text-gray-600">(0=kapalı)</span></div>
+          <input
+            type="range"
+            min="0"
+            max="2"
+            step="0.1"
+            :value="store.pressureSensitivity"
+            @input="store.setPressureSensitivity(Number(($event.target as HTMLInputElement).value))"
+            class="w-full accent-indigo-600"
+            title="0=kapalı, 2=çok hassas"
+          />
+          <label class="flex items-center gap-2 mt-2 cursor-pointer" title="Açıkken parmakla çizim engellenir">
+            <input
+              type="checkbox"
+              :checked="store.rejectTouch"
+              @change="store.setRejectTouch(($event.target as HTMLInputElement).checked)"
+              class="accent-indigo-600"
+            />
+            Avuç reddi
           </label>
         </div>
       </div>
@@ -377,7 +397,11 @@ const overlayCanvas = ref<HTMLCanvasElement | null>(null)
 const hud = ref<HTMLDivElement | null>(null)
 const pdfError = ref('')
 const showSettings = ref(false)
+const showFile = ref(false)
 const store = useDrawingStore()
+
+// Hızlı erişim paleti (yanındaki damlalık özel renk için)
+const PALETTE = ['#ffffff', '#000000', '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7']
 // Her pointermove'da overlay redraw yapma — frame başına en fazla 1 (rAF throttle).
 let rafId = 0
 let lastHudAt = 0
@@ -540,6 +564,7 @@ const onKeyDown = (e: KeyboardEvent) => {
 }
 
 const exportPng = () => {
+  showFile.value = false
   const url = store.exportDataURL()
   if (!url) return
   const a = document.createElement('a')
@@ -556,6 +581,7 @@ const showPdfError = (msg: string) => {
 }
 
 const onPdfFile = async (e: Event) => {
+  showFile.value = false
   const input = e.target as HTMLInputElement
   const f = input.files?.[0]
   input.value = ''
@@ -568,12 +594,14 @@ const onPdfFile = async (e: Event) => {
 }
 
 const exportPdfDoc = async () => {
+  showFile.value = false
   const res = await store.exportPdf()
   // cancelled = kullanıcı picker'da vazgeçti → hata değil, sessizlik
   if ('error' in res) showPdfError(res.error)
 }
 
 const askClosePdf = () => {
+  showFile.value = false
   const hasInk = store.pages.some((p) => p.strokes.length > 0)
   if (hasInk && !confirm('PDF kapatılıp tek boş sayfaya dönülsün mü?')) return
   store.closePdf()
