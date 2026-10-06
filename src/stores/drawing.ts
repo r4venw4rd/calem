@@ -118,6 +118,8 @@ export const useDrawingStore = defineStore('drawing', () => {
   const redoStack = ref<Stroke[]>([])
   // Son başarılı autosave saati (HH:MM) — header göstergesi, nadiren yazılır.
   const lastSavedAt = ref('')
+  // Bulunan kayıtlı oturum özeti — OTOMATİK YÜKLENMEZ, kullanıcı banner'dan seçer.
+  const savedSession = ref<{ when: string; pages: number; strokes: number } | null>(null)
 
   // Silgi history'de durur (replay tutarlılığı için) ama "çizgi" sayılmaz — HUD/undo bunu kullanır.
   // Her zaman AKTİF sayfa sayılır.
@@ -867,8 +869,49 @@ export const useDrawingStore = defineStore('drawing', () => {
     return { ...fallback }
   }
 
-  // Açılışta kayıtlı sahneyi yükler. Canvas ref'leri hazır olduktan sonra çağrılmalı.
-  // v1 (tek sayfa) kayıtları tek sayfaya göçer.
+  // Açılışta SADECE bakılır, yüklenmez: kayıtlı oturum varsa banner için özet döner.
+  // Boş kayıt (çizgisiz) oturum sayılmaz — her açılışta banner çıkmasın diye.
+  const checkSavedSession = async (): Promise<boolean> => {
+    let doc: PersistedDoc | null = null
+    try {
+      doc = await idbGet()
+    } catch {
+      savedSession.value = null
+      return false
+    }
+    if (!doc || typeof doc.v !== 'number') {
+      savedSession.value = null
+      return false
+    }
+    let pages = 0
+    let strokes = 0
+    if (doc.v === 2 && Array.isArray(doc.pages)) {
+      pages = doc.pages.length
+      for (const p of doc.pages) {
+        if (p && Array.isArray(p.strokes)) strokes += p.strokes.length
+      }
+    } else if (doc.v === 1 && Array.isArray((doc as { strokes?: unknown }).strokes)) {
+      pages = 1
+      strokes = (doc as unknown as { strokes: unknown[] }).strokes.length
+    }
+    if (strokes === 0) {
+      savedSession.value = null
+      return false
+    }
+    savedSession.value = {
+      when: fmtTime(typeof doc.savedAt === 'number' ? doc.savedAt : Date.now()),
+      pages,
+      strokes,
+    }
+    return true
+  }
+
+  const dismissSavedSession = () => {
+    savedSession.value = null
+  }
+
+  // Açılışta kayıtlı sahneyi yükler (SADECE banner'dan çağrılır — otomatik değil).
+  // Canvas ref'leri hazır olduktan sonra çağrılmalı. v1 kayıtları tek sayfaya göçer.
   const loadPersisted = async (): Promise<boolean> => {
     let doc: PersistedDoc | null = null
     try {
@@ -912,6 +955,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     if (!loaded || loaded.length === 0) return false
     pages.value = loaded
+    savedSession.value = null
     redoStack.value = []
     const idx = (doc as { activePageIndex?: unknown }).activePageIndex
     activePageIndex.value =
@@ -1067,6 +1111,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     setPressureSensitivity,
     persistNow,
     loadPersisted,
+    checkSavedSession,
+    dismissSavedSession,
+    savedSession,
     lastSavedAt,
     undoLastStroke,
     redo,
