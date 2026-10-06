@@ -1,11 +1,21 @@
-import type { Stroke, Tool } from '../stores/drawing'
+import type { Page, Stroke, Tool } from '../stores/drawing'
 
-export interface PersistedDoc {
+export interface PersistedDocV1 {
   v: 1
   savedAt: number
   strokes: Stroke[]
   widths?: Record<Tool, number>
 }
+
+export interface PersistedDocV2 {
+  v: 2
+  savedAt: number
+  pages: Page[]
+  widths?: Record<Tool, number>
+  activePageIndex?: number
+}
+
+export type PersistedDoc = PersistedDocV1 | PersistedDocV2
 
 const DB_NAME = 'calem'
 const STORE_NAME = 'docs'
