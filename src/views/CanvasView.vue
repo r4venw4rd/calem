@@ -112,6 +112,14 @@
         PNG
       </button>
 
+      <span
+        v-if="store.lastSavedAt"
+        class="text-[10px] text-gray-500 font-mono"
+        title="Otomatik kayıt (IndexedDB)"
+      >
+        kayıtlı {{ store.lastSavedAt }}
+      </span>
+
       <button
         @click="clearCanvas"
         class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition flex items-center gap-1"
@@ -301,6 +309,8 @@ onMounted(() => {
   store.setOverlayRef(overlayCanvas.value)
   // DPR-aware backing store + ilk redraw store üzerinden
   store.setupCanvas()
+  // Kayıtlı sahne varsa yükle (repaint içeride), sonra HUD'u tazele
+  store.loadPersisted().then(() => updateHud(true))
   updateHud(true)
 
   window.addEventListener('resize', sizeCanvas)
