@@ -1027,7 +1027,8 @@ export const useDrawingStore = defineStore('drawing', () => {
   const buildPdfDocument = async (): Promise<
     { doc: InstanceType<typeof import('jspdf').jsPDF>; pages: number } | { error: string }
   > => {
-    if (pdfBusy.value) return { error: 'işlem sürüyor' }
+    // Not: busy kilidi çağrıda (exportPdf); burada tekrar kontrol YOK
+    // (yoksa export kendini kilitler — gerçek vaka).
     if (pages.value.length === 0) return { error: 'sayfa yok' }
     const { jsPDF } = await import('jspdf')
     let doc: InstanceType<typeof jsPDF> | undefined
@@ -1048,13 +1049,50 @@ export const useDrawingStore = defineStore('drawing', () => {
     return { doc: doc!, pages: pages.value.length }
   }
 
-  const exportPdf = async (): Promise<{ pages: number } | { error: string }> => {
+  // Konum + isim seçimli kayıt (File System Access API).
+  // Dönüş: saved (picker ile yazıldı) / fallback (API yok, klasik indirme) /
+  // cancelled (kullanıcı vazgeçti — hata DEĞİL, sessiz dönülür).
+  const savePdfBlob = async (blob: Blob, fileName: string): Promise<'saved' | 'fallback' | 'cancelled'> => {
+    const w = window as unknown as {
+      showSaveFilePicker?: (opts: {
+        suggestedName?: string
+        types?: { description?: string; accept: Record<string, string[]> }[]
+      }) => Promise<{
+        createWritable: () => Promise<{ write: (d: Blob) => Promise<void>; close: () => Promise<void> }>
+      }>
+    }
+    if (typeof w.showSaveFilePicker !== 'function') return 'fallback'
+    try {
+      const handle = await w.showSaveFilePicker({
+        suggestedName: fileName,
+        types: [{ description: 'PDF belgesi', accept: { 'application/pdf': ['.pdf'] } }],
+      })
+      const writable = await handle.createWritable()
+      await writable.write(blob)
+      await writable.close()
+      return 'saved'
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return 'cancelled'
+      throw e
+    }
+  }
+
+  const exportPdf = async (opts: { prompt?: boolean } = {}): Promise<
+    { pages: number } | { error: string } | { cancelled: true }
+  > => {
     if (pdfBusy.value) return { error: 'işlem sürüyor' }
     pdfBusy.value = true
     try {
       const built = await buildPdfDocument()
       if ('error' in built) return built
-      built.doc.save(`calem-${new Date().toISOString().slice(0, 10)}.pdf`)
+      const fileName = `calem-${new Date().toISOString().slice(0, 10)}.pdf`
+      // Varsayılan: konum + isim sor. API yoksa (Firefox vb.) klasik indirme klasörü.
+      if (opts.prompt !== false) {
+        const how = await savePdfBlob(built.doc.output('blob'), fileName)
+        if (how === 'saved') return { pages: built.pages }
+        if (how === 'cancelled') return { cancelled: true }
+      }
+      built.doc.save(fileName)
       return { pages: built.pages }
     } catch (e) {
       console.error('[calem] PDF export hatası:', e)

@@ -141,7 +141,7 @@
         @click="exportPdfDoc"
         :disabled="store.pdfBusy"
         class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
-        title="Tüm sayfaları PDF olarak indir"
+        title="Konum + isim seçerek PDF olarak indir"
       >
         PDF Yaz
       </button>
@@ -569,6 +569,7 @@ const onPdfFile = async (e: Event) => {
 
 const exportPdfDoc = async () => {
   const res = await store.exportPdf()
+  // cancelled = kullanıcı picker'da vazgeçti → hata değil, sessizlik
   if ('error' in res) showPdfError(res.error)
 }
 
