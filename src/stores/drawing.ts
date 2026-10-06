@@ -472,19 +472,46 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
-  // Export için: sayfayı verilen canvas'a tam boy çiz (opak zemin + arkaplan + mürekkep).
-  const renderPageToCanvas = (page: Page, canvas: HTMLCanvasElement, cssW: number, cssH: number) => {
-    const ctx = getCtx(canvas)
-    if (!ctx) return false
-    const scale = dpr.value || getDPR()
-    canvas.width = Math.max(1, Math.round(cssW * scale))
-    canvas.height = Math.max(1, Math.round(cssH * scale))
-    withDpr(ctx, () => {
-      ctx.fillStyle = EXPORT_BG
-      ctx.fillRect(0, 0, cssW, cssH)
-      paintPage(ctx, page, cssW, cssH)
-    })
-    return true
+  // Export sayfa boyutu (punto): PDF arkaplanlı sayfa orijinal boyutuna birebir
+  // (A4 girer, A4 çıkar); boş sayfa ekran oranını korur, uzun kenar A4'e normalize olur.
+  // Ekran px'ini punto saymak 19 inçlik sayfalar üretirdi — jsPDF'e yön de şart
+  // (belirtilmezse landscape içeriğe portrait MediaBox açıyor).
+  const PAGE_LONG_PT = 842
+  const exportPageSize = (page: Page, viewW: number, viewH: number) => {
+    if (page.bgSize) return { w: page.bgSize.w, h: page.bgSize.h }
+    const s = PAGE_LONG_PT / Math.max(viewW, viewH)
+    return { w: viewW * s, h: viewH * s }
+  }
+
+  // Export raster: sayfayı GERÇEK boyutunda çizer (~144dpi). Arkaplan tam kanama
+  // (bitmap aspect == sayfa aspect, bozulma yok); mürekkep ekran-css'ten sayfa-pt'ye taşınır.
+  const EXPORT_SCALE = 2
+  const exportPageToCanvas = (page: Page, viewW: number, viewH: number): HTMLCanvasElement | null => {
+    const { w, h } = exportPageSize(page, viewW, viewH)
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(w * EXPORT_SCALE))
+    canvas.height = Math.max(1, Math.round(h * EXPORT_SCALE))
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.setTransform(EXPORT_SCALE, 0, 0, EXPORT_SCALE, 0, 0)
+    ctx.fillStyle = EXPORT_BG
+    ctx.fillRect(0, 0, w, h)
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(0, 0, w, h)
+    ctx.clip()
+    const bg = page.bgSize ? bgCanvases.get(page.id) : undefined
+    if (bg && page.bgSize) {
+      ctx.drawImage(bg, 0, 0, w, h)
+      // Mürekkep remap: ekrandaki contain-fit'in tersi (uniform ölçek, tek oran).
+      const f = fitContain(page.bgSize.w, page.bgSize.h, viewW, viewH)
+      const k = w / f.dw
+      ctx.translate(-f.ox * k, -f.oy * k)
+      ctx.scale(k, k)
+    }
+    for (const s of page.strokes) paintStroke(ctx, s)
+    ctx.restore()
+    return canvas
   }
 
   // Arkaplan ata (PDF import yolu). Eski bitmap varsa ezilir.
@@ -698,27 +725,42 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
-  // PDF export: her sayfa PNG'ye çevrilip tek PDF'e gömülür (WYSIWYG).
-  const exportPdf = async (): Promise<{ pages: number } | { error: string }> => {
+  // PDF export: her sayfa GERÇEK boyutunda PNG'ye çevrilip tek PDF'e gömülür.
+  // Üretim ve kaydetme ayrı (test edilebilirlik + hata ayrımı).
+  const buildPdfDocument = async (): Promise<
+    { doc: InstanceType<typeof import('jspdf').jsPDF>; pages: number } | { error: string }
+  > => {
     if (pdfBusy.value) return { error: 'işlem sürüyor' }
     const base = canvasRef.value
     if (!base || pages.value.length === 0) return { error: 'sayfa yok' }
+    const { jsPDF } = await import('jspdf')
+    const viewW = base.clientWidth || 800
+    const viewH = base.clientHeight || 600
+    let doc: InstanceType<typeof jsPDF> | undefined
+    for (let i = 0; i < pages.value.length; i++) {
+      const page = pages.value[i]!
+      const { w, h } = exportPageSize(page, viewW, viewH)
+      const orientation = w >= h ? 'landscape' : 'portrait'
+      if (!doc) {
+        doc = new jsPDF({ unit: 'pt', format: [w, h], orientation, compress: true })
+      } else {
+        doc.addPage([w, h], orientation)
+      }
+      const rendered = exportPageToCanvas(page, viewW, viewH)
+      if (!rendered) return { error: `sayfa ${i + 1} çizilemedi` }
+      doc.addImage(rendered.toDataURL('image/png'), 'PNG', 0, 0, w, h)
+    }
+    return { doc: doc!, pages: pages.value.length }
+  }
+
+  const exportPdf = async (): Promise<{ pages: number } | { error: string }> => {
+    if (pdfBusy.value) return { error: 'işlem sürüyor' }
     pdfBusy.value = true
     try {
-      const { jsPDF } = await import('jspdf')
-      const cssW = base.clientWidth || 800
-      const cssH = base.clientHeight || 600
-      const doc = new jsPDF({ unit: 'pt', format: [cssW, cssH], compress: true })
-      const tmp = document.createElement('canvas')
-      for (let i = 0; i < pages.value.length; i++) {
-        if (i > 0) doc.addPage([cssW, cssH])
-        if (!renderPageToCanvas(pages.value[i]!, tmp, cssW, cssH)) {
-          return { error: `sayfa ${i + 1} çizilemedi` }
-        }
-        doc.addImage(tmp.toDataURL('image/png'), 'PNG', 0, 0, cssW, cssH)
-      }
-      doc.save(`calem-${new Date().toISOString().slice(0, 10)}.pdf`)
-      return { pages: pages.value.length }
+      const built = await buildPdfDocument()
+      if ('error' in built) return built
+      built.doc.save(`calem-${new Date().toISOString().slice(0, 10)}.pdf`)
+      return { pages: built.pages }
     } catch {
       return { error: 'PDF yazılamadı' }
     } finally {
@@ -1016,7 +1058,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     deletePage,
     setPageBackground,
     clearPageBackground,
-    renderPageToCanvas,
+    exportPageToCanvas,
     dpr,
     setTool,
     setColor,
@@ -1050,6 +1092,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     pdfName,
     importPdf,
     closePdf,
+    buildPdfDocument,
     exportPdf,
     resizeCanvas,
   }
