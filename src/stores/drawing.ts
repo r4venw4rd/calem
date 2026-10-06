@@ -555,16 +555,26 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // ✅ Başlat - basılı tutunca. rejectTouch'ta touch yok sayılır.
+  // Sayfa DIŞINA basım yok sayılır (kenar dışı nokta tıklamasından mürekkep doğmaz).
   const startDrawing = (e: PointerEvent): boolean => {
     if (!canvasRef.value || isDrawing.value) return false
     if (shouldIgnoreEvent(e)) return false
     isDrawing.value = true
 
     const { x, y } = getPos(e)
+    const size = activePage.value.size
+    // Kenar toleransı: float/çizgi-kalınlığı payı (2 ekran-px). Ötesi ret, içi kelepçe.
+    const m = 2 / (effScale() || 1)
+    if (x < -m || y < -m || x > size.w + m || y > size.h + m) {
+      isDrawing.value = false
+      return false
+    }
+    const cx = Math.min(size.w, Math.max(0, x))
+    const cy = Math.min(size.h, Math.max(0, y))
     const p = readPressure(e)
     lastPressure = p
-    points.value = [{ x, y, pressure: p }]
-    bb = { x0: x, y0: y, x1: x, y1: y }
+    points.value = [{ x: cx, y: cy, pressure: p }]
+    bb = { x0: cx, y0: cy, x1: cx, y1: cy }
     // Silgi ilk temasta base'e nokta koyar (overlay'de önizleme olmaz).
     if (currentTool.value === 'eraser') {
       paintEraserOnBase(points.value, strokeWidth.value, paperFor(activePage.value))
@@ -580,7 +590,11 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (!isDrawing.value || !canvasRef.value) return
     if (shouldIgnoreEvent(e)) return
 
-    const { x, y } = getPos(e)
+    const raw = getPos(e)
+    const size = activePage.value.size
+    // Sayfa dışına taşan hareket kenara kelepçelenir (ekran/export tutarlılığı).
+    const x = Math.min(size.w, Math.max(0, raw.x))
+    const y = Math.min(size.h, Math.max(0, raw.y))
     const pressureVal = readPressure(e)
     lastPressure = pressureVal
 
