@@ -13,6 +13,7 @@ export interface Stroke {
 export interface PerfStats {
   lastMs: number
   emaMs: number
+  frameMs: number
   renders: number
   totalPoints: number
 }
@@ -20,7 +21,7 @@ export interface PerfStats {
 // Bilerek reaktivite DIŞI (modül seviyesi): her frame yazılır.
 // Pinia state'i içinde olsaydı her yazım tüm store'u (tüm stroke'lar dahil)
 // reaktivite/devtools hattından geçirir → çizgi sayısı arttıkça kasar.
-export const drawingPerf: PerfStats = { lastMs: 0, emaMs: 0, renders: 0, totalPoints: 0 }
+export const drawingPerf: PerfStats = { lastMs: 0, emaMs: 0, frameMs: 0, renders: 0, totalPoints: 0 }
 
 export const useDrawingStore = defineStore('drawing', () => {
   const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -34,6 +35,8 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Reactive olsaydı her yazım Pinia/devtools'a mutation olarak düşer → oturum uzadıkça kasar.
   let lastPressure = 1
   let cachedRect: DOMRect | null = null
+  // Aktif çizginin kirli kutusu (CSS px) — overlay fullscreen değil, bu kutu temizlenir.
+  let bb: { x0: number; y0: number; x1: number; y1: number } | null = null
   const color = ref('#ffffff')
   const strokeWidth = ref(3)
   const currentTool = ref<Tool>('pen')
@@ -131,6 +134,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // İlk kurulum + resize için tek giriş noktası: iki katmanı boyutlandır, base'i vektörden çiz.
   const setupCanvas = () => {
     cachedRect = null
+    bb = null
     setupBackingStoreFor(canvasRef.value)
     setupBackingStoreFor(overlayRef.value)
     repaintBase()
@@ -168,6 +172,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     const p = readPressure(e)
     lastPressure = p
     points.value = [{ x, y, pressure: p }]
+    bb = { x0: x, y0: y, x1: x, y1: y }
     // Silgi ilk temasta base'e nokta koyar (overlay'de önizleme olmaz).
     if (currentTool.value === 'eraser') paintEraserOnBase(points.value, strokeWidth.value)
     return true
@@ -194,6 +199,12 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (dx * dx + dy * dy < MIN_DIST * MIN_DIST) return
     }
     pts.push({ x, y, pressure: pressureVal })
+    if (bb) {
+      if (x < bb.x0) bb.x0 = x
+      else if (x > bb.x1) bb.x1 = x
+      if (y < bb.y0) bb.y0 = y
+      else if (y > bb.y1) bb.y1 = y
+    }
     // Silgi: yeni segmenti hemen base'e işle (overlay bypass).
     if (currentTool.value === 'eraser') paintEraserOnBase(pts, strokeWidth.value)
   }
@@ -249,6 +260,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     isDrawing.value = false
     points.value = []
     clearOverlay()
+    bb = null
   }
 
   const hexToRgba = (hex: string, alpha: number): string => {
@@ -358,10 +370,20 @@ export const useDrawingStore = defineStore('drawing', () => {
     ctx.restore()
   }
 
-  // Overlay'i temizle (aktif çizgi katmanı).
+  // Overlay'i temizle — fullscreen DEĞİL, aktif çizginin kirli kutusu + pay.
+  // Fullscreen clearRect DPR2'de ~8M px doldurur; zayıf iGPU'da her frame ödenmez.
+  const DIRTY_PAD = 36
   const clearOverlay = () => {
     const ctx = getCtx(overlayRef.value)
-    if (ctx) clearFull(ctx)
+    if (!ctx) return
+    withDpr(ctx, () => {
+      if (!bb) {
+        const s = dpr.value || getDPR()
+        ctx.clearRect(0, 0, ctx.canvas.width / s, ctx.canvas.height / s)
+        return
+      }
+      ctx.clearRect(bb.x0 - DIRTY_PAD, bb.y0 - DIRTY_PAD, bb.x1 - bb.x0 + DIRTY_PAD * 2, bb.y1 - bb.y0 + DIRTY_PAD * 2)
+    })
   }
 
   // Base katmanını geçmişten baştan çiz — sadece undo/clear/resize/setup'ta çalışır (nadir).
@@ -423,6 +445,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     drawingPerf.totalPoints = 0
     isDrawing.value = false
     cachedRect = null
+    bb = null
     const ctx = getCtx(canvasRef.value)
     if (ctx) clearFull(ctx)
     clearOverlay()
@@ -468,17 +491,22 @@ export const useDrawingStore = defineStore('drawing', () => {
     isDrawing.value = false
     repaintBase()
     clearOverlay()
+    bb = null
   }
 
   // ✅ Canvas boyutlarını yeniden hesapla — vektör geçmişi CSS px olduğu için
   // bitmap kopyaya gerek yok, sadece iki katmanı güncelle ve base'i redraw yap.
   const resizeCanvas = () => {
     cachedRect = null
+    bb = null
     setupBackingStoreFor(canvasRef.value)
     setupBackingStoreFor(overlayRef.value)
     repaintBase()
     renderActiveStroke()
   }
+
+  // HUD için: aktif çizgideki nokta sayısı (reaktiviteye dokunmadan okunur).
+  const activePoints = (): number => points.value.length
 
   return {
     canvasRef,
@@ -499,6 +527,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     setCanvasRef,
     setOverlayRef,
     setupCanvas,
+    activePoints,
     startDrawing,
     draw,
     stopDrawing,
