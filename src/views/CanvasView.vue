@@ -120,6 +120,42 @@
         kayıtlı {{ store.lastSavedAt }}
       </span>
 
+      <span class="w-px h-4 bg-white/10"></span>
+
+      <label
+        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition cursor-pointer"
+        :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
+        title="PDF aç — sayfalar PDF sayfalarıyla değişir"
+      >
+        PDF Aç
+        <input
+          type="file"
+          accept="application/pdf,.pdf"
+          class="hidden"
+          :disabled="store.pdfBusy"
+          @change="onPdfFile"
+        />
+      </label>
+
+      <button
+        @click="exportPdfDoc"
+        :disabled="store.pdfBusy"
+        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
+        title="Tüm sayfaları PDF olarak indir"
+      >
+        PDF Yaz
+      </button>
+
+      <span v-if="store.pdfName" class="flex items-center gap-1 text-[10px] text-gray-400 font-mono max-w-40 truncate" :title="store.pdfName">
+        {{ store.pdfName }}
+        <button @click="askClosePdf" class="text-gray-500 hover:text-white" title="PDF'i kapat">
+          Kapat
+        </button>
+      </span>
+
+      <span v-if="store.pdfBusy" class="text-[10px] text-yellow-400/80 font-mono">işleniyor…</span>
+      <span v-if="pdfError" class="text-[10px] text-red-400 font-mono">{{ pdfError }}</span>
+
       <button
         @click="clearCanvas"
         class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition flex items-center gap-1"
@@ -205,6 +241,7 @@ import { drawingPerf, useDrawingStore } from '@/stores/drawing'
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
 const hud = ref<HTMLDivElement | null>(null)
+const pdfError = ref('')
 const store = useDrawingStore()
 // Her pointermove'da overlay redraw yapma — frame başına en fazla 1 (rAF throttle).
 let rafId = 0
@@ -325,6 +362,37 @@ const exportPng = () => {
   a.href = url
   a.download = `calem-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`
   a.click()
+}
+
+const showPdfError = (msg: string) => {
+  pdfError.value = msg
+  window.setTimeout(() => {
+    if (pdfError.value === msg) pdfError.value = ''
+  }, 4000)
+}
+
+const onPdfFile = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const f = input.files?.[0]
+  input.value = ''
+  if (!f) return
+  const hasInk = store.pages.some((p) => p.strokes.length > 0)
+  if (hasInk && !confirm('Mevcut çizimler PDF sayfalarıyla değişecek. Devam?')) return
+  const res = await store.importPdf(f)
+  if ('error' in res) showPdfError(res.error)
+  updateHud(true)
+}
+
+const exportPdfDoc = async () => {
+  const res = await store.exportPdf()
+  if ('error' in res) showPdfError(res.error)
+}
+
+const askClosePdf = () => {
+  const hasInk = store.pages.some((p) => p.strokes.length > 0)
+  if (hasInk && !confirm('PDF kapatılıp tek boş sayfaya dönülsün mü?')) return
+  store.closePdf()
+  updateHud(true)
 }
 
 const clearCanvas = () => {
