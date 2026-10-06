@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, shallowRef } from 'vue'
 
 export type Tool = 'pen' | 'eraser' | 'highlighter'
 export interface Point { x: number; y: number; pressure?: number }
@@ -12,8 +12,12 @@ export interface Stroke {
 
 export const useDrawingStore = defineStore('drawing', () => {
   const canvasRef = ref<HTMLCanvasElement | null>(null)
+  // Aktif çizgi katmanı — commit'lenmiş sahneye dokunmadan her frame sadece bu temizlenip çizilir.
+  // Böylece per-frame maliyet O(tüm sahne) değil O(aktif çizgi) olur.
+  const overlayRef = ref<HTMLCanvasElement | null>(null)
   const isDrawing = ref(false)
-  const points = ref<Point[]>([])
+  // Hot path: her pointermove'da push — deep reactivity maliyeti olmasın diye shallow.
+  const points = shallowRef<Point[]>([])
   const pressure = ref(1)
   const color = ref('#ffffff')
   const strokeWidth = ref(3)
@@ -59,11 +63,33 @@ export const useDrawingStore = defineStore('drawing', () => {
     canvasRef.value = canvas
   }
 
+  const setOverlayRef = (canvas: HTMLCanvasElement | null) => {
+    overlayRef.value = canvas
+  }
+
+  // Düşük gecikme: Chrome'da kompozitör senkronizasyonu atlanır (desteklemeyen görmezden gelir).
+  const getCtx = (canvas: HTMLCanvasElement | null): CanvasRenderingContext2D | null => {
+    if (!canvas) return null
+    return canvas.getContext('2d', { desynchronized: true }) as CanvasRenderingContext2D | null
+  }
+
+  // DPR transform'unu uygula ve CSS-px uzayında çalıştır.
+  const withDpr = (ctx: CanvasRenderingContext2D, fn: () => void) => {
+    const scale = dpr.value || getDPR()
+    ctx.setTransform(scale, 0, 0, scale, 0, 0)
+    fn()
+  }
+
+  const clearFull = (ctx: CanvasRenderingContext2D) => {
+    withDpr(ctx, () => {
+      ctx.clearRect(0, 0, ctx.canvas.width / (dpr.value || getDPR()), ctx.canvas.height / (dpr.value || getDPR()))
+    })
+  }
+
   const getDPR = () => Math.min(window.devicePixelRatio || 1, 3)
 
   // Backing store'u CSS boyut x DPR yap. Boyut değiştiyse true döner.
-  const setupBackingStore = (): boolean => {
-    const canvas = canvasRef.value
+  const setupBackingStoreFor = (canvas: HTMLCanvasElement | null): boolean => {
     if (!canvas) return false
     const w = canvas.clientWidth
     const h = canvas.clientHeight
@@ -80,16 +106,17 @@ export const useDrawingStore = defineStore('drawing', () => {
     return false
   }
 
-  // İlk kurulum + resize için tek giriş noktası: boyutlandır ve vektörden redraw yap.
+  // İlk kurulum + resize için tek giriş noktası: iki katmanı boyutlandır, base'i vektörden çiz.
   const setupCanvas = () => {
-    if (!canvasRef.value) return
-    setupBackingStore()
-    const ctx = canvasRef.value.getContext('2d')
-    if (ctx) redraw(ctx)
+    setupBackingStoreFor(canvasRef.value)
+    setupBackingStoreFor(overlayRef.value)
+    repaintBase()
+    clearOverlay()
   }
 
   const getPos = (e: PointerEvent) => {
-    const canvas = canvasRef.value!
+    const canvas = overlayRef.value ?? canvasRef.value
+    if (!canvas) return { x: 0, y: 0 }
     const rect = canvas.getBoundingClientRect()
     // Noktalar CSS px cinsinden saklanır — DPR sadece render transform'unda uygulanır.
     return {
@@ -118,7 +145,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     return true
   }
 
-  // ✅ Çek - hareket ederken smooth çizim
+  // ✅ Çek - hareket ederken smooth çizim.
+  // Desimasyon: birbirine çok yakın noktalar path'i şişirir, görsel fark yaratmaz — atla.
+  // (Basınç belirgin değiştiyse konumu aynı olsa da noktayı tut.)
+  const MIN_DIST = 1.25
   const draw = (e: PointerEvent) => {
     if (!isDrawing.value || !canvasRef.value) return
     if (shouldIgnoreEvent(e)) return
@@ -127,21 +157,36 @@ export const useDrawingStore = defineStore('drawing', () => {
     const pressureVal = readPressure(e)
     pressure.value = pressureVal
 
-    points.value.push({ x, y, pressure: pressureVal })
+    const pts = points.value
+    const last = pts[pts.length - 1]
+    if (last) {
+      const dx = x - last.x
+      const dy = y - last.y
+      const moved = dx * dx + dy * dy >= MIN_DIST * MIN_DIST
+      const pressChanged = Math.abs(pressureVal - (last.pressure ?? 1)) > 0.25
+      if (!moved && !pressChanged) return
+    }
+    pts.push({ x, y, pressure: pressureVal })
   }
 
-  // ✅ Bitti — mevcut stroke'u geçmişe kaydet
+  // ✅ Bitti — stroke'u geçmişe kaydet ve base katmanına bir kez işle (overlay temizlenir).
   const stopDrawing = () => {
     if (isDrawing.value && points.value.length > 0) {
-      strokes.value.push({
+      const stroke: Stroke = {
         tool: currentTool.value,
         color: color.value,
         width: strokeWidth.value,
         points: [...points.value],
-      })
+      }
+      strokes.value.push(stroke)
+      const ctx = getCtx(canvasRef.value)
+      if (ctx) {
+        withDpr(ctx, () => paintStroke(ctx, stroke))
+      }
     }
     isDrawing.value = false
     points.value = []
+    clearOverlay()
   }
 
   const hexToRgba = (hex: string, alpha: number): string => {
@@ -251,33 +296,54 @@ export const useDrawingStore = defineStore('drawing', () => {
     ctx.restore()
   }
 
-  // ✅ Devam eden stroke'ı render et (incremental değil, tüm sahneyi tekrar çiz — yırtılma olmaz)
-  const renderCurrentStroke = (ctx: CanvasRenderingContext2D) => {
-    redraw(ctx)
+  // Overlay'i temizle (aktif çizgi katmanı).
+  const clearOverlay = () => {
+    const ctx = getCtx(overlayRef.value)
+    if (ctx) clearFull(ctx)
   }
 
-  // ✅ Tüm sahneyi render et: geçmiş + devam eden (CSS px uzayında, DPR transform ile)
-  const redraw = (ctx: CanvasRenderingContext2D) => {
-    const scale = dpr.value || getDPR()
-    ctx.setTransform(scale, 0, 0, scale, 0, 0)
-    ctx.clearRect(0, 0, ctx.canvas.width / scale, ctx.canvas.height / scale)
+  // Base katmanını geçmişten baştan çiz — sadece undo/clear/resize/setup'ta çalışır (nadir).
+  const repaintBase = () => {
+    const ctx = getCtx(canvasRef.value)
+    if (!ctx) return
+    clearFull(ctx)
+    withDpr(ctx, () => {
+      for (const s of strokes.value) {
+        paintStroke(ctx, s)
+      }
+    })
+  }
 
-    for (const s of strokes.value) {
-      paintStroke(ctx, s)
-    }
-    if (isDrawing.value && points.value.length > 0) {
+  // ✅ Aktif çizgiyi overlay'e çiz — per-frame tek maliyet bu (O(aktif çizgi), sahneden bağımsız).
+  const renderActiveStroke = () => {
+    const ctx = getCtx(overlayRef.value)
+    if (!ctx) return
+    clearFull(ctx)
+    if (!isDrawing.value || points.value.length === 0) return
+    withDpr(ctx, () => {
       paintStroke(ctx, {
         tool: currentTool.value,
         color: color.value,
         width: strokeWidth.value,
         points: points.value,
       })
-    }
+    })
+  }
+
+  // Geriye uyumluluk: ctx'li eski çağrılar overlay/base'e yönlenir (ctx argümanı yok sayılır).
+  const renderCurrentStroke = (_ctx?: CanvasRenderingContext2D) => {
+    renderActiveStroke()
+  }
+
+  const redraw = (_ctx?: CanvasRenderingContext2D) => {
+    repaintBase()
+    renderActiveStroke()
   }
 
   // ✅ Canvası render et (dışarıdan çağrılan)
-  const renderAllStrokes = (ctx: CanvasRenderingContext2D) => {
-    redraw(ctx)
+  const renderAllStrokes = (_ctx?: CanvasRenderingContext2D) => {
+    repaintBase()
+    renderActiveStroke()
   }
 
   // ✅ Canvası temizle
@@ -285,19 +351,25 @@ export const useDrawingStore = defineStore('drawing', () => {
     strokes.value = []
     points.value = []
     isDrawing.value = false
-    if (!canvasRef.value) return
-    const ctx = canvasRef.value.getContext('2d')
-    if (ctx) {
-      const scale = dpr.value || getDPR()
-      ctx.setTransform(scale, 0, 0, scale, 0, 0)
-      ctx.clearRect(0, 0, canvasRef.value.width / scale, canvasRef.value.height / scale)
-    }
+    const ctx = getCtx(canvasRef.value)
+    if (ctx) clearFull(ctx)
+    clearOverlay()
   }
 
-  // ✅ Görüntü verisi dışa aktar
+  // ✅ Görüntü verisi dışa aktar (base + overlay kompoze)
   const exportDataURL = (): string => {
     if (!canvasRef.value) return ''
-    return canvasRef.value.toDataURL('image/png')
+    const base = canvasRef.value
+    const overlay = overlayRef.value
+    if (!overlay) return base.toDataURL('image/png')
+    const tmp = document.createElement('canvas')
+    tmp.width = base.width
+    tmp.height = base.height
+    const tctx = tmp.getContext('2d')
+    if (!tctx) return base.toDataURL('image/png')
+    tctx.drawImage(base, 0, 0)
+    tctx.drawImage(overlay, 0, 0, tmp.width, tmp.height)
+    return tmp.toDataURL('image/png')
   }
 
   // ✅ Görüntü verisi al
@@ -319,24 +391,22 @@ export const useDrawingStore = defineStore('drawing', () => {
     strokes.value.pop()
     points.value = []
     isDrawing.value = false
-    if (canvasRef.value) {
-      const ctx = canvasRef.value.getContext('2d')
-      if (ctx) redraw(ctx)
-    }
+    repaintBase()
+    clearOverlay()
   }
 
   // ✅ Canvas boyutlarını yeniden hesapla — vektör geçmişi CSS px olduğu için
-  // bitmap kopyaya gerek yok, sadece backing store'u güncelle ve redraw yap.
+  // bitmap kopyaya gerek yok, sadece iki katmanı güncelle ve base'i redraw yap.
   const resizeCanvas = () => {
-    if (!canvasRef.value) return
-    setupBackingStore()
-    const ctx = canvasRef.value.getContext('2d')
-    if (!ctx) return
-    redraw(ctx)
+    setupBackingStoreFor(canvasRef.value)
+    setupBackingStoreFor(overlayRef.value)
+    repaintBase()
+    renderActiveStroke()
   }
 
   return {
     canvasRef,
+    overlayRef,
     isDrawing,
     pressure,
     color,
@@ -351,10 +421,14 @@ export const useDrawingStore = defineStore('drawing', () => {
     setStrokeWidth,
     setRejectTouch,
     setCanvasRef,
+    setOverlayRef,
     setupCanvas,
     startDrawing,
     draw,
     stopDrawing,
+    renderActiveStroke,
+    repaintBase,
+    clearOverlay,
     renderCurrentStroke,
     renderAllStrokes,
     redraw,
