@@ -91,6 +91,17 @@ export const useDrawingStore = defineStore('drawing', () => {
   let viewScale = 1
   let viewOx = 0
   let viewOy = 0
+  // Kullanıcı zoom/pan'i: fit'in ÜSTÜNE çarpılır (non-reactive; gesture'da reactive yazım yok).
+  // UI etiketi ayrıca senkronlanır (zoomLabel), template sadece onu okur.
+  let viewZoom = 1
+  let viewPanX = 0
+  let viewPanY = 0
+  const zoomLabel = ref('100%')
+  const ZOOM_MIN = 0.5
+  const ZOOM_MAX = 8
+  const effScale = () => (viewScale || 1) * viewZoom
+  const effOx = () => viewOx * viewZoom + viewPanX
+  const effOy = () => viewOy * viewZoom + viewPanY
   const layoutView = () => {
     const canvas = canvasRef.value
     const page = activePage.value
@@ -105,6 +116,94 @@ export const useDrawingStore = defineStore('drawing', () => {
     viewOx = f.ox
     viewOy = f.oy
   }
+
+  // --- Zoom / pan (pinch, ctrl-wheel, trackpad-kaydırma) ---
+  const syncZoomLabel = () => {
+    zoomLabel.value = `${Math.round(viewZoom * 100)}%`
+  }
+
+  const clampPan = () => {
+    const c = canvasRef.value
+    if (!c) return
+    viewPanX = Math.min(c.clientWidth, Math.max(-c.clientWidth, viewPanX))
+    viewPanY = Math.min(c.clientHeight, Math.max(-c.clientHeight, viewPanY))
+  }
+
+  // İç çekirdek: verilen ekran noktasının altındaki sayfa noktası sabit kalır.
+  const applyZoomAt = (nz: number, cx: number, cy: number) => {
+    const fs = viewScale || 1
+    const es = fs * viewZoom
+    const px = (cx - (viewOx * viewZoom + viewPanX)) / es
+    const py = (cy - (viewOy * viewZoom + viewPanY)) / es
+    viewZoom = nz
+    viewPanX = cx - (px * fs * nz + viewOx * nz)
+    viewPanY = cy - (py * fs * nz + viewOy * nz)
+  }
+
+  // İmleç/pinch-merkezi sabitli zoom. Tek repaint.
+  const zoomBy = (factor: number, cx: number, cy: number) => {
+    if (!(factor > 0) || !Number.isFinite(factor) || !Number.isFinite(cx) || !Number.isFinite(cy)) return
+    const nz = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, viewZoom * factor))
+    if (nz === viewZoom) return
+    applyZoomAt(nz, cx, cy)
+    clampPan()
+    syncZoomLabel()
+    repaintBase()
+    clearOverlay()
+  }
+
+  const panBy = (dx: number, dy: number) => {
+    if ((!dx && !dy) || !Number.isFinite(dx) || !Number.isFinite(dy)) return
+    viewPanX += dx
+    viewPanY += dy
+    clampPan()
+    repaintBase()
+    clearOverlay()
+  }
+
+  // Pinch gesture: tek repaint ile zoom + orta-nokta sürükleme.
+  const pinch = (factor: number, midX: number, midY: number, dx: number, dy: number) => {
+    if (!(factor > 0) || !Number.isFinite(factor)) return
+    const nz = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, viewZoom * factor))
+    if (nz !== viewZoom && Number.isFinite(midX) && Number.isFinite(midY)) {
+      applyZoomAt(nz, midX, midY)
+    }
+    if (Number.isFinite(dx) && Number.isFinite(dy)) {
+      viewPanX += dx || 0
+      viewPanY += dy || 0
+    }
+    clampPan()
+    syncZoomLabel()
+    repaintBase()
+    clearOverlay()
+  }
+
+  const resetView = () => {
+    viewZoom = 1
+    viewPanX = 0
+    viewPanY = 0
+    syncZoomLabel()
+    repaintBase()
+    clearOverlay()
+  }
+
+  // Ekran merkezli kademeli zoom (butonlar için).
+  const zoomStep = (factor: number) => {
+    const c = canvasRef.value
+    if (!c) return
+    zoomBy(factor, c.clientWidth / 2, c.clientHeight / 2)
+  }
+
+  // Yarım çizgiyi çöpe at (gesture başlayınca yanlış nokta kalmasın — commit YOK).
+  const cancelActiveStroke = () => {
+    isDrawing.value = false
+    points.value = []
+    bb = null
+    clearOverlay()
+  }
+
+  // Test/HUD için canlı view durumu (reaktiviteye dokunmaz).
+  const getViewTransform = () => ({ scale: effScale(), ox: effOx(), oy: effOy(), zoom: viewZoom })
 
   const pages = ref<Page[]>([blankPage()])
   const activePageIndex = ref(0)
@@ -178,10 +277,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     return canvas.getContext('2d', { desynchronized: true }) as CanvasRenderingContext2D | null
   }
 
-  // Sayfa-uzayı transform'u: DPR × view-fit. Tüm boyama bu çatı altında yapılır.
+  // Sayfa-uzayı transform'u: DPR × efektif view-fit. Tüm boyama bu çatı altında yapılır.
   const applyView = (ctx: CanvasRenderingContext2D, fn: () => void) => {
     const d = dpr.value || getDPR()
-    ctx.setTransform(d * viewScale, 0, 0, d * viewScale, d * viewOx, d * viewOy)
+    ctx.setTransform(d * effScale(), 0, 0, d * effScale(), d * effOx(), d * effOy())
     fn()
   }
 
@@ -230,11 +329,11 @@ export const useDrawingStore = defineStore('drawing', () => {
     // getBoundingClientRect çağırıp sync-layout'e zorlama.
     if (!cachedRect) cachedRect = canvas.getBoundingClientRect()
     const rect = cachedRect
-    // Ekran-css → sayfa-pt (contain-fit'in tersi).
-    const s = viewScale || 1
+    // Ekran-css → sayfa-pt (efektif fit'in tersi).
+    const s = effScale() || 1
     return {
-      x: (e.clientX - rect.left - viewOx) / s,
-      y: (e.clientY - rect.top - viewOy) / s,
+      x: (e.clientX - rect.left - effOx()) / s,
+      y: (e.clientY - rect.top - effOy()) / s,
     }
   }
 
@@ -278,7 +377,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (last) {
       const dx = x - last.x
       const dy = y - last.y
-      const minD = MIN_DIST_SCREEN / (viewScale || 1)
+      const minD = MIN_DIST_SCREEN / (effScale() || 1)
       if (dx * dx + dy * dy < minD * minD) return
     }
     pts.push({ x, y, pressure: pressureVal })
@@ -456,17 +555,20 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // Overlay'i temizle — fullscreen DEĞİL, aktif çizginin kirli kutusu + pay (sayfa uzayında).
-  const DIRTY_PAD = 36
+  // Pay ekran-px'ten çevrilir ki zoom'da da yeterli kalsın.
+  const DIRTY_PAD_SCREEN = 36
   const clearOverlay = () => {
     const ctx = getCtx(overlayRef.value)
     if (!ctx) return
+    if (!bb) {
+      clearLayer(ctx)
+      return
+    }
+    // const'a al: closure içinde let-daralma kaybolur (TS18047).
+    const box = bb
+    const pad = DIRTY_PAD_SCREEN / (effScale() || 1)
     applyView(ctx, () => {
-      if (!bb) {
-        const s = dpr.value || getDPR()
-        ctx.clearRect(0, 0, ctx.canvas.width / s, ctx.canvas.height / s)
-        return
-      }
-      ctx.clearRect(bb.x0 - DIRTY_PAD, bb.y0 - DIRTY_PAD, bb.x1 - bb.x0 + DIRTY_PAD * 2, bb.y1 - bb.y0 + DIRTY_PAD * 2)
+      ctx.clearRect(box.x0 - pad, box.y0 - pad, box.x1 - box.x0 + pad * 2, box.y1 - box.y0 + pad * 2)
     })
   }
 
@@ -640,8 +742,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     const pdf = await pdfjs.getDocument({ data: bytes }).promise
     try {
-      // Çok sayfada bellek patlamasın diye ölçek düşer (30+ sayfa → 1x).
-      const scale = pdf.numPages > 30 ? 1 : 1.5
+      // Kalite payı: zoom'da bitmap erimesin diye 2x (30+ sayfada bellek için 1.25x).
+      const scale = pdf.numPages > 30 ? 1.25 : 2
       const out: RenderedPdfPage[] = []
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i)
@@ -1088,6 +1190,14 @@ export const useDrawingStore = defineStore('drawing', () => {
     setPageBackground,
     clearPageBackground,
     exportPageToCanvas,
+    zoomLabel,
+    zoomBy,
+    panBy,
+    pinch,
+    resetView,
+    zoomStep,
+    cancelActiveStroke,
+    getViewTransform,
     dpr,
     setTool,
     setColor,

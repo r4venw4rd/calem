@@ -224,6 +224,28 @@
         >
           Sil
         </button>
+        <span class="w-px h-4 bg-white/10"></span>
+        <button
+          @click="zoomOut"
+          class="px-2 py-0.5 rounded hover:bg-white/10 font-mono"
+          title="Uzaklaş"
+        >
+          −
+        </button>
+        <button
+          @click="resetZoom"
+          class="font-mono w-12 text-center text-gray-200 hover:bg-white/10 rounded py-0.5"
+          :title="`Yakınlaştırma: ${store.zoomLabel} (sıfırlamak için tıkla)`"
+        >
+          {{ store.zoomLabel }}
+        </button>
+        <button
+          @click="zoomIn"
+          class="px-2 py-0.5 rounded hover:bg-white/10 font-mono"
+          title="Yakınlaş"
+        >
+          +
+        </button>
       </div>
       <!-- Perf HUD: reaktivite dışı güncellenir (kendisi render tetiklemez) -->
       <div
@@ -309,10 +331,33 @@ const scheduleRender = () => {
 // Event handler'lar — template'teki @pointer* binding'leri yeterli.
 // onMounted'da addEventListener EKLEME (yoksa her olay 2 kez ateşlenir).
 // Tek aktif pointer kilidi: avuç ikinci parmağı mevcut çizgiyi gasp edemez.
+// İKİ parmak = pinch gesture: yarım çizgi çöpe atılır, zoom/pan başlar.
 let activePointerId: number | null = null
+const pointers = new Map<number, { x: number; y: number }>()
+let gesture: { d0: number; mx0: number; my0: number } | null = null
+let gestureConsumed = false
+
+const ptrPos = (e: PointerEvent) => {
+  const r = overlayCanvas.value!.getBoundingClientRect()
+  return { x: e.clientX - r.left, y: e.clientY - r.top }
+}
 
 const startDraw = (e: PointerEvent) => {
-  if (!overlayCanvas.value || activePointerId !== null) return
+  if (!overlayCanvas.value) return
+  pointers.set(e.pointerId, ptrPos(e))
+  if (pointers.size === 2) {
+    store.cancelActiveStroke()
+    if (rafId !== 0) {
+      cancelAnimationFrame(rafId)
+      rafId = 0
+    }
+    activePointerId = null
+    const [a, b] = [...pointers.values()] as [{ x: number; y: number }, { x: number; y: number }]
+    gesture = { d0: Math.hypot(a.x - b.x, a.y - b.y), mx0: (a.x + b.x) / 2, my0: (a.y + b.y) / 2 }
+    gestureConsumed = true
+    return
+  }
+  if (pointers.size !== 1 || gesture || gestureConsumed) return
   if (store.rejectTouch && e.pointerType === 'touch') return
   // pointer capture ile canvas dışına taşınca bile çizmeye devam et
   try {
@@ -327,6 +372,22 @@ const startDraw = (e: PointerEvent) => {
 }
 
 const draw = (e: PointerEvent) => {
+  const tracked = pointers.get(e.pointerId)
+  if (tracked && overlayCanvas.value) {
+    const r = overlayCanvas.value.getBoundingClientRect()
+    tracked.x = e.clientX - r.left
+    tracked.y = e.clientY - r.top
+  }
+  if (gesture && pointers.size >= 2) {
+    const [a, b] = [...pointers.values()] as [{ x: number; y: number }, { x: number; y: number }]
+    const d1 = Math.hypot(a.x - b.x, a.y - b.y)
+    const mx = (a.x + b.x) / 2
+    const my = (a.y + b.y) / 2
+    if (gesture.d0 > 0) store.pinch(d1 / gesture.d0, mx, my, mx - gesture.mx0, my - gesture.my0)
+    gesture = { d0: d1, mx0: mx, my0: my }
+    updateHud()
+    return
+  }
   if (!store.isDrawing || activePointerId === null || e.pointerId !== activePointerId) return
   // Sadece basılıyken çiz (pointermove hover'da ateşlenir)
   if (e.buttons === 0 && e.pointerType === 'mouse') return
@@ -337,6 +398,16 @@ const draw = (e: PointerEvent) => {
 }
 
 const endDraw = (e?: PointerEvent) => {
+  if (e) pointers.delete(e.pointerId)
+  if (pointers.size === 0) {
+    gesture = null
+    gestureConsumed = false
+  }
+  // Gesture bitene (tüm parmaklar kalkana) kadar çizim kapalı — arta kalan parmak çizmesin.
+  if (gesture || gestureConsumed) {
+    if (gesture && pointers.size < 2) gesture = null
+    return
+  }
   if (!store.isDrawing) {
     activePointerId = null
     return
@@ -425,6 +496,38 @@ const clearCanvas = () => {
   updateHud(true)
 }
 
+// Trackpad/mause tekeri: yalın = pan, ctrl/cmd = imleç sabitli zoom.
+// passive:false ŞART (sayfa-zoom'u engellemek için preventDefault).
+const onWheel = (e: WheelEvent) => {
+  e.preventDefault()
+  if (!overlayCanvas.value) return
+  const r = overlayCanvas.value.getBoundingClientRect()
+  const cx = e.clientX - r.left
+  const cy = e.clientY - r.top
+  if (e.ctrlKey || e.metaKey) {
+    const unit = e.deltaMode === 1 ? 16 : 1
+    store.zoomBy(Math.exp(-e.deltaY * unit * 0.002), cx, cy)
+  } else {
+    store.panBy(-e.deltaX, -e.deltaY)
+  }
+  updateHud(true)
+}
+
+const zoomIn = () => {
+  store.zoomStep(1.25)
+  updateHud(true)
+}
+
+const zoomOut = () => {
+  store.zoomStep(1 / 1.25)
+  updateHud(true)
+}
+
+const resetZoom = () => {
+  store.resetView()
+  updateHud(true)
+}
+
 const prevPage = () => {
   store.goToPage(store.activePageIndex - 1)
   updateHud(true)
@@ -475,13 +578,17 @@ onMounted(() => {
 
   window.addEventListener('resize', sizeCanvas)
   window.addEventListener('keydown', onKeyDown)
+  overlayCanvas.value.addEventListener('wheel', onWheel, { passive: false })
 })
 
 onUnmounted(() => {
   if (rafId !== 0) cancelAnimationFrame(rafId)
   activePointerId = null
+  pointers.clear()
+  gesture = null
   window.removeEventListener('resize', sizeCanvas)
   window.removeEventListener('keydown', onKeyDown)
+  overlayCanvas.value?.removeEventListener('wheel', onWheel)
   store.setCanvasRef(null)
   store.setOverlayRef(null)
 })
