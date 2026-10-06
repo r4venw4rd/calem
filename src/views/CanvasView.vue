@@ -280,6 +280,26 @@
             Avuç reddi
           </label>
         </div>
+
+        <div class="mt-3 pt-2 border-t border-[var(--chrome-border)]">
+          <div class="mb-1 text-[var(--chrome-muted)]">Ayar yedeği</div>
+          <div class="flex gap-1">
+            <button
+              @click="backupSettings"
+              class="flex-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition"
+              title="Ayarları JSON indir"
+            >
+              Yedekle
+            </button>
+            <label
+              class="flex-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer text-center"
+              title="Yedekten geri yükle"
+            >
+              Geri yükle
+              <input type="file" accept="application/json,.json" class="hidden" @change="onSettingsFile" />
+            </label>
+          </div>
+        </div>
       </div>
 
       <button
@@ -596,6 +616,24 @@ const showPdfError = (msg: string) => {
   window.setTimeout(() => {
     if (pdfError.value === msg) pdfError.value = ''
   }, 4000)
+}
+
+const backupSettings = () => {
+  const blob = new Blob([store.exportSettingsJSON()], { type: 'application/json' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `calem-ayarlar-${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  window.setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+}
+
+const onSettingsFile = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const f = input.files?.[0]
+  input.value = ''
+  if (!f) return
+  const ok = await store.importSettingsJSON(await f.text())
+  if (!ok) showPdfError('Ayar dosyası geçersiz')
 }
 
 const onPdfFile = async (e: Event) => {
