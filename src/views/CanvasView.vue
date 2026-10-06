@@ -139,28 +139,18 @@ const clearCanvas = () => {
 
 const sizeCanvas = () => {
   if (!canvas.value) return
-  const c = canvas.value
-  // Boyut değiştiyse güncelle (aynıysa dokunma — dokunmak temizler)
-  const w = c.clientWidth
-  const h = c.clientHeight
-  if (w === 0 || h === 0) return
-  if (c.width !== w || c.height !== h) {
-    // Geçmişi korumak için store üzerinden resize yap
-    store.resizeCanvas()
-  }
+  store.resizeCanvas()
 }
 
 // Canvas initialization
 onMounted(() => {
   if (!canvas.value) return
   const c = canvas.value
-  // İlk boyutlandırma — sadece burada width/height ata
-  c.width = c.clientWidth
-  c.height = c.clientHeight
-
   c.style.touchAction = 'none'
 
   store.setCanvasRef(c)
+  // DPR-aware backing store + ilk redraw store üzerinden
+  store.setupCanvas()
 
   window.addEventListener('resize', sizeCanvas)
 })
