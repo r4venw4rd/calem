@@ -99,8 +99,19 @@ import { useDrawingStore } from '@/stores/drawing'
 
 const canvas = ref<HTMLCanvasElement | null>(null)
 const store = useDrawingStore()
+// Her pointermove'da full redraw yapma — frame başına en fazla 1 redraw (rAF throttle).
+let rafId = 0
 
 const getCtx = () => canvas.value?.getContext('2d') ?? null
+
+const scheduleRender = () => {
+  if (rafId !== 0) return
+  rafId = requestAnimationFrame(() => {
+    rafId = 0
+    const ctx = getCtx()
+    if (ctx) store.renderCurrentStroke(ctx)
+  })
+}
 
 // Event handler'lar — template'teki @pointer* binding'leri yeterli.
 // onMounted'da addEventListener EKLEME (yoksa her olay 2 kez ateşlenir).
@@ -113,21 +124,25 @@ const startDraw = (e: PointerEvent) => {
     /* ignore */
   }
   store.startDrawing(e)
-  const ctx = getCtx()
-  if (ctx) store.renderCurrentStroke(ctx)
+  scheduleRender()
 }
 
 const draw = (e: PointerEvent) => {
   if (!store.isDrawing) return
   // Sadece basılıyken çiz (pointermove hover'da ateşlenir)
   if (e.buttons === 0 && e.pointerType === 'mouse') return
-  store.draw(e)
-  const ctx = getCtx()
-  if (ctx) store.renderCurrentStroke(ctx)
+  // coalesced events: birikmiş ara noktaları da işle, çizgi köşelenmesin
+  const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
+  for (const ev of events) store.draw(ev as PointerEvent)
+  scheduleRender()
 }
 
 const endDraw = () => {
   if (!store.isDrawing) return
+  if (rafId !== 0) {
+    cancelAnimationFrame(rafId)
+    rafId = 0
+  }
   store.stopDrawing()
   const ctx = getCtx()
   if (ctx) store.renderAllStrokes(ctx)
@@ -156,6 +171,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (rafId !== 0) cancelAnimationFrame(rafId)
   window.removeEventListener('resize', sizeCanvas)
   store.setCanvasRef(null)
 })
