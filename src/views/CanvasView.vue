@@ -134,6 +134,11 @@
       <p class="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-gray-500 pointer-events-none">
         Basılı tutun &amp; hareket edin - Smooth çizim
       </p>
+      <!-- Perf HUD: reaktivite dışı güncellenir (kendisi render tetiklemez) -->
+      <div
+        ref="hud"
+        class="absolute bottom-2 right-2 text-[10px] leading-tight text-gray-500 bg-black/40 rounded px-1.5 py-0.5 pointer-events-none font-mono"
+      ></div>
     </div>
   </div>
 </template>
@@ -144,15 +149,30 @@ import { useDrawingStore } from '@/stores/drawing'
 
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
+const hud = ref<HTMLDivElement | null>(null)
 const store = useDrawingStore()
 // Her pointermove'da overlay redraw yapma — frame başına en fazla 1 (rAF throttle).
 let rafId = 0
+let lastHudAt = 0
+
+const fmtPts = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`)
+
+// Doğrudan DOM yazımı — reactive state'e dokunmaz, render döngüsü tetiklemez.
+const updateHud = (force = false) => {
+  const el = hud.value
+  if (!el) return
+  const now = performance.now()
+  if (!force && now - lastHudAt < 250) return
+  lastHudAt = now
+  el.textContent = `${store.perf.emaMs.toFixed(1)}ms · ${store.strokes.length} çizgi · ${fmtPts(store.perf.totalPoints)} nokta`
+}
 
 const scheduleRender = () => {
   if (rafId !== 0) return
   rafId = requestAnimationFrame(() => {
     rafId = 0
     store.renderActiveStroke()
+    updateHud()
   })
 }
 
@@ -199,10 +219,12 @@ const endDraw = (e?: PointerEvent) => {
   }
   // stopDrawing stroke'u base'e işler + overlay'i temizler — ek redraw gerekmez.
   store.stopDrawing()
+  updateHud(true)
 }
 
 const undo = () => {
   store.undoLastStroke()
+  updateHud(true)
 }
 
 const exportPng = () => {
@@ -217,6 +239,7 @@ const exportPng = () => {
 const clearCanvas = () => {
   activePointerId = null
   store.clearCanvas()
+  updateHud(true)
 }
 
 const sizeCanvas = () => {
@@ -233,6 +256,7 @@ onMounted(() => {
   store.setOverlayRef(overlayCanvas.value)
   // DPR-aware backing store + ilk redraw store üzerinden
   store.setupCanvas()
+  updateHud(true)
 
   window.addEventListener('resize', sizeCanvas)
 })
