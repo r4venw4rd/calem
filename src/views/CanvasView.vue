@@ -116,8 +116,13 @@
     </header>
 
     <div class="relative flex-1 bg-gray-900/50 min-h-0">
+      <!-- Alt katman: commit'lenmiş stroke'lar. Üst katman: aktif çizgi (pointer burada). -->
       <canvas
-        ref="canvas"
+        ref="baseCanvas"
+        class="absolute inset-0 w-full h-full block"
+      ></canvas>
+      <canvas
+        ref="overlayCanvas"
         class="absolute inset-0 w-full h-full cursor-crosshair touch-none select-none block"
         @pointerdown="startDraw"
         @pointermove="draw"
@@ -137,19 +142,17 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useDrawingStore } from '@/stores/drawing'
 
-const canvas = ref<HTMLCanvasElement | null>(null)
+const baseCanvas = ref<HTMLCanvasElement | null>(null)
+const overlayCanvas = ref<HTMLCanvasElement | null>(null)
 const store = useDrawingStore()
-// Her pointermove'da full redraw yapma — frame başına en fazla 1 redraw (rAF throttle).
+// Her pointermove'da overlay redraw yapma — frame başına en fazla 1 (rAF throttle).
 let rafId = 0
-
-const getCtx = () => canvas.value?.getContext('2d') ?? null
 
 const scheduleRender = () => {
   if (rafId !== 0) return
   rafId = requestAnimationFrame(() => {
     rafId = 0
-    const ctx = getCtx()
-    if (ctx) store.renderCurrentStroke(ctx)
+    store.renderActiveStroke()
   })
 }
 
@@ -159,11 +162,11 @@ const scheduleRender = () => {
 let activePointerId: number | null = null
 
 const startDraw = (e: PointerEvent) => {
-  if (!canvas.value || activePointerId !== null) return
+  if (!overlayCanvas.value || activePointerId !== null) return
   if (store.rejectTouch && e.pointerType === 'touch') return
   // pointer capture ile canvas dışına taşınca bile çizmeye devam et
   try {
-    canvas.value.setPointerCapture(e.pointerId)
+    overlayCanvas.value.setPointerCapture(e.pointerId)
   } catch {
     /* ignore */
   }
@@ -194,9 +197,8 @@ const endDraw = (e?: PointerEvent) => {
     cancelAnimationFrame(rafId)
     rafId = 0
   }
+  // stopDrawing stroke'u base'e işler + overlay'i temizler — ek redraw gerekmez.
   store.stopDrawing()
-  const ctx = getCtx()
-  if (ctx) store.renderAllStrokes(ctx)
 }
 
 const undo = () => {
@@ -218,17 +220,17 @@ const clearCanvas = () => {
 }
 
 const sizeCanvas = () => {
-  if (!canvas.value) return
+  if (!baseCanvas.value || !overlayCanvas.value) return
   store.resizeCanvas()
 }
 
 // Canvas initialization
 onMounted(() => {
-  if (!canvas.value) return
-  const c = canvas.value
-  c.style.touchAction = 'none'
+  if (!baseCanvas.value || !overlayCanvas.value) return
+  overlayCanvas.value.style.touchAction = 'none'
 
-  store.setCanvasRef(c)
+  store.setCanvasRef(baseCanvas.value)
+  store.setOverlayRef(overlayCanvas.value)
   // DPR-aware backing store + ilk redraw store üzerinden
   store.setupCanvas()
 
@@ -240,6 +242,7 @@ onUnmounted(() => {
   activePointerId = null
   window.removeEventListener('resize', sizeCanvas)
   store.setCanvasRef(null)
+  store.setOverlayRef(null)
 })
 </script>
 
