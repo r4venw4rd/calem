@@ -18,7 +18,12 @@ export const useDrawingStore = defineStore('drawing', () => {
   const isDrawing = ref(false)
   // Hot path: her pointermove'da push — deep reactivity maliyeti olmasın diye shallow.
   const points = shallowRef<Point[]>([])
-  const pressure = ref(1)
+  // Hot-path state bilerek NON-reactive: her pointermove alt-event'inde yazılır, template okumaz.
+  // Reactive olsaydı her yazım Pinia/devtools'a mutation olarak düşer → oturum uzadıkça kasar.
+  let lastPressure = 1
+  let cachedRect: DOMRect | null = null
+  // HUD sayaçları: referans sabit, içi mutate edilir → store.perf üzerinden canlı okunur.
+  const perf = { lastMs: 0, emaMs: 0, renders: 0, totalPoints: 0 }
   const color = ref('#ffffff')
   const strokeWidth = ref(3)
   const currentTool = ref<Tool>('pen')
@@ -86,7 +91,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     })
   }
 
-  const getDPR = () => Math.min(window.devicePixelRatio || 1, 3)
+  const getDPR = () => Math.min(window.devicePixelRatio || 1, 2)
 
   // Backing store'u CSS boyut x DPR yap. Boyut değiştiyse true döner.
   const setupBackingStoreFor = (canvas: HTMLCanvasElement | null): boolean => {
@@ -108,6 +113,7 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // İlk kurulum + resize için tek giriş noktası: iki katmanı boyutlandır, base'i vektörden çiz.
   const setupCanvas = () => {
+    cachedRect = null
     setupBackingStoreFor(canvasRef.value)
     setupBackingStoreFor(overlayRef.value)
     repaintBase()
@@ -117,7 +123,10 @@ export const useDrawingStore = defineStore('drawing', () => {
   const getPos = (e: PointerEvent) => {
     const canvas = overlayRef.value ?? canvasRef.value
     if (!canvas) return { x: 0, y: 0 }
-    const rect = canvas.getBoundingClientRect()
+    // Stroke boyunca layout sabit (overflow hidden) → rect'i bir kez al, her alt-event'te
+    // getBoundingClientRect çağırıp sync-layout'e zorlama.
+    if (!cachedRect) cachedRect = canvas.getBoundingClientRect()
+    const rect = cachedRect
     // Noktalar CSS px cinsinden saklanır — DPR sadece render transform'unda uygulanır.
     return {
       x: e.clientX - rect.left,
@@ -140,7 +149,7 @@ export const useDrawingStore = defineStore('drawing', () => {
 
     const { x, y } = getPos(e)
     const p = readPressure(e)
-    pressure.value = p
+    lastPressure = p
     points.value = [{ x, y, pressure: p }]
     return true
   }
@@ -155,7 +164,7 @@ export const useDrawingStore = defineStore('drawing', () => {
 
     const { x, y } = getPos(e)
     const pressureVal = readPressure(e)
-    pressure.value = pressureVal
+    lastPressure = pressureVal
 
     const pts = points.value
     const last = pts[pts.length - 1]
@@ -179,6 +188,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         points: [...points.value],
       }
       strokes.value.push(stroke)
+      perf.totalPoints += stroke.points.length
       const ctx = getCtx(canvasRef.value)
       if (ctx) {
         withDpr(ctx, () => paintStroke(ctx, stroke))
@@ -316,18 +326,24 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // ✅ Aktif çizgiyi overlay'e çiz — per-frame tek maliyet bu (O(aktif çizgi), sahneden bağımsız).
   const renderActiveStroke = () => {
+    const t0 = performance.now()
     const ctx = getCtx(overlayRef.value)
     if (!ctx) return
     clearFull(ctx)
-    if (!isDrawing.value || points.value.length === 0) return
-    withDpr(ctx, () => {
-      paintStroke(ctx, {
-        tool: currentTool.value,
-        color: color.value,
-        width: strokeWidth.value,
-        points: points.value,
+    if (isDrawing.value && points.value.length > 0) {
+      withDpr(ctx, () => {
+        paintStroke(ctx, {
+          tool: currentTool.value,
+          color: color.value,
+          width: strokeWidth.value,
+          points: points.value,
+        })
       })
-    })
+    }
+    const dt = performance.now() - t0
+    perf.lastMs = dt
+    perf.emaMs = perf.emaMs === 0 ? dt : perf.emaMs * 0.9 + dt * 0.1
+    perf.renders += 1
   }
 
   // Geriye uyumluluk: ctx'li eski çağrılar overlay/base'e yönlenir (ctx argümanı yok sayılır).
@@ -350,7 +366,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   const clearCanvas = () => {
     strokes.value = []
     points.value = []
+    perf.totalPoints = 0
     isDrawing.value = false
+    cachedRect = null
     const ctx = getCtx(canvasRef.value)
     if (ctx) clearFull(ctx)
     clearOverlay()
@@ -388,7 +406,8 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // ✅ Son stroke'u geri al (undo)
   const undoLastStroke = () => {
-    strokes.value.pop()
+    const popped = strokes.value.pop()
+    if (popped) perf.totalPoints = Math.max(0, perf.totalPoints - popped.points.length)
     points.value = []
     isDrawing.value = false
     repaintBase()
@@ -398,6 +417,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Canvas boyutlarını yeniden hesapla — vektör geçmişi CSS px olduğu için
   // bitmap kopyaya gerek yok, sadece iki katmanı güncelle ve base'i redraw yap.
   const resizeCanvas = () => {
+    cachedRect = null
     setupBackingStoreFor(canvasRef.value)
     setupBackingStoreFor(overlayRef.value)
     repaintBase()
@@ -408,7 +428,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     canvasRef,
     overlayRef,
     isDrawing,
-    pressure,
     color,
     strokeWidth,
     currentTool,
@@ -416,6 +435,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     rejectTouch,
     strokes,
     dpr,
+    perf,
     setTool,
     setColor,
     setStrokeWidth,
