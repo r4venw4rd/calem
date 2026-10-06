@@ -157,6 +157,94 @@
       <span v-if="pdfError" class="text-[10px] text-red-400 font-mono">{{ pdfError }}</span>
 
       <button
+        @click="showSettings = !showSettings"
+        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition"
+        :class="{ 'bg-white/10 text-white': showSettings }"
+        title="Ayarlar"
+      >
+        Ayarlar
+      </button>
+
+      <div
+        v-if="showSettings"
+        class="absolute right-2 top-full mt-1 z-20 w-64 rounded-lg bg-gray-900 border border-white/15 p-3 text-xs text-gray-300 shadow-xl"
+        role="dialog"
+        aria-label="Ayarlar"
+      >
+        <div class="flex items-center justify-between mb-2">
+          <span class="font-medium text-gray-100">Ayarlar</span>
+          <button @click="showSettings = false" class="text-gray-500 hover:text-white" title="Kapat">
+            Kapat
+          </button>
+        </div>
+
+        <div class="mb-1 text-gray-400">Kâğıt teması</div>
+        <div class="flex gap-2 mb-3">
+          <button
+            v-for="(hex, name) in PAPER_THEMES"
+            :key="name"
+            @click="store.setPaper(hex)"
+            :title="String(name)"
+            class="w-8 h-8 rounded-full border-2 transition"
+            :class="store.paper === hex ? 'border-white' : 'border-white/20 hover:border-white/50'"
+            :style="{ background: hex }"
+          ></button>
+        </div>
+
+        <div class="mb-1 text-gray-400">Sayfa biçimi <span class="text-gray-600">(yeni sayfalar)</span></div>
+        <select
+          :value="store.pageFormat"
+          @change="store.setPageFormat(($event.target as HTMLSelectElement).value)"
+          class="w-full px-2 py-1 rounded bg-white/10 border border-white/15 text-gray-100"
+        >
+          <option v-for="(_, name) in PAGE_FORMATS" :key="name" :value="name">{{ name }}</option>
+          <option value="custom">Özel</option>
+        </select>
+
+        <div class="flex gap-1 mt-2">
+          <button
+            @click="store.setPageOrientation('portrait')"
+            class="flex-1 px-2 py-1 rounded transition"
+            :class="store.pageOrientation === 'portrait' ? 'bg-indigo-600 text-white' : 'bg-white/5 hover:bg-white/10'"
+          >
+            Dikey
+          </button>
+          <button
+            @click="store.setPageOrientation('landscape')"
+            class="flex-1 px-2 py-1 rounded transition"
+            :class="store.pageOrientation === 'landscape' ? 'bg-indigo-600 text-white' : 'bg-white/5 hover:bg-white/10'"
+          >
+            Yatay
+          </button>
+        </div>
+
+        <div v-if="store.pageFormat === 'custom'" class="flex items-center gap-2 mt-2">
+          <label class="flex-1">
+            <span class="text-gray-500">Genişlik</span>
+            <input
+              type="number"
+              min="100"
+              max="3000"
+              :value="store.customW"
+              @change="store.setCustomSize(Number(($event.target as HTMLInputElement).value), store.customH)"
+              class="w-full px-2 py-1 rounded bg-white/10 border border-white/15 text-gray-100"
+            />
+          </label>
+          <label class="flex-1">
+            <span class="text-gray-500">Yükseklik</span>
+            <input
+              type="number"
+              min="100"
+              max="3000"
+              :value="store.customH"
+              @change="store.setCustomSize(store.customW, Number(($event.target as HTMLInputElement).value))"
+              class="w-full px-2 py-1 rounded bg-white/10 border border-white/15 text-gray-100"
+            />
+          </label>
+        </div>
+      </div>
+
+      <button
         @click="clearCanvas"
         class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition flex items-center gap-1"
         title="Aktif sayfayı temizle"
@@ -282,12 +370,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { drawingPerf, useDrawingStore } from '@/stores/drawing'
+import { drawingPerf, PAGE_FORMATS, PAPER_THEMES, useDrawingStore } from '@/stores/drawing'
 
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
 const hud = ref<HTMLDivElement | null>(null)
 const pdfError = ref('')
+const showSettings = ref(false)
 const store = useDrawingStore()
 // Her pointermove'da overlay redraw yapma — frame başına en fazla 1 (rAF throttle).
 let rafId = 0

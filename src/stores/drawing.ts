@@ -24,6 +24,10 @@ export interface Page {
 export interface AppSettings {
   v: 1
   paper: string
+  format: PageFormat
+  orientation: PageOrientation
+  customW: number
+  customH: number
 }
 
 // A4 punto — boş sayfaların varsayılan boyutu.
@@ -36,6 +40,16 @@ export const PAPER_THEMES = {
   kagit: '#f5f1e8',
 } as const
 export type PaperTheme = keyof typeof PAPER_THEMES
+
+// Sayfa biçimleri (punto, dikey). Yatayda en-boy yer değiştirir.
+export const PAGE_FORMATS = {
+  A4: { w: 595, h: 842 },
+  A3: { w: 842, h: 1191 },
+  A5: { w: 420, h: 595 },
+  Letter: { w: 612, h: 792 },
+} as const
+export type PageFormat = keyof typeof PAGE_FORMATS | 'custom'
+export type PageOrientation = 'portrait' | 'landscape'
 
 // Sayfa arkaplan bitmap'leri: sayfa id → render edilmiş canvas. Persist edilmez,
 // PDF bytes'larından yeniden üretilir. Aspect her zaman page.size ile aynıdır (inşa gereği).
@@ -94,9 +108,55 @@ export const useDrawingStore = defineStore('drawing', () => {
   const paperFor = (page: Page): string | null =>
     page.pdfPageIndex !== undefined && page.pdfPageIndex !== null ? null : paper.value
 
+  // Varsayılan sayfa biçimi (yeni sayfalar buradan doğar; açık sayfalar değişmez).
+  const pageFormat = ref<PageFormat>('A4')
+  const pageOrientation = ref<PageOrientation>('portrait')
+  const customW = ref(595)
+  const customH = ref(842)
+
+  const defaultPageSize = (): { w: number; h: number } => {
+    let base: { w: number; h: number }
+    if (pageFormat.value === 'custom') {
+      base = { w: customW.value, h: customH.value }
+    } else {
+      const f = PAGE_FORMATS[pageFormat.value] ?? PAGE_FORMATS.A4
+      base = { w: f.w, h: f.h }
+    }
+    const w = Math.min(3000, Math.max(100, Math.round(base.w) || 595))
+    const h = Math.min(3000, Math.max(100, Math.round(base.h) || 842))
+    return pageOrientation.value === 'landscape' ? { w: h, h: w } : { w, h }
+  }
+
+  const setPageFormat = (f: string) => {
+    if (f !== 'custom' && !(f in PAGE_FORMATS)) return
+    pageFormat.value = f as PageFormat
+    void persistSettings()
+  }
+
+  const setPageOrientation = (o: string) => {
+    if (o !== 'portrait' && o !== 'landscape') return
+    pageOrientation.value = o
+    void persistSettings()
+  }
+
+  const setCustomSize = (w: number, h: number) => {
+    if (!Number.isFinite(w) || !Number.isFinite(h)) return
+    customW.value = Math.min(3000, Math.max(100, Math.round(w)))
+    customH.value = Math.min(3000, Math.max(100, Math.round(h)))
+    void persistSettings()
+  }
+
   const persistSettings = async (): Promise<void> => {
     try {
-      await idbSetKey(SETTINGS_KEY, { v: 1, paper: paper.value } satisfies AppSettings)
+      const doc: AppSettings = {
+        v: 1,
+        paper: paper.value,
+        format: pageFormat.value,
+        orientation: pageOrientation.value,
+        customW: customW.value,
+        customH: customH.value,
+      }
+      await idbSetKey(SETTINGS_KEY, doc)
     } catch {
       /* sessiz */
     }
@@ -105,11 +165,22 @@ export const useDrawingStore = defineStore('drawing', () => {
   const loadSettings = async (): Promise<void> => {
     try {
       const raw = await idbGetKey<AppSettings>(SETTINGS_KEY)
-      if (raw && raw.v === 1 && typeof raw.paper === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw.paper)) {
+      if (!raw || raw.v !== 1) return
+      if (typeof raw.paper === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw.paper)) {
         paper.value = raw.paper
       }
+      if (raw.format === 'custom' || (typeof raw.format === 'string' && raw.format in PAGE_FORMATS)) {
+        pageFormat.value = raw.format as PageFormat
+      }
+      if (raw.orientation === 'portrait' || raw.orientation === 'landscape') {
+        pageOrientation.value = raw.orientation
+      }
+      if (Number.isFinite(raw.customW) && Number.isFinite(raw.customH)) {
+        customW.value = Math.min(3000, Math.max(100, Math.round(raw.customW)))
+        customH.value = Math.min(3000, Math.max(100, Math.round(raw.customH)))
+      }
     } catch {
-      /* varsayılan kâğıt */
+      /* varsayılanlar */
     }
   }
   const color = ref('#ffffff')
@@ -134,7 +205,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Stroke'lar sayfalarda durur; tüm çizim op'ları AKTİF sayfaya işler.
   const newPageId = () =>
     `p-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
-  const blankPage = (): Page => ({ id: newPageId(), strokes: [], size: { ...A4 } })
+  const blankPage = (): Page => ({ id: newPageId(), strokes: [], size: defaultPageSize() })
 
   // View transform (non-reactive): aktif sayfa → ekran contain-fit.
   // Tüm giriş (getPos) ve çıkış (paint) bu uzaydan geçer; zoom/pan'in zemini.
@@ -1254,6 +1325,13 @@ export const useDrawingStore = defineStore('drawing', () => {
     paper,
     setPaper,
     loadSettings,
+    pageFormat,
+    pageOrientation,
+    customW,
+    customH,
+    setPageFormat,
+    setPageOrientation,
+    setCustomSize,
     strokeWidth,
     widths,
     widthMin,
