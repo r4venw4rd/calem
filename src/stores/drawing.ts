@@ -187,8 +187,66 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
-  const loadSettings = async (): Promise<void> => {
+  // Ayar yedeği: indirilen JSON'u başka cihaza/tarayıcıya taşımak için.
+  const exportSettingsJSON = (): string => {
+    const doc: AppSettings = {
+      v: 1,
+      paper: paper.value,
+      format: pageFormat.value,
+      orientation: pageOrientation.value,
+      customW: customW.value,
+      customH: customH.value,
+      uiTheme: uiTheme.value,
+    }
+    return JSON.stringify(doc)
+  }
+
+  // Yedeği geri yükler: alan alan doğrular, geçerlileri uygular, tek persist.
+  // En az bir alan uygulandıysa true döner.
+  const importSettingsJSON = async (text: string): Promise<boolean> => {
+    let raw: unknown
     try {
+      raw = JSON.parse(text)
+    } catch {
+      return false
+    }
+    if (!raw || typeof raw !== 'object') return false
+    const r = raw as Record<string, unknown>
+    let applied = false
+    const paperHex = r.paper
+    if (typeof paperHex === 'string' && /^#[0-9a-fA-F]{6}$/.test(paperHex)) {
+      paper.value = paperHex
+      applied = true
+    }
+    const fmt = r.format
+    if (fmt === 'custom' || (typeof fmt === 'string' && fmt in PAGE_FORMATS)) {
+      pageFormat.value = fmt as PageFormat
+      applied = true
+    }
+    if (r.orientation === 'portrait' || r.orientation === 'landscape') {
+      pageOrientation.value = r.orientation
+      applied = true
+    }
+    if (Number.isFinite(r.customW) && Number.isFinite(r.customH)) {
+      customW.value = Math.min(3000, Math.max(100, Math.round(r.customW as number)))
+      customH.value = Math.min(3000, Math.max(100, Math.round(r.customH as number)))
+      applied = true
+    }
+    if (r.uiTheme === 'koyu' || r.uiTheme === 'acik') {
+      uiTheme.value = r.uiTheme
+      applied = true
+    }
+    if (!applied) return false
+    applyUiTheme()
+    await persistSettings()
+    if (canvasRef.value) {
+      repaintBase()
+      clearOverlay()
+    }
+    return true
+  }
+
+  const loadSettings = async (): Promise<void> => {    try {
       const raw = await idbGetKey<AppSettings>(SETTINGS_KEY)
       if (!raw || raw.v !== 1) return
       if (typeof raw.paper === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw.paper)) {
@@ -1490,6 +1548,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     setCustomSize,
     uiTheme,
     setUiTheme,
+    exportSettingsJSON,
+    importSettingsJSON,
     strokeWidth,
     widths,
     widthMin,
