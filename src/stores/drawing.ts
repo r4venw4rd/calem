@@ -13,13 +13,15 @@ export interface Stroke {
 export const useDrawingStore = defineStore('drawing', () => {
   const canvasRef = ref<HTMLCanvasElement | null>(null)
   const isDrawing = ref(false)
-  const lastPoint = ref({ x: 0, y: 0 })
   const points = ref<Point[]>([])
   const pressure = ref(1)
   const color = ref('#ffffff')
   const strokeWidth = ref(3)
   const currentTool = ref<Tool>('pen')
+  // 0 = basınç kapalı, 2 = çok hassas. UI slider'dan ayarlanır.
   const pressureSensitivity = ref(1)
+  // Açıkken touch ile çizim engellenir (stylus + mouse serbest) — Chromebook avuç reddi.
+  const rejectTouch = ref(false)
   // Backing-store ölçeği — noktalar CSS px cinsinden saklanır, render DPR ile ölçeklenir.
   // Böylece resize'da vektör geçmişi bozulmaz, hidpi'de bulanıklık olmaz.
   const dpr = ref(1)
@@ -40,6 +42,15 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Stroke width change
   const setStrokeWidth = (w: number) => {
     strokeWidth.value = w
+  }
+
+  const setRejectTouch = (v: boolean) => {
+    rejectTouch.value = v
+  }
+
+  const shouldIgnoreEvent = (e: PointerEvent): boolean => {
+    if (rejectTouch.value && e.pointerType === 'touch') return true
+    return false
   }
 
   // Canvas ref setter — DİKKAT: burada width/height sıfırlama YAPMA.
@@ -87,29 +98,36 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
-  // ✅ Başlat - basılı tutunca
-  const startDrawing = (e: PointerEvent) => {
-    if (!canvasRef.value) return
+  const readPressure = (e: PointerEvent): number => {
+    // mouse her zaman 1; stylus/touch basıncı yoksa nötr 0.5 (çizgi kaybolmasın)
+    if (e.pointerType === 'mouse') return 1
+    if (e.pressure && e.pressure > 0) return e.pressure
+    return 0.5
+  }
+
+  // ✅ Başlat - basılı tutunca. rejectTouch'ta touch yok sayılır.
+  const startDrawing = (e: PointerEvent): boolean => {
+    if (!canvasRef.value || isDrawing.value) return false
+    if (shouldIgnoreEvent(e)) return false
     isDrawing.value = true
 
     const { x, y } = getPos(e)
-    lastPoint.value = { x, y }
-
-    const p = e.pressure && e.pressure > 0 ? e.pressure : 1
-    pressure.value = currentTool.value === 'highlighter' ? 0.8 : p
-    points.value = [{ x, y, pressure: pressure.value }]
+    const p = readPressure(e)
+    pressure.value = p
+    points.value = [{ x, y, pressure: p }]
+    return true
   }
 
   // ✅ Çek - hareket ederken smooth çizim
   const draw = (e: PointerEvent) => {
     if (!isDrawing.value || !canvasRef.value) return
+    if (shouldIgnoreEvent(e)) return
 
     const { x, y } = getPos(e)
-    const pressureVal = e.pressure && e.pressure > 0 ? e.pressure : 1
+    const pressureVal = readPressure(e)
     pressure.value = pressureVal
 
     points.value.push({ x, y, pressure: pressureVal })
-    lastPoint.value = { x, y }
   }
 
   // ✅ Bitti — mevcut stroke'u geçmişe kaydet
@@ -201,20 +219,32 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
+  // Basınç ortalamasından efektif genişlik: sensitivity=0 → basınç yok sayılır.
+  const effectiveWidth = (pts: Point[], base: number): number => {
+    if (pressureSensitivity.value <= 0 || pts.length === 0) return base
+    let sum = 0
+    for (const p of pts) sum += p.pressure ?? 1
+    const avg = sum / pts.length
+    const pressureFactor = 0.4 + 0.6 * Math.min(Math.max(avg, 0), 1)
+    const w = base * (1 + (pressureFactor - 1) * Math.min(pressureSensitivity.value, 2))
+    return Math.max(w, 0.5)
+  }
+
   const paintStroke = (
     ctx: CanvasRenderingContext2D,
     s: Pick<Stroke, 'tool' | 'color' | 'width' | 'points'>,
   ) => {
     if (s.points.length === 0) return
     ctx.save()
-    applyStyleForStroke(ctx, s.tool, s.color, s.width)
+    const w = s.tool === 'eraser' ? s.width : effectiveWidth(s.points, s.width)
+    applyStyleForStroke(ctx, s.tool, s.color, w)
     strokePath(ctx, s.points)
     ctx.stroke()
     // Tek nokta ise dolgu da yap ki görünsün
     if (s.points.length === 1) {
       const p = s.points[0]!
       ctx.beginPath()
-      ctx.arc(p.x, p.y, Math.max(s.width / 2, 1), 0, Math.PI * 2)
+      ctx.arc(p.x, p.y, Math.max(w / 2, 1), 0, Math.PI * 2)
       ctx.fillStyle = s.tool === 'highlighter' ? hexToRgba(s.color, 0.5) : s.color
       ctx.fill()
     }
@@ -279,9 +309,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     )
   }
 
-  // ✅ Pressure sensitivity ayarla
+  // ✅ Pressure sensitivity ayarla (0..2 aralığına kelepçele)
   const setPressureSensitivity = (val: number) => {
-    pressureSensitivity.value = val
+    pressureSensitivity.value = Math.min(2, Math.max(0, val))
   }
 
   // ✅ Son stroke'u geri al (undo)
@@ -313,11 +343,13 @@ export const useDrawingStore = defineStore('drawing', () => {
     strokeWidth,
     currentTool,
     pressureSensitivity,
+    rejectTouch,
     strokes,
     dpr,
     setTool,
     setColor,
     setStrokeWidth,
+    setRejectTouch,
     setCanvasRef,
     setupCanvas,
     startDrawing,
