@@ -461,19 +461,24 @@ export const useDrawingStore = defineStore('drawing', () => {
     scheduleSave()
   }
 
-  // ✅ Görüntü verisi dışa aktar (base + overlay kompoze)
+  // Ekranla birebir koyu zemin — beyaz kalem export'ta da görünür kalır.
+  // (Şeffaf bırakılırsa PNG görüntüleyicide satranç tahtası/şeffaf açılır.)
+  const EXPORT_BG = '#111827'
+
+  // ✅ Görüntü verisi dışa aktar (opak zemin + base + overlay kompoze)
   const exportDataURL = (): string => {
     if (!canvasRef.value) return ''
     const base = canvasRef.value
     const overlay = overlayRef.value
-    if (!overlay) return base.toDataURL('image/png')
     const tmp = document.createElement('canvas')
     tmp.width = base.width
     tmp.height = base.height
     const tctx = tmp.getContext('2d')
     if (!tctx) return base.toDataURL('image/png')
+    tctx.fillStyle = EXPORT_BG
+    tctx.fillRect(0, 0, tmp.width, tmp.height)
     tctx.drawImage(base, 0, 0)
-    tctx.drawImage(overlay, 0, 0, tmp.width, tmp.height)
+    if (overlay) tctx.drawImage(overlay, 0, 0, tmp.width, tmp.height)
     return tmp.toDataURL('image/png')
   }
 
