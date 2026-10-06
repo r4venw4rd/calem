@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
+import { idbGet, idbSet, type PersistedDoc } from '../lib/idb'
 
 export type Tool = 'pen' | 'eraser' | 'highlighter'
 export interface Point { x: number; y: number; pressure?: number }
@@ -52,6 +53,8 @@ export const useDrawingStore = defineStore('drawing', () => {
   const strokes = ref<Stroke[]>([])
   // Undo ile çıkanlar buraya; yeni çizgi girince ölür (klasik redo semantiği).
   const redoStack = ref<Stroke[]>([])
+  // Son başarılı autosave saati (HH:MM) — header göstergesi, nadiren yazılır.
+  const lastSavedAt = ref('')
 
   // Silgi history'de durur (replay tutarlılığı için) ama "çizgi" sayılmaz — HUD/undo bunu kullanır.
   const drawingCount = computed(() => {
@@ -260,6 +263,7 @@ export const useDrawingStore = defineStore('drawing', () => {
           withDpr(ctx, () => paintStroke(ctx, stroke))
         }
       }
+      scheduleSave()
     }
     isDrawing.value = false
     points.value = []
@@ -454,6 +458,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     const ctx = getCtx(canvasRef.value)
     if (ctx) clearFull(ctx)
     clearOverlay()
+    scheduleSave()
   }
 
   // ✅ Görüntü verisi dışa aktar (base + overlay kompoze)
@@ -486,6 +491,73 @@ export const useDrawingStore = defineStore('drawing', () => {
     pressureSensitivity.value = Math.min(2, Math.max(0, val))
   }
 
+  // --- Autosave (IndexedDB, debounce'lu) ---
+  let saveTimer: ReturnType<typeof setTimeout> | undefined
+
+  const fmtTime = (t: number) =>
+    new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+
+  // Reactive proxy'leri düz veriye çevir — IDB structured-clone'a temiz girer.
+  const snapshot = (): Stroke[] =>
+    strokes.value.map((s) => ({
+      tool: s.tool,
+      color: s.color,
+      width: s.width,
+      points: s.points.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
+    }))
+
+  const persistNow = async (): Promise<void> => {
+    try {
+      const now = Date.now()
+      const doc: PersistedDoc = { v: 1, savedAt: now, strokes: snapshot() }
+      await idbSet(doc)
+      lastSavedAt.value = fmtTime(now)
+    } catch {
+      // Özel mod / IDB kapalı: sessizce vazgeç (çizim bellekte sürer).
+    }
+  }
+
+  const scheduleSave = () => {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      saveTimer = undefined
+      void persistNow()
+    }, 800)
+  }
+
+  // Açılışta kayıtlı sahneyi yükler. Canvas ref'leri hazır olduktan sonra çağrılmalı.
+  const loadPersisted = async (): Promise<boolean> => {
+    let doc: PersistedDoc | null = null
+    try {
+      doc = await idbGet()
+    } catch {
+      return false
+    }
+    if (!doc || doc.v !== 1 || !Array.isArray(doc.strokes) || doc.strokes.length === 0) return false
+    const clean: Stroke[] = []
+    for (const s of doc.strokes) {
+      if (!s || !Array.isArray(s.points)) continue
+      const pts = s.points.filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y))
+      if (pts.length === 0) continue
+      clean.push({
+        tool: s.tool === 'eraser' || s.tool === 'highlighter' ? s.tool : 'pen',
+        color: typeof s.color === 'string' ? s.color : '#ffffff',
+        width: typeof s.width === 'number' ? Math.min(100, Math.max(1, s.width)) : 3,
+        points: pts.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
+      })
+    }
+    if (clean.length === 0) return false
+    strokes.value = clean
+    redoStack.value = []
+    drawingPerf.totalPoints = clean.reduce(
+      (n, s) => n + (s.tool === 'eraser' ? 0 : s.points.length),
+      0,
+    )
+    lastSavedAt.value = fmtTime(doc.savedAt)
+    repaintBase()
+    return true
+  }
+
   // ✅ Son stroke'u geri al (undo)
   const undoLastStroke = () => {
     const popped = strokes.value.pop()
@@ -500,6 +572,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     repaintBase()
     clearOverlay()
     bb = null
+    scheduleSave()
   }
 
   // ✅ Yinele (redo) — undo ile çıkan en son stroke'u geri koyar.
@@ -509,6 +582,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     strokes.value.push(s)
     if (s.tool !== 'eraser') drawingPerf.totalPoints += s.points.length
     repaintBase()
+    scheduleSave()
     return true
   }
 
@@ -559,6 +633,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     exportDataURL,
     getImageData,
     setPressureSensitivity,
+    persistNow,
+    loadPersisted,
+    lastSavedAt,
     undoLastStroke,
     redo,
     redoStack,
