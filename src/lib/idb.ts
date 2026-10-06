@@ -65,11 +65,22 @@ function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) 
 }
 
 export function idbGet(): Promise<PersistedDoc | null> {
-  return tx(DOCS_STORE, 'readonly', (s) => s.get(KEY)).then((v) => (v as PersistedDoc | undefined) ?? null)
+  return idbGetKey<PersistedDoc>(KEY)
 }
 
 export function idbSet(doc: PersistedDoc): Promise<void> {
-  return tx(DOCS_STORE, 'readwrite', (s) => s.put(doc, KEY)).then(() => undefined)
+  return idbSetKey(KEY, doc)
+}
+
+// Esnek ayar deposu (kâğıt, biçim, toolbar konumu… — Xournal-esnekliğinin zemini).
+export const SETTINGS_KEY = 'settings'
+
+export function idbGetKey<T>(key: string): Promise<T | null> {
+  return tx(DOCS_STORE, 'readonly', (s) => s.get(key)).then((v) => (v as T | undefined) ?? null)
+}
+
+export function idbSetKey<T>(key: string, value: T): Promise<void> {
+  return tx(DOCS_STORE, 'readwrite', (s) => s.put(value, key)).then(() => undefined)
 }
 
 export function idbGetFile(id: string): Promise<PdfFileRecord | null> {

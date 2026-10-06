@@ -570,10 +570,15 @@ onMounted(() => {
 
   store.setCanvasRef(baseCanvas.value)
   store.setOverlayRef(overlayCanvas.value)
-  // DPR-aware backing store + ilk redraw store üzerinden
-  store.setupCanvas()
-  // Otomatik yükleme YOK: kayıtlı oturum varsa banner çıkar, seçim kullanıcıda.
-  store.checkSavedSession().then(() => updateHud(true))
+  // Önce ayarlar (kâğıt rengi), sonra ilk boya — yanlış renk flaşı yok.
+  // Otomatik oturum yükleme YOK: kayıt varsa banner çıkar, seçim kullanıcıda.
+  store
+    .loadSettings()
+    .then(() => {
+      store.setupCanvas()
+      return store.checkSavedSession()
+    })
+    .then(() => updateHud(true))
   updateHud(true)
 
   window.addEventListener('resize', sizeCanvas)
