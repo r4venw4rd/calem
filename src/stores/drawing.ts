@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
-import { idbGet, idbSet, type PersistedDoc } from '../lib/idb'
+import { idbDeleteFile, idbGet, idbGetFile, idbSet, idbSetFile, type PersistedDoc } from '../lib/idb'
 
 export type Tool = 'pen' | 'eraser' | 'highlighter'
 export interface Point { x: number; y: number; pressure?: number }
@@ -602,6 +602,136 @@ export const useDrawingStore = defineStore('drawing', () => {
     pressureSensitivity.value = Math.min(2, Math.max(0, val))
   }
 
+  // --- PDF (çok sayfalı import, arkaplanlar sayfa bitmap'i olur) ---
+  // pdf.js/jspdf DİNAMİK import edilir — ilk yüklemeye ~1MB eklenmez, PDF'e dokununca gelir.
+  const pdfBusy = ref(false)
+  const pdfId = ref<string | null>(null)
+  const pdfName = ref('')
+  let workerReady = false
+
+  interface RenderedPdfPage {
+    canvas: HTMLCanvasElement
+    cssW: number
+    cssH: number
+  }
+
+  const renderPdfPages = async (bytes: Uint8Array): Promise<RenderedPdfPage[]> => {
+    const pdfjs = await import('pdfjs-dist')
+    if (!workerReady) {
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+        'pdfjs-dist/build/pdf.worker.min.mjs',
+        import.meta.url,
+      ).href
+      workerReady = true
+    }
+    const pdf = await pdfjs.getDocument({ data: bytes }).promise
+    try {
+      // Çok sayfada bellek patlamasın diye ölçek düşer (30+ sayfa → 1x).
+      const scale = pdf.numPages > 30 ? 1 : 1.5
+      const out: RenderedPdfPage[] = []
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i)
+        const viewport = page.getViewport({ scale })
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.ceil(viewport.width)
+        canvas.height = Math.ceil(viewport.height)
+        const ctx = canvas.getContext('2d')
+        if (!ctx) continue
+        await page.render({ canvas, canvasContext: ctx, viewport }).promise
+        out.push({ canvas, cssW: viewport.width / scale, cssH: viewport.height / scale })
+      }
+      return out
+    } finally {
+      // v6'da document destroy yok; cleanup sayfa kaynaklarını bırakır (worker yeniden kullanılır).
+      await pdf.cleanup()
+    }
+  }
+
+  // PDF açar: sayfaları değiştirir (component önceden confirm sorar).
+  const importPdf = async (file: File): Promise<{ pages: number } | { error: string }> => {
+    if (pdfBusy.value) return { error: 'işlem sürüyor' }
+    const looksPdf = file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf')
+    if (!looksPdf) return { error: 'PDF dosyası seç' }
+    pdfBusy.value = true
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      // pdf.js worker'a taşırken buffer'ı detach edebilir — IDB kopyası ÖNCE alınır.
+      const stored = bytes.slice().buffer
+      const rendered = await renderPdfPages(bytes)
+      if (rendered.length === 0) return { error: 'sayfa yok' }
+      const id = `${file.name}::${file.size}::${file.lastModified}`
+      // Önce dosyayı persist et: başarısızsa mevcut sahne korunur.
+      await idbSetFile({
+        id,
+        name: file.name,
+        size: file.size,
+        addedAt: Date.now(),
+        pageCount: rendered.length,
+        bytes: stored,
+      })
+      if (pdfId.value && pdfId.value !== id) {
+        void idbDeleteFile(pdfId.value).catch(() => {})
+      }
+      bgCanvases.clear()
+      pages.value = rendered.map((r) => ({ id: newPageId(), strokes: [], bgSize: { w: r.cssW, h: r.cssH } }))
+      rendered.forEach((r, i) => {
+        const p = pages.value[i]!
+        bgCanvases.set(p.id, r.canvas)
+        p.pdfPageIndex = i
+      })
+      pdfId.value = id
+      pdfName.value = file.name
+      activePageIndex.value = 0
+      redoStack.value = []
+      points.value = []
+      isDrawing.value = false
+      bb = null
+      recountActive()
+      repaintBase()
+      clearOverlay()
+      scheduleSave()
+      return { pages: rendered.length }
+    } catch {
+      return { error: 'PDF açılamadı' }
+    } finally {
+      pdfBusy.value = false
+    }
+  }
+
+  // PDF'i kapat: arkaplanlar gider, tek boş sayfaya dönülür, dosya kaydı silinir.
+  const closePdf = () => {
+    if (pdfId.value) void idbDeleteFile(pdfId.value).catch(() => {})
+    bgCanvases.clear()
+    pdfId.value = null
+    pdfName.value = ''
+    pages.value = [blankPage()]
+    activePageIndex.value = 0
+    redoStack.value = []
+    points.value = []
+    isDrawing.value = false
+    bb = null
+    recountActive()
+    repaintBase()
+    clearOverlay()
+    scheduleSave()
+  }
+
+  // Açılışta arkaplanları PDF bytes'larından yeniden üretir (sessiz başarısızlık: mürekkep durur).
+  const restorePdfBackgrounds = async (id: string): Promise<void> => {
+    try {
+      const rec = await idbGetFile(id)
+      if (!rec) return
+      const rendered = await renderPdfPages(new Uint8Array(rec.bytes))
+      for (const p of pages.value) {
+        if (p.pdfPageIndex === undefined) continue
+        const r = rendered[p.pdfPageIndex]
+        if (r) setPageBackground(p.id, r.canvas, r.cssW, r.cssH, p.pdfPageIndex)
+      }
+    } catch {
+      /* arkaplansız devam */
+    }
+  }
+
   // --- Autosave (IndexedDB, debounce'lu) ---
   let saveTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -630,6 +760,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         })),
         widths: { ...widths.value },
         activePageIndex: activePageIndex.value,
+        ...(pdfId.value ? { pdfId: pdfId.value, pdfName: pdfName.value } : {}),
       }
       await idbSet(doc)
       lastSavedAt.value = fmtTime(now)
@@ -710,6 +841,15 @@ export const useDrawingStore = defineStore('drawing', () => {
       typeof idx === 'number' && Number.isFinite(idx)
         ? Math.min(loaded.length - 1, Math.max(0, Math.floor(idx)))
         : 0
+    // PDF kaydı varsa arkaplanları bytes'tan yeniden üret (yoksa mürekkep tek başına durur).
+    if (doc.v === 2 && doc.pdfId) {
+      pdfId.value = doc.pdfId
+      pdfName.value = doc.pdfName ?? ''
+      await restorePdfBackgrounds(doc.pdfId)
+    } else {
+      pdfId.value = null
+      pdfName.value = ''
+    }
     recountActive()
     lastSavedAt.value = fmtTime(doc.savedAt)
     repaintBase()
@@ -878,6 +1018,11 @@ export const useDrawingStore = defineStore('drawing', () => {
     undoLastStroke,
     redo,
     redoStack,
+    pdfBusy,
+    pdfId,
+    pdfName,
+    importPdf,
+    closePdf,
     resizeCanvas,
   }
 })
