@@ -55,6 +55,14 @@ export type PageOrientation = 'portrait' | 'landscape'
 // PDF bytes'larından yeniden üretilir. Aspect her zaman page.size ile aynıdır (inşa gereği).
 const bgCanvases = new Map<string, HTMLCanvasElement>()
 
+// Test edilebilir saf kural: ihtiyaç mevcudun %20 üstündeyse yeniden render et.
+// (Sürekli üret-tüket döngüsüne girmemesi için histerezis şart.)
+export const needsPdfRerender = (current: number, need: number): boolean =>
+  Number.isFinite(current) &&
+  Number.isFinite(need) &&
+  current > 0 &&
+  need > current * 1.2
+
 // Contain-fit: bitmap CSS boyutu + hedef CSS boyut → ölçek + offset.
 const fitContain = (bw: number, bh: number, cssW: number, cssH: number) => {
   const scale = Math.min(cssW / bw, cssH / bh)
@@ -271,6 +279,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     syncZoomLabel()
     repaintBase()
     clearOverlay()
+    scheduleRerender()
   }
 
   const panBy = (dx: number, dy: number) => {
@@ -297,6 +306,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     syncZoomLabel()
     repaintBase()
     clearOverlay()
+    scheduleRerender()
   }
 
   const resetView = () => {
@@ -881,7 +891,18 @@ export const useDrawingStore = defineStore('drawing', () => {
     cssH: number
   }
 
-  const renderPdfPages = async (bytes: Uint8Array): Promise<RenderedPdfPage[]> => {
+  // PDF kalite politikası: import'ta yüksek çözünürlük, zoom sonunda ihtiyaca göre yenile.
+  const PDF_RENDER_BASE = 3
+  const PDF_RENDER_MANY = 1.5
+  const PDF_RENDER_MAX = 4
+  const RERENDER_DELAY = 600
+  // Açık PDF'in bytes'ları (yeniden render için bellekte; kapatınca silinir).
+  let pdfBytesCache: Uint8Array | null = null
+  // Sayfa id → bitmap'in render ölçeği (pt→bitmap px). İhtiyaç hesabının girdisi.
+  const pdfRenderScales = new Map<string, number>()
+
+  // Test edilebilir saf kural: ihtiyaç, mevcudun %20 üstündeyse yeniden render.
+  const renderPdfPages = async (bytes: Uint8Array): Promise<{ rendered: RenderedPdfPage[]; scale: number }> => {
     const pdfjs = await import('pdfjs-dist')
     if (!workerReady) {
       pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -892,8 +913,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     const pdf = await pdfjs.getDocument({ data: bytes }).promise
     try {
-      // Kalite payı: zoom'da bitmap erimesin diye 2x (30+ sayfada bellek için 1.25x).
-      const scale = pdf.numPages > 30 ? 1.25 : 2
+      // Tam boyut hamlesi: bitmap sayfa puntosunun katları (zoom'da erime payı).
+      const scale = pdf.numPages > 30 ? PDF_RENDER_MANY : PDF_RENDER_BASE
       const out: RenderedPdfPage[] = []
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i)
@@ -906,9 +927,40 @@ export const useDrawingStore = defineStore('drawing', () => {
         await page.render({ canvas, canvasContext: ctx, viewport }).promise
         out.push({ canvas, cssW: viewport.width / scale, cssH: viewport.height / scale })
       }
-      return out
+      return { rendered: out, scale }
     } finally {
       // v6'da document destroy yok; cleanup sayfa kaynaklarını bırakır (worker yeniden kullanılır).
+      await pdf.cleanup()
+    }
+  }
+
+  // Tek sayfayı verilen ölçekte render et (zoom-sonu tazeleme yolu).
+  const renderPdfPageAt = async (
+    bytes: Uint8Array,
+    index0: number,
+    scale: number,
+  ): Promise<RenderedPdfPage | null> => {
+    const pdfjs = await import('pdfjs-dist')
+    if (!workerReady) {
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+        'pdfjs-dist/build/pdf.worker.min.mjs',
+        import.meta.url,
+      ).href
+      workerReady = true
+    }
+    const pdf = await pdfjs.getDocument({ data: bytes.slice() }).promise
+    try {
+      if (index0 < 0 || index0 >= pdf.numPages) return null
+      const page = await pdf.getPage(index0 + 1)
+      const viewport = page.getViewport({ scale })
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.ceil(viewport.width)
+      canvas.height = Math.ceil(viewport.height)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return null
+      await page.render({ canvas, canvasContext: ctx, viewport }).promise
+      return { canvas, cssW: viewport.width / scale, cssH: viewport.height / scale }
+    } finally {
       await pdf.cleanup()
     }
   }
@@ -923,7 +975,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       const bytes = new Uint8Array(await file.arrayBuffer())
       // pdf.js worker'a taşırken buffer'ı detach edebilir — IDB kopyası ÖNCE alınır.
       const stored = bytes.slice().buffer
-      const rendered = await renderPdfPages(bytes)
+      const { rendered, scale } = await renderPdfPages(bytes)
       if (rendered.length === 0) return { error: 'sayfa yok' }
       const id = `${file.name}::${file.size}::${file.lastModified}`
       // Önce dosyayı persist et: başarısızsa mevcut sahne korunur.
@@ -939,11 +991,14 @@ export const useDrawingStore = defineStore('drawing', () => {
         void idbDeleteFile(pdfId.value).catch(() => {})
       }
       bgCanvases.clear()
+      pdfRenderScales.clear()
+      pdfBytesCache = new Uint8Array(stored)
       // Sayfa boyutu = PDF puntosu (bitmap aspect ile aynı, inşa gereği).
       pages.value = rendered.map((r) => ({ id: newPageId(), strokes: [], size: { w: r.cssW, h: r.cssH } }))
       rendered.forEach((r, i) => {
         const p = pages.value[i]!
         bgCanvases.set(p.id, r.canvas)
+        pdfRenderScales.set(p.id, scale)
         p.pdfPageIndex = i
       })
       pdfId.value = id
@@ -1012,6 +1067,8 @@ export const useDrawingStore = defineStore('drawing', () => {
   const closePdf = () => {
     if (pdfId.value) void idbDeleteFile(pdfId.value).catch(() => {})
     bgCanvases.clear()
+    pdfRenderScales.clear()
+    pdfBytesCache = null
     pdfId.value = null
     pdfName.value = ''
     pages.value = [blankPage()]
@@ -1032,14 +1089,51 @@ export const useDrawingStore = defineStore('drawing', () => {
     try {
       const rec = await idbGetFile(id)
       if (!rec) return
-      const rendered = await renderPdfPages(new Uint8Array(rec.bytes))
+      pdfBytesCache = new Uint8Array(rec.bytes)
+      const { rendered, scale } = await renderPdfPages(pdfBytesCache)
       for (const p of pages.value) {
         if (p.pdfPageIndex === undefined) continue
         const r = rendered[p.pdfPageIndex]
-        if (r) setPageBackground(p.id, r.canvas, p.pdfPageIndex)
+        if (r) {
+          setPageBackground(p.id, r.canvas, p.pdfPageIndex)
+          pdfRenderScales.set(p.id, scale)
+        }
       }
     } catch {
       /* arkaplansız devam */
+    }
+  }
+
+  // Zoom sonunda görünür sayfanın bitmap'i yetersizse yüksek çözünürlükte yenile.
+  // Debounce'lu + async: gesture'i bloklamaz, sessiz başarısız olur.
+  let rerenderTimer: ReturnType<typeof setTimeout> | undefined
+  const scheduleRerender = () => {
+    if (rerenderTimer) clearTimeout(rerenderTimer)
+    rerenderTimer = setTimeout(() => {
+      rerenderTimer = undefined
+      void rerenderActivePageIfNeeded()
+    }, RERENDER_DELAY)
+  }
+
+  const rerenderActivePageIfNeeded = async (): Promise<boolean> => {
+    try {
+      const page = activePage.value
+      if (!pdfBytesCache || !canvasRef.value) return false
+      if (page.pdfPageIndex === undefined) return false
+      const need = effScale() * (dpr.value || getDPR())
+      const current = pdfRenderScales.get(page.id) ?? 0
+      if (!needsPdfRerender(current, need)) return false
+      const target = Math.min(PDF_RENDER_MAX, need)
+      const r = await renderPdfPageAt(pdfBytesCache, page.pdfPageIndex, target)
+      if (!r) return false
+      // Boyut PUNTO cinsinden sabit — sadece bitmap tazelenir (vektörler kıpırdamaz).
+      setPageBackground(page.id, r.canvas, page.pdfPageIndex)
+      pdfRenderScales.set(page.id, target)
+      repaintBase()
+      clearOverlay()
+      return true
+    } catch {
+      return false
     }
   }
 
@@ -1284,7 +1378,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (pages.value.length <= 1) return false
     const clamped = Math.min(pages.value.length - 1, Math.max(0, Math.floor(i)))
     const [removed] = pages.value.splice(clamped, 1)
-    if (removed) bgCanvases.delete(removed.id)
+    if (removed) {
+      bgCanvases.delete(removed.id)
+      pdfRenderScales.delete(removed.id)
+    }
     redoStack.value = []
     if (clamped < activePageIndex.value) {
       activePageIndex.value -= 1
