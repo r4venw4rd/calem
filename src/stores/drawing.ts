@@ -151,6 +151,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     const p = readPressure(e)
     lastPressure = p
     points.value = [{ x, y, pressure: p }]
+    // Silgi ilk temasta base'e nokta koyar (overlay'de önizleme olmaz).
+    if (currentTool.value === 'eraser') paintEraserOnBase(points.value, strokeWidth.value)
     return true
   }
 
@@ -176,9 +178,40 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (!moved && !pressChanged) return
     }
     pts.push({ x, y, pressure: pressureVal })
+    // Silgi: yeni segmenti hemen base'e işle (overlay bypass).
+    if (currentTool.value === 'eraser') paintEraserOnBase(pts, strokeWidth.value)
+  }
+
+  // Silgi overlay'de ÇALIŞMAZ (destination-out şeffaf katmanda görünmez).
+  // Bu yüzden silgi doğrudan base'e inkremental işlenir: her yeni segment tek çizilir.
+  // History'de normal stroke olarak durur → undo/resize replay ile tutarlı.
+  const paintEraserOnBase = (pts: Point[], width: number) => {
+    if (pts.length === 0) return
+    const ctx = getCtx(canvasRef.value)
+    if (!ctx) return
+    withDpr(ctx, () => {
+      ctx.save()
+      applyStyleForStroke(ctx, 'eraser', '#000000', width)
+      if (pts.length === 1) {
+        const p = pts[0]!
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, Math.max(width / 2, 2.5), 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(0,0,0,1)'
+        ctx.fill()
+      } else {
+        const a = pts[pts.length - 2]!
+        const b = pts[pts.length - 1]!
+        ctx.beginPath()
+        ctx.moveTo(a.x, a.y)
+        ctx.lineTo(b.x, b.y)
+        ctx.stroke()
+      }
+      ctx.restore()
+    })
   }
 
   // ✅ Bitti — stroke'u geçmişe kaydet ve base katmanına bir kez işle (overlay temizlenir).
+  // Silgi zaten çizilirken base'e işlendiği için tekrar boyanmaz (idempotent olurdu ama gereksiz).
   const stopDrawing = () => {
     if (isDrawing.value && points.value.length > 0) {
       const stroke: Stroke = {
@@ -189,9 +222,11 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       strokes.value.push(stroke)
       perf.totalPoints += stroke.points.length
-      const ctx = getCtx(canvasRef.value)
-      if (ctx) {
-        withDpr(ctx, () => paintStroke(ctx, stroke))
+      if (stroke.tool !== 'eraser') {
+        const ctx = getCtx(canvasRef.value)
+        if (ctx) {
+          withDpr(ctx, () => paintStroke(ctx, stroke))
+        }
       }
     }
     isDrawing.value = false
@@ -325,7 +360,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // ✅ Aktif çizgiyi overlay'e çiz — per-frame tek maliyet bu (O(aktif çizgi), sahneden bağımsız).
+  // Silgi overlay kullanmaz (doğrudan base'e işlenir) → burada iş yok.
   const renderActiveStroke = () => {
+    if (currentTool.value === 'eraser') return
     const t0 = performance.now()
     const ctx = getCtx(overlayRef.value)
     if (!ctx) return
