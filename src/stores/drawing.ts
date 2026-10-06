@@ -50,6 +50,8 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // Kalıcı geçmiş — yoktu, bu yüzden her bırakışta her şey siliniyordu
   const strokes = ref<Stroke[]>([])
+  // Undo ile çıkanlar buraya; yeni çizgi girince ölür (klasik redo semantiği).
+  const redoStack = ref<Stroke[]>([])
 
   // Silgi history'de durur (replay tutarlılığı için) ama "çizgi" sayılmaz — HUD/undo bunu kullanır.
   const drawingCount = computed(() => {
@@ -248,6 +250,8 @@ export const useDrawingStore = defineStore('drawing', () => {
         points: [...points.value],
       }
       strokes.value.push(stroke)
+      // Yeni mürekkep redo'yu öldürür.
+      redoStack.value = []
       // Sayaç: sadece gerçek mürekkep (silgi history'de durur ama sayılmaz).
       if (stroke.tool !== 'eraser') drawingPerf.totalPoints += stroke.points.length
       if (stroke.tool !== 'eraser') {
@@ -441,6 +445,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Canvası temizle
   const clearCanvas = () => {
     strokes.value = []
+    redoStack.value = []
     points.value = []
     drawingPerf.totalPoints = 0
     isDrawing.value = false
@@ -484,14 +489,27 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Son stroke'u geri al (undo)
   const undoLastStroke = () => {
     const popped = strokes.value.pop()
-    if (popped && popped.tool !== 'eraser') {
-      drawingPerf.totalPoints = Math.max(0, drawingPerf.totalPoints - popped.points.length)
+    if (popped) {
+      redoStack.value.push(popped)
+      if (popped.tool !== 'eraser') {
+        drawingPerf.totalPoints = Math.max(0, drawingPerf.totalPoints - popped.points.length)
+      }
     }
     points.value = []
     isDrawing.value = false
     repaintBase()
     clearOverlay()
     bb = null
+  }
+
+  // ✅ Yinele (redo) — undo ile çıkan en son stroke'u geri koyar.
+  const redo = (): boolean => {
+    const s = redoStack.value.pop()
+    if (!s) return false
+    strokes.value.push(s)
+    if (s.tool !== 'eraser') drawingPerf.totalPoints += s.points.length
+    repaintBase()
+    return true
   }
 
   // ✅ Canvas boyutlarını yeniden hesapla — vektör geçmişi CSS px olduğu için
@@ -542,6 +560,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     getImageData,
     setPressureSensitivity,
     undoLastStroke,
+    redo,
+    redoStack,
     resizeCanvas,
   }
 })
