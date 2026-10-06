@@ -6,10 +6,12 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 import tailwindcssVite from '@tailwindcss/vite'
 
 // https://vite.dev/config/
+// CALEM_DEVTOOLS=0 ile devtools eklentisiz çalışır (saf performans ölçümü için).
+const useDevTools = process.env.CALEM_DEVTOOLS !== '0'
 export default defineConfig({
   plugins: [
     vue(),
-    vueDevTools(),
+    ...(useDevTools ? [vueDevTools()] : []),
     tailwindcssVite(),
   ],
   css: {

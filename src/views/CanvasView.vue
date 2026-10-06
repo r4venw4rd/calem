@@ -1,6 +1,6 @@
 <template>
   <div class="h-screen flex flex-col bg-gray-950 overflow-hidden">
-    <header class="relative z-10 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-gray-900/90 backdrop-blur-sm border-b border-white/10">
+    <header class="relative z-10 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-gray-900 border-b border-white/10">
       <div class="flex items-center gap-1 p-1 rounded-lg bg-white/5 border border-white/10" role="toolbar" aria-label="Araçlar">
         <button
           @click="store.setTool('pen')"
