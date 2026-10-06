@@ -1,11 +1,11 @@
 <template>
   <div class="h-screen flex flex-col bg-gray-950 overflow-hidden">
     <header class="relative z-10 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-gray-900/90 backdrop-blur-sm border-b border-white/10">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1 p-1 rounded-lg bg-white/5 border border-white/10" role="toolbar" aria-label="Araçlar">
         <button
           @click="store.setTool('pen')"
-          :class="{ 'bg-indigo-600 text-white': store.currentTool === 'pen' }"
-          class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition flex items-center gap-1"
+          :class="store.currentTool === 'pen' ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:text-white'"
+          class="px-3 py-1 rounded text-xs font-medium transition flex items-center gap-1"
           title="Kalem"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -15,9 +15,21 @@
         </button>
 
         <button
+          @click="store.setTool('highlighter')"
+          :class="store.currentTool === 'highlighter' ? 'bg-yellow-500 text-black' : 'text-gray-300 hover:text-white'"
+          class="px-3 py-1 rounded text-xs font-medium transition flex items-center gap-1"
+          title="Vurgulayıcı"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 11l3 3m-2.5-2.5L4 17l5-1.5L19.5 5 15 3.5 9.5 8.5z" />
+          </svg>
+          Vurgu
+        </button>
+
+        <button
           @click="store.setTool('eraser')"
-          :class="{ 'bg-red-600 text-white': store.currentTool === 'eraser' }"
-          class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition flex items-center gap-1"
+          :class="store.currentTool === 'eraser' ? 'bg-red-600 text-white' : 'text-gray-300 hover:text-white'"
+          class="px-3 py-1 rounded text-xs font-medium transition flex items-center gap-1"
           title="Silgi"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -25,19 +37,6 @@
           </svg>
           Silgi
         </button>
-      </div>
-
-      <div class="flex items-center gap-2">
-        <span class="text-sm text-gray-400">Araç:</span>
-        <select
-          :value="store.currentTool"
-          @change="store.setTool(($event.target as HTMLSelectElement).value as 'pen' | 'eraser' | 'highlighter')"
-          class="px-2 py-1 rounded text-sm border border-white/30 bg-white/20 cursor-pointer text-white"
-        >
-          <option value="pen">Kalem</option>
-          <option value="eraser">Silgi</option>
-          <option value="highlighter">Vurgulayıcı</option>
-        </select>
       </div>
 
       <div class="flex items-center gap-2">
