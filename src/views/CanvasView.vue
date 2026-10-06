@@ -1,10 +1,10 @@
 <template>
-  <div class="h-screen flex flex-col bg-gray-950 overflow-hidden">
-    <header class="relative z-10 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-gray-900 border-b border-white/10">
-      <div class="flex items-center gap-1 p-1 rounded-lg bg-white/5 border border-white/10" role="toolbar" aria-label="Araçlar">
+  <div class="h-screen flex flex-col bg-[var(--page-bg)] overflow-hidden">
+    <header class="relative z-10 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-[var(--chrome-bg)] border-b border-[var(--chrome-border)]">
+      <div class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]" role="toolbar" aria-label="Araçlar">
         <button
           @click="store.setTool('pen')"
-          :class="store.currentTool === 'pen' ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:text-white'"
+          :class="store.currentTool === 'pen' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
           class="px-3 py-1 rounded text-xs font-medium transition flex items-center gap-1"
           title="Kalem"
         >
@@ -16,7 +16,7 @@
 
         <button
           @click="store.setTool('highlighter')"
-          :class="store.currentTool === 'highlighter' ? 'bg-yellow-500 text-black' : 'text-gray-300 hover:text-white'"
+          :class="store.currentTool === 'highlighter' ? 'bg-yellow-500 text-black' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
           class="px-3 py-1 rounded text-xs font-medium transition flex items-center gap-1"
           title="Vurgulayıcı"
         >
@@ -28,7 +28,7 @@
 
         <button
           @click="store.setTool('eraser')"
-          :class="store.currentTool === 'eraser' ? 'bg-red-600 text-white' : 'text-gray-300 hover:text-white'"
+          :class="store.currentTool === 'eraser' ? 'bg-red-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
           class="px-3 py-1 rounded text-xs font-medium transition flex items-center gap-1"
           title="Silgi"
         >
@@ -46,7 +46,7 @@
           @click="store.setColor(hex)"
           :title="hex"
           class="w-6 h-6 rounded-full border transition"
-          :class="store.color.toLowerCase() === hex ? 'border-white scale-110' : 'border-white/25 hover:border-white/60'"
+          :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110' : 'border-white/25 hover:border-white/60'"
           :style="{ background: hex }"
         ></button>
         <input
@@ -59,7 +59,7 @@
       </div>
 
       <div class="flex items-center gap-2">
-        <span class="text-sm text-gray-400">Kalınlık:</span>
+        <span class="text-sm text-[var(--chrome-muted)]">Kalınlık:</span>
         <input
           type="range"
           :min="store.widthMin"
@@ -68,13 +68,13 @@
           @input="store.setStrokeWidth(Number(($event.target as HTMLInputElement).value))"
           class="w-24 accent-indigo-600"
         />
-        <span class="text-xs text-gray-300 w-6 text-right">{{ store.strokeWidth }}</span>
+        <span class="text-xs text-[var(--chrome-text)] w-6 text-right">{{ store.strokeWidth }}</span>
       </div>
 
       <button
         @click="undo"
         :disabled="store.strokes.length === 0"
-        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
+        class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition disabled:opacity-40 disabled:cursor-not-allowed"
         title="Geri al (Ctrl+Z)"
       >
         Geri al
@@ -83,7 +83,7 @@
       <button
         @click="redo"
         :disabled="store.redoStack.length === 0"
-        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
+        class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition disabled:opacity-40 disabled:cursor-not-allowed"
         title="Yinele (Ctrl+Y / Ctrl+Shift+Z)"
       >
         Yinele
@@ -92,20 +92,20 @@
       <div class="relative">
         <button
           @click="showFile = !showFile"
-          class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition"
-          :class="{ 'bg-white/10 text-white': showFile }"
+          class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
+          :class="{ 'bg-[var(--chrome-bg-soft)] text-white': showFile }"
           title="Dosya işlemleri"
         >
           Dosya
         </button>
         <div
           v-if="showFile"
-          class="absolute left-0 top-full mt-1 z-20 w-56 rounded-lg bg-gray-900 border border-white/15 p-1.5 text-xs shadow-xl"
+          class="absolute left-0 top-full mt-1 z-20 w-56 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-1.5 text-xs shadow-xl"
           role="menu"
           aria-label="Dosya"
         >
           <label
-            class="block w-full text-left px-3 py-1.5 rounded text-gray-200 hover:bg-white/10 transition cursor-pointer"
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer"
             :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
             title="PDF aç — sayfalar PDF sayfalarıyla değişir"
           >
@@ -121,25 +121,25 @@
           <button
             @click="exportPdfDoc"
             :disabled="store.pdfBusy"
-            class="block w-full text-left px-3 py-1.5 rounded text-gray-200 hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
             title="Konum + isim seçerek PDF olarak indir"
           >
             PDF Yaz…
           </button>
           <button
             @click="exportPng"
-            class="block w-full text-left px-3 py-1.5 rounded text-gray-200 hover:bg-white/10 transition"
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
             title="Aktif sayfayı PNG indir"
           >
             PNG İndir
           </button>
           <div
             v-if="store.pdfName || store.lastSavedAt"
-            class="mt-1 pt-1 border-t border-white/10 px-3 py-1 text-[10px] text-gray-500 font-mono truncate"
+            class="mt-1 pt-1 border-t border-[var(--chrome-border)] px-3 py-1 text-[10px] text-[var(--chrome-faint)] font-mono truncate"
           >
             <span v-if="store.pdfName" :title="store.pdfName">
               {{ store.pdfName }}
-              <button @click="askClosePdf" class="text-gray-400 hover:text-white underline" title="PDF'i kapat">
+              <button @click="askClosePdf" class="text-[var(--chrome-muted)] hover:text-[var(--chrome-title)] underline" title="PDF'i kapat">
                 Kapat
               </button>
             </span>
@@ -155,8 +155,8 @@
 
       <button
         @click="showSettings = !showSettings"
-        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition"
-        :class="{ 'bg-white/10 text-white': showSettings }"
+        class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
+        :class="{ 'bg-[var(--chrome-bg-soft)] text-white': showSettings }"
         title="Ayarlar"
       >
         Ayarlar
@@ -164,18 +164,36 @@
 
       <div
         v-if="showSettings"
-        class="absolute right-2 top-full mt-1 z-20 w-64 rounded-lg bg-gray-900 border border-white/15 p-3 text-xs text-gray-300 shadow-xl"
+        class="absolute right-2 top-full mt-1 z-20 w-64 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
         role="dialog"
         aria-label="Ayarlar"
       >
         <div class="flex items-center justify-between mb-2">
-          <span class="font-medium text-gray-100">Ayarlar</span>
-          <button @click="showSettings = false" class="text-gray-500 hover:text-white" title="Kapat">
+          <span class="font-medium text-[var(--chrome-title)]">Ayarlar</span>
+          <button @click="showSettings = false" class="text-[var(--chrome-faint)] hover:text-[var(--chrome-title)]" title="Kapat">
             Kapat
           </button>
         </div>
 
-        <div class="mb-1 text-gray-400">Kâğıt teması</div>
+        <div class="mb-1 text-[var(--chrome-muted)]">Arayüz teması</div>
+        <div class="flex gap-1 mb-3">
+          <button
+            @click="store.setUiTheme('koyu')"
+            class="flex-1 px-2 py-1 rounded transition"
+            :class="store.uiTheme === 'koyu' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
+          >
+            Koyu
+          </button>
+          <button
+            @click="store.setUiTheme('acik')"
+            class="flex-1 px-2 py-1 rounded transition"
+            :class="store.uiTheme === 'acik' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
+          >
+            Açık
+          </button>
+        </div>
+
+        <div class="mb-1 text-[var(--chrome-muted)]">Kâğıt teması</div>
         <div class="flex gap-2 mb-3">
           <button
             v-for="(hex, name) in PAPER_THEMES"
@@ -183,16 +201,16 @@
             @click="store.setPaper(hex)"
             :title="String(name)"
             class="w-8 h-8 rounded-full border-2 transition"
-            :class="store.paper === hex ? 'border-white' : 'border-white/20 hover:border-white/50'"
+            :class="store.paper === hex ? 'border-[var(--chrome-title)]' : 'border-white/20 hover:border-white/50'"
             :style="{ background: hex }"
           ></button>
         </div>
 
-        <div class="mb-1 text-gray-400">Sayfa biçimi <span class="text-gray-600">(yeni sayfalar)</span></div>
+        <div class="mb-1 text-[var(--chrome-muted)]">Sayfa biçimi <span class="text-[var(--chrome-faint)]">(yeni sayfalar)</span></div>
         <select
           :value="store.pageFormat"
           @change="store.setPageFormat(($event.target as HTMLSelectElement).value)"
-          class="w-full px-2 py-1 rounded bg-white/10 border border-white/15 text-gray-100"
+          class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
         >
           <option v-for="(_, name) in PAGE_FORMATS" :key="name" :value="name">{{ name }}</option>
           <option value="custom">Özel</option>
@@ -202,14 +220,14 @@
           <button
             @click="store.setPageOrientation('portrait')"
             class="flex-1 px-2 py-1 rounded transition"
-            :class="store.pageOrientation === 'portrait' ? 'bg-indigo-600 text-white' : 'bg-white/5 hover:bg-white/10'"
+            :class="store.pageOrientation === 'portrait' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
           >
             Dikey
           </button>
           <button
             @click="store.setPageOrientation('landscape')"
             class="flex-1 px-2 py-1 rounded transition"
-            :class="store.pageOrientation === 'landscape' ? 'bg-indigo-600 text-white' : 'bg-white/5 hover:bg-white/10'"
+            :class="store.pageOrientation === 'landscape' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
           >
             Yatay
           </button>
@@ -217,31 +235,31 @@
 
         <div v-if="store.pageFormat === 'custom'" class="flex items-center gap-2 mt-2">
           <label class="flex-1">
-            <span class="text-gray-500">Genişlik</span>
+            <span class="text-[var(--chrome-faint)]">Genişlik</span>
             <input
               type="number"
               min="100"
               max="3000"
               :value="store.customW"
               @change="store.setCustomSize(Number(($event.target as HTMLInputElement).value), store.customH)"
-              class="w-full px-2 py-1 rounded bg-white/10 border border-white/15 text-gray-100"
+              class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
             />
           </label>
           <label class="flex-1">
-            <span class="text-gray-500">Yükseklik</span>
+            <span class="text-[var(--chrome-faint)]">Yükseklik</span>
             <input
               type="number"
               min="100"
               max="3000"
               :value="store.customH"
               @change="store.setCustomSize(store.customW, Number(($event.target as HTMLInputElement).value))"
-              class="w-full px-2 py-1 rounded bg-white/10 border border-white/15 text-gray-100"
+              class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
             />
           </label>
         </div>
 
-        <div class="mt-3 pt-2 border-t border-white/10">
-          <div class="mb-1 text-gray-400">Kalem basıncı <span class="text-gray-600">(0=kapalı)</span></div>
+        <div class="mt-3 pt-2 border-t border-[var(--chrome-border)]">
+          <div class="mb-1 text-[var(--chrome-muted)]">Kalem basıncı <span class="text-[var(--chrome-faint)]">(0=kapalı)</span></div>
           <input
             type="range"
             min="0"
@@ -266,7 +284,7 @@
 
       <button
         @click="clearCanvas"
-        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition flex items-center gap-1"
+        class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition flex items-center gap-1"
         title="Aktif sayfayı temizle"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -276,7 +294,7 @@
       </button>
     </header>
 
-    <div class="relative flex-1 bg-gray-900/50 min-h-0">
+    <div class="relative flex-1 bg-[var(--page-bg)] min-h-0">
       <!-- Alt katman: commit'lenmiş stroke'lar. Üst katman: aktif çizgi (pointer burada). -->
       <canvas
         ref="baseCanvas"
@@ -293,33 +311,33 @@
       ></canvas>
 
       <div
-        class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 rounded-lg bg-black/60 border border-white/10 text-xs text-gray-300 select-none"
+        class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border)] text-xs text-[var(--chrome-text)] select-none"
         role="navigation"
         aria-label="Sayfalar"
       >
         <button
           @click="prevPage"
           :disabled="store.activePageIndex === 0"
-          class="px-2 py-0.5 rounded hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
           title="Önceki sayfa"
         >
           ‹
         </button>
-        <span class="font-mono w-12 text-center text-gray-200">
+        <span class="font-mono w-12 text-center text-[var(--chrome-title)]">
           {{ store.activePageIndex + 1 }} / {{ store.pages.length }}
         </span>
         <button
           @click="nextPage"
           :disabled="store.activePageIndex >= store.pages.length - 1"
-          class="px-2 py-0.5 rounded hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
           title="Sonraki sayfa"
         >
           ›
         </button>
-        <span class="w-px h-4 bg-white/10"></span>
+        <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
         <button
           @click="addPage"
-          class="px-2 py-0.5 rounded hover:bg-white/10 font-mono"
+          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] font-mono"
           title="Yeni sayfa"
         >
           +
@@ -332,24 +350,24 @@
         >
           Sil
         </button>
-        <span class="w-px h-4 bg-white/10"></span>
+        <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
         <button
           @click="zoomOut"
-          class="px-2 py-0.5 rounded hover:bg-white/10 font-mono"
+          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] font-mono"
           title="Uzaklaş"
         >
           −
         </button>
         <button
           @click="resetZoom"
-          class="font-mono w-12 text-center text-gray-200 hover:bg-white/10 rounded py-0.5"
+          class="font-mono w-12 text-center text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] rounded py-0.5"
           :title="`Yakınlaştırma: ${store.zoomLabel} (sıfırlamak için tıkla)`"
         >
           {{ store.zoomLabel }}
         </button>
         <button
           @click="zoomIn"
-          class="px-2 py-0.5 rounded hover:bg-white/10 font-mono"
+          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] font-mono"
           title="Yakınlaş"
         >
           +
@@ -358,12 +376,12 @@
       <!-- Perf HUD: reaktivite dışı güncellenir (kendisi render tetiklemez) -->
       <div
         ref="hud"
-        class="absolute bottom-2 right-2 text-[10px] leading-tight text-gray-500 bg-black/40 rounded px-1.5 py-0.5 pointer-events-none font-mono"
+        class="absolute bottom-2 right-2 text-[10px] leading-tight text-[var(--chrome-faint)] bg-[var(--chrome-bg)] rounded px-1.5 py-0.5 pointer-events-none font-mono"
       ></div>
 
       <div
         v-if="store.savedSession"
-        class="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/70 border border-white/15 text-xs text-gray-200 select-none"
+        class="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)] select-none"
         role="dialog"
         aria-label="Önceki oturum"
       >
@@ -379,7 +397,7 @@
         </button>
         <button
           @click="store.dismissSavedSession()"
-          class="px-2 py-0.5 rounded hover:bg-white/10 text-gray-300"
+          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] text-[var(--chrome-text)]"
         >
           Yeni başlat
         </button>

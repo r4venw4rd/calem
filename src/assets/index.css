@@ -1,3 +1,32 @@
 @import "tailwindcss";
 
 @config "../../tailwind.config.cjs";
+
+/* Arayüz teması: chrome yüzeyleri CSS var'larından beslenir (koyu/açık).
+   Kâğıt rengi ayrıdır (paper setting) — bu sadece uygulama iskeleti. */
+:root,
+:root[data-theme='koyu'] {
+  --chrome-bg: #111827;
+  --chrome-bg-soft: rgb(255 255 255 / 0.05);
+  --chrome-bg-solid: #1f2937;
+  --chrome-border: rgb(255 255 255 / 0.1);
+  --chrome-border-strong: rgb(255 255 255 / 0.15);
+  --chrome-text: #d1d5db;
+  --chrome-muted: #9ca3af;
+  --chrome-faint: #6b7280;
+  --chrome-title: #f3f4f6;
+  --page-bg: #030712;
+}
+
+:root[data-theme='acik'] {
+  --chrome-bg: #f3f4f6;
+  --chrome-bg-soft: rgb(0 0 0 / 0.05);
+  --chrome-bg-solid: #ffffff;
+  --chrome-border: rgb(0 0 0 / 0.12);
+  --chrome-border-strong: rgb(0 0 0 / 0.18);
+  --chrome-text: #374151;
+  --chrome-muted: #6b7280;
+  --chrome-faint: #9ca3af;
+  --chrome-title: #111827;
+  --page-bg: #e5e7eb;
+}
