@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
-import { idbDeleteFile, idbGet, idbGetFile, idbSet, idbSetFile, type PersistedDoc } from '../lib/idb'
+import { idbDeleteFile, idbGet, idbGetFile, idbGetKey, idbSet, idbSetFile, idbSetKey, SETTINGS_KEY, type PersistedDoc } from '../lib/idb'
 
 export type Tool = 'pen' | 'eraser' | 'highlighter'
 export interface Point { x: number; y: number; pressure?: number }
@@ -20,8 +20,22 @@ export interface Page {
   pdfPageIndex?: number
 }
 
+// Uygulama ayarları (çizimden ayrı anahtar; çizim silinse de durur).
+export interface AppSettings {
+  v: 1
+  paper: string
+}
+
 // A4 punto — boş sayfaların varsayılan boyutu.
 export const A4 = { w: 595, h: 842 }
+
+// Kâğıt temaları (ayarlar UI'ı buradan beslenir; esnek config'in ilk üyesi).
+export const PAPER_THEMES = {
+  gece: '#111827',
+  siyah: '#000000',
+  kagit: '#f5f1e8',
+} as const
+export type PaperTheme = keyof typeof PAPER_THEMES
 
 // Sayfa arkaplan bitmap'leri: sayfa id → render edilmiş canvas. Persist edilmez,
 // PDF bytes'larından yeniden üretilir. Aspect her zaman page.size ile aynıdır (inşa gereği).
@@ -62,6 +76,42 @@ export const useDrawingStore = defineStore('drawing', () => {
   let cachedRect: DOMRect | null = null
   // Aktif çizginin kirli kutusu (SAYFA uzayında) — overlay fullscreen değil, bu kutu temizlenir.
   let bb: { x0: number; y0: number; x1: number; y1: number } | null = null
+  // Kâğıt rengi (ayar; esnek config'in ilk üyesi — tema/toolbar konumu vs. buraya eklenir).
+  // PDF sayfalarında kâğıt YOKTUR (bitmap opak zaten) → şeffaf mod.
+  const paper = ref<string>(PAPER_THEMES.gece)
+  const setPaper = (hex: string) => {
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return
+    if (paper.value === hex) return
+    paper.value = hex
+    void persistSettings()
+    // Base'de kâğıt dolgusu var → anında yeniden boya (canvas yoksa sessiz geç).
+    if (canvasRef.value) {
+      repaintBase()
+      clearOverlay()
+    }
+  }
+  // Sayfa için efektif kâğıt: PDF'li sayfada null (şeffaf mod).
+  const paperFor = (page: Page): string | null =>
+    page.pdfPageIndex !== undefined && page.pdfPageIndex !== null ? null : paper.value
+
+  const persistSettings = async (): Promise<void> => {
+    try {
+      await idbSetKey(SETTINGS_KEY, { v: 1, paper: paper.value } satisfies AppSettings)
+    } catch {
+      /* sessiz */
+    }
+  }
+
+  const loadSettings = async (): Promise<void> => {
+    try {
+      const raw = await idbGetKey<AppSettings>(SETTINGS_KEY)
+      if (raw && raw.v === 1 && typeof raw.paper === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw.paper)) {
+        paper.value = raw.paper
+      }
+    } catch {
+      /* varsayılan kâğıt */
+    }
+  }
   const color = ref('#ffffff')
   // Araç başına kalınlık hafızası: kalem ince, silgi kocaman olabilir; araç değişince geri gelir.
   const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5 }
@@ -356,7 +406,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     points.value = [{ x, y, pressure: p }]
     bb = { x0: x, y0: y, x1: x, y1: y }
     // Silgi ilk temasta base'e nokta koyar (overlay'de önizleme olmaz).
-    if (currentTool.value === 'eraser') paintEraserOnBase(points.value, strokeWidth.value)
+    if (currentTool.value === 'eraser') {
+      paintEraserOnBase(points.value, strokeWidth.value, paperFor(activePage.value))
+    }
     return true
   }
 
@@ -388,24 +440,33 @@ export const useDrawingStore = defineStore('drawing', () => {
       else if (y > bb.y1) bb.y1 = y
     }
     // Silgi: yeni segmenti hemen base'e işle (overlay bypass).
-    if (currentTool.value === 'eraser') paintEraserOnBase(pts, strokeWidth.value)
+    if (currentTool.value === 'eraser') {
+      paintEraserOnBase(pts, strokeWidth.value, paperFor(activePage.value))
+    }
   }
 
   // Silgi overlay'de ÇALIŞMAZ (destination-out şeffaf katmanda görünmez).
   // Bu yüzden silgi doğrudan base'e inkremental işlenir: her yeni segment tek çizilir.
   // History'de normal stroke olarak durur → undo/resize replay ile tutarlı.
-  const paintEraserOnBase = (pts: Point[], width: number) => {
+  // Kâğıt modunda silgi = kâğıt rengi boya (seam yok); şeffaf modda gerçek silme.
+  const paintEraserOnBase = (pts: Point[], width: number, paperHex: string | null) => {
     if (pts.length === 0) return
     const ctx = getCtx(canvasRef.value)
     if (!ctx) return
     applyView(ctx, () => {
       ctx.save()
-      applyStyleForStroke(ctx, 'eraser', '#000000', width)
+      applyStyleForStroke(ctx, 'eraser', '#000000', width, paperHex)
       if (pts.length === 1) {
         const p = pts[0]!
         ctx.beginPath()
         ctx.arc(p.x, p.y, Math.max(width / 2, 2.5), 0, Math.PI * 2)
-        ctx.fillStyle = 'rgba(0,0,0,1)'
+        if (paperHex) {
+          ctx.globalCompositeOperation = 'source-over'
+          ctx.fillStyle = paperHex
+        } else {
+          ctx.globalCompositeOperation = 'destination-out'
+          ctx.fillStyle = 'rgba(0,0,0,1)'
+        }
         ctx.fill()
       } else {
         const a = pts[pts.length - 2]!
@@ -436,7 +497,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (stroke.tool !== 'eraser') {
         const ctx = getCtx(canvasRef.value)
         if (ctx) {
-          applyView(ctx, () => paintStroke(ctx, stroke))
+          const paperHex = paperFor(activePage.value)
+          applyView(ctx, () => paintStroke(ctx, stroke, paperHex))
         }
       }
       scheduleSave()
@@ -463,14 +525,26 @@ export const useDrawingStore = defineStore('drawing', () => {
     tool: Tool,
     col: string,
     w: number,
+    paperHex: string | null,
   ) => {
     if (tool === 'eraser') {
-      ctx.globalCompositeOperation = 'destination-out'
-      ctx.strokeStyle = 'rgba(0, 0, 0, 1)'
-      ctx.lineWidth = Math.max(w, 5)
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
-      ctx.globalAlpha = 1
+      if (paperHex) {
+        // Kâğıt modu: silgi = kâğıt rengi boya (opak base, seam yok, undo tutarlı).
+        ctx.globalCompositeOperation = 'source-over'
+        ctx.strokeStyle = paperHex
+        ctx.lineWidth = Math.max(w, 5)
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        ctx.globalAlpha = 1
+      } else {
+        // Şeffaf mod (PDF): gerçek silme.
+        ctx.globalCompositeOperation = 'destination-out'
+        ctx.strokeStyle = 'rgba(0, 0, 0, 1)'
+        ctx.lineWidth = Math.max(w, 5)
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        ctx.globalAlpha = 1
+      }
     } else if (tool === 'highlighter') {
       ctx.globalCompositeOperation = 'source-over'
       ctx.strokeStyle = hexToRgba(col, 0.5)
@@ -536,11 +610,12 @@ export const useDrawingStore = defineStore('drawing', () => {
   const paintStroke = (
     ctx: CanvasRenderingContext2D,
     s: Pick<Stroke, 'tool' | 'color' | 'width' | 'points'>,
+    paperHex: string | null,
   ) => {
     if (s.points.length === 0) return
     ctx.save()
     const w = s.tool === 'eraser' ? s.width : effectiveWidth(s.points, s.width)
-    applyStyleForStroke(ctx, s.tool, s.color, w)
+    applyStyleForStroke(ctx, s.tool, s.color, w, paperHex)
     strokePath(ctx, s.points)
     ctx.stroke()
     // Tek nokta ise dolgu da yap ki görünsün
@@ -548,7 +623,17 @@ export const useDrawingStore = defineStore('drawing', () => {
       const p = s.points[0]!
       ctx.beginPath()
       ctx.arc(p.x, p.y, Math.max(w / 2, 1), 0, Math.PI * 2)
-      ctx.fillStyle = s.tool === 'highlighter' ? hexToRgba(s.color, 0.5) : s.color
+      if (s.tool === 'eraser') {
+        if (paperHex) {
+          ctx.globalCompositeOperation = 'source-over'
+          ctx.fillStyle = paperHex
+        } else {
+          ctx.globalCompositeOperation = 'destination-out'
+          ctx.fillStyle = 'rgba(0,0,0,1)'
+        }
+      } else {
+        ctx.fillStyle = s.tool === 'highlighter' ? hexToRgba(s.color, 0.5) : s.color
+      }
       ctx.fill()
     }
     ctx.restore()
@@ -582,13 +667,18 @@ export const useDrawingStore = defineStore('drawing', () => {
     })
   }
 
-  // Bir sayfayı verilen ctx'e çiz: arkaplan tam kanama (aspect inşa gereği aynı) + stroke'lar.
+  // Bir sayfayı verilen ctx'e çiz: kâğıt dolgusu + arkaplan tam kanama + stroke'lar.
   // Transform dışarıda kurulur (ekran: view-fit, export: sayfa boyutu).
   const paintPage = (ctx: CanvasRenderingContext2D, page: Page) => {
+    const paperHex = paperFor(page)
+    if (paperHex) {
+      ctx.fillStyle = paperHex
+      ctx.fillRect(0, 0, page.size.w, page.size.h)
+    }
     const bg = bgCanvases.get(page.id)
     if (bg) ctx.drawImage(bg, 0, 0, page.size.w, page.size.h)
     for (const s of page.strokes) {
-      paintStroke(ctx, s)
+      paintStroke(ctx, s, paperHex)
     }
   }
 
@@ -598,7 +688,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const exportPageSize = (page: Page) => ({ w: page.size.w, h: page.size.h })
 
   // Export raster: sayfayı GERÇEK boyutunda çizer (~144dpi). Remap YOK —
-  // mürekkep zaten sayfa uzayında, arkaplan tam kanama.
+  // mürekkep zaten sayfa uzayında, arkaplan tam kanama. Kâğıt varsa dolar, PDF modu şeffaf kalır.
   const EXPORT_SCALE = 2
   const exportPageToCanvas = (page: Page): HTMLCanvasElement | null => {
     const { w, h } = page.size
@@ -609,8 +699,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     const ctx = canvas.getContext('2d')
     if (!ctx) return null
     ctx.setTransform(EXPORT_SCALE, 0, 0, EXPORT_SCALE, 0, 0)
-    ctx.fillStyle = EXPORT_BG
-    ctx.fillRect(0, 0, w, h)
     paintPage(ctx, page)
     return canvas
   }
@@ -638,13 +726,18 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (!ctx) return
     clearOverlay()
     if (isDrawing.value && points.value.length > 0) {
+      const paperHex = paperFor(activePage.value)
       applyView(ctx, () => {
-        paintStroke(ctx, {
-          tool: currentTool.value,
-          color: color.value,
-          width: strokeWidth.value,
-          points: points.value,
-        })
+        paintStroke(
+          ctx,
+          {
+            tool: currentTool.value,
+            color: color.value,
+            width: strokeWidth.value,
+            points: points.value,
+          },
+          paperHex,
+        )
       })
     }
     const dt = performance.now() - t0
@@ -684,24 +777,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     scheduleSave()
   }
 
-  // Ekranla birebir koyu zemin — beyaz kalem export'ta da görünür kalır.
-  // (Şeffaf bırakılırsa PNG görüntüleyicide satranç tahtası/şeffaf açılır.)
-  const EXPORT_BG = '#111827'
-
-  // ✅ Görüntü verisi dışa aktar: SADECE mürekkep, transparan zemin.
-  // PDF arkaplanı DAHİL hiçbir arkaplan katılmaz (ekran görüntüsü değil, çizgi katmanıdır).
+  // ✅ PNG dışa aktar: aktif sayfanın render'ı (kâğıt dahil; PDF modu şeffaf zemin).
   const exportDataURL = (): string => {
-    const base = canvasRef.value
-    if (!base || base.width === 0) return ''
-    const tmp = document.createElement('canvas')
-    tmp.width = base.width
-    tmp.height = base.height
-    const tctx = tmp.getContext('2d')
-    if (!tctx) return ''
-    applyView(tctx, () => {
-      for (const s of activePage.value.strokes) paintStroke(tctx, s)
-    })
-    return tmp.toDataURL('image/png')
+    const rendered = exportPageToCanvas(activePage.value)
+    return rendered ? rendered.toDataURL('image/png') : ''
   }
 
   // ✅ Görüntü verisi al
@@ -1172,6 +1251,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     overlayRef,
     isDrawing,
     color,
+    paper,
+    setPaper,
+    loadSettings,
     strokeWidth,
     widths,
     widthMin,
