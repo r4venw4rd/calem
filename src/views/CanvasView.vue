@@ -123,7 +123,7 @@
       <button
         @click="clearCanvas"
         class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition flex items-center gap-1"
-        title="Temizle"
+        title="Aktif sayfayı temizle"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m12 4h4m4-4v4m-4-6h4m-5.303-5.303L16 16" />
@@ -148,9 +148,47 @@
         @pointercancel="endDraw"
       ></canvas>
 
-      <p class="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-gray-500 pointer-events-none">
-        Basılı tutun &amp; hareket edin - Smooth çizim
-      </p>
+      <div
+        class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 rounded-lg bg-black/60 border border-white/10 text-xs text-gray-300 select-none"
+        role="navigation"
+        aria-label="Sayfalar"
+      >
+        <button
+          @click="prevPage"
+          :disabled="store.activePageIndex === 0"
+          class="px-2 py-0.5 rounded hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+          title="Önceki sayfa"
+        >
+          ‹
+        </button>
+        <span class="font-mono w-12 text-center text-gray-200">
+          {{ store.activePageIndex + 1 }} / {{ store.pages.length }}
+        </span>
+        <button
+          @click="nextPage"
+          :disabled="store.activePageIndex >= store.pages.length - 1"
+          class="px-2 py-0.5 rounded hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+          title="Sonraki sayfa"
+        >
+          ›
+        </button>
+        <span class="w-px h-4 bg-white/10"></span>
+        <button
+          @click="addPage"
+          class="px-2 py-0.5 rounded hover:bg-white/10 font-mono"
+          title="Yeni sayfa"
+        >
+          +
+        </button>
+        <button
+          @click="askDeletePage"
+          :disabled="store.pages.length <= 1"
+          class="px-2 py-0.5 rounded hover:bg-red-600/40 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Aktif sayfayı sil"
+        >
+          Sil
+        </button>
+      </div>
       <!-- Perf HUD: reaktivite dışı güncellenir (kendisi render tetiklemez) -->
       <div
         ref="hud"
@@ -293,6 +331,30 @@ const clearCanvas = () => {
   activePointerId = null
   store.clearCanvas()
   updateHud(true)
+}
+
+const prevPage = () => {
+  store.goToPage(store.activePageIndex - 1)
+  updateHud(true)
+}
+
+const nextPage = () => {
+  store.goToPage(store.activePageIndex + 1)
+  updateHud(true)
+}
+
+const addPage = () => {
+  store.addPage()
+  updateHud(true)
+}
+
+const askDeletePage = () => {
+  if (store.pages.length <= 1) return
+  if (confirm(`Sayfa ${store.activePageIndex + 1} silinsin mi? (${store.drawingCount} çizgi kaybolur)`)) {
+    activePointerId = null
+    store.deletePage(store.activePageIndex)
+    updateHud(true)
+  }
 }
 
 const sizeCanvas = () => {
