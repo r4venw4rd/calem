@@ -62,6 +62,47 @@
         <span class="text-xs text-gray-300 w-6 text-right">{{ store.strokeWidth }}</span>
       </div>
 
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-gray-400">Basınç:</span>
+        <input
+          type="range"
+          min="0"
+          max="2"
+          step="0.1"
+          :value="store.pressureSensitivity"
+          @input="store.setPressureSensitivity(Number(($event.target as HTMLInputElement).value))"
+          class="w-20 accent-indigo-600"
+          title="0=kapalı, 2=çok hassas"
+        />
+      </div>
+
+      <label class="flex items-center gap-1 text-xs text-gray-400 cursor-pointer" title="Açıkken parmakla çizim engellenir">
+        <input
+          type="checkbox"
+          :checked="store.rejectTouch"
+          @change="store.setRejectTouch(($event.target as HTMLInputElement).checked)"
+          class="accent-indigo-600"
+        />
+        Avuç reddi
+      </label>
+
+      <button
+        @click="undo"
+        :disabled="store.strokes.length === 0"
+        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
+        title="Geri al"
+      >
+        Geri al
+      </button>
+
+      <button
+        @click="exportPng"
+        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition"
+        title="PNG indir"
+      >
+        PNG
+      </button>
+
       <button
         @click="clearCanvas"
         class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition flex items-center gap-1"
@@ -114,20 +155,26 @@ const scheduleRender = () => {
 
 // Event handler'lar — template'teki @pointer* binding'leri yeterli.
 // onMounted'da addEventListener EKLEME (yoksa her olay 2 kez ateşlenir).
+// Tek aktif pointer kilidi: avuç ikinci parmağı mevcut çizgiyi gasp edemez.
+let activePointerId: number | null = null
+
 const startDraw = (e: PointerEvent) => {
-  if (!canvas.value) return
+  if (!canvas.value || activePointerId !== null) return
+  if (store.rejectTouch && e.pointerType === 'touch') return
   // pointer capture ile canvas dışına taşınca bile çizmeye devam et
   try {
     canvas.value.setPointerCapture(e.pointerId)
   } catch {
     /* ignore */
   }
-  store.startDrawing(e)
+  const started = store.startDrawing(e)
+  if (!started) return
+  activePointerId = e.pointerId
   scheduleRender()
 }
 
 const draw = (e: PointerEvent) => {
-  if (!store.isDrawing) return
+  if (!store.isDrawing || activePointerId === null || e.pointerId !== activePointerId) return
   // Sadece basılıyken çiz (pointermove hover'da ateşlenir)
   if (e.buttons === 0 && e.pointerType === 'mouse') return
   // coalesced events: birikmiş ara noktaları da işle, çizgi köşelenmesin
@@ -136,8 +183,13 @@ const draw = (e: PointerEvent) => {
   scheduleRender()
 }
 
-const endDraw = () => {
-  if (!store.isDrawing) return
+const endDraw = (e?: PointerEvent) => {
+  if (!store.isDrawing) {
+    activePointerId = null
+    return
+  }
+  if (e && activePointerId !== null && e.pointerId !== activePointerId) return
+  activePointerId = null
   if (rafId !== 0) {
     cancelAnimationFrame(rafId)
     rafId = 0
@@ -147,7 +199,21 @@ const endDraw = () => {
   if (ctx) store.renderAllStrokes(ctx)
 }
 
+const undo = () => {
+  store.undoLastStroke()
+}
+
+const exportPng = () => {
+  const url = store.exportDataURL()
+  if (!url) return
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `calem-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`
+  a.click()
+}
+
 const clearCanvas = () => {
+  activePointerId = null
   store.clearCanvas()
 }
 
@@ -171,6 +237,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (rafId !== 0) cancelAnimationFrame(rafId)
+  activePointerId = null
   window.removeEventListener('resize', sizeCanvas)
   store.setCanvasRef(null)
 })
