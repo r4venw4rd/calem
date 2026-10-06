@@ -586,20 +586,19 @@ export const useDrawingStore = defineStore('drawing', () => {
   // (Şeffaf bırakılırsa PNG görüntüleyicide satranç tahtası/şeffaf açılır.)
   const EXPORT_BG = '#111827'
 
-  // ✅ Görüntü verisi dışa aktar (opak zemin + base + overlay kompoze)
+  // ✅ Görüntü verisi dışa aktar: SADECE mürekkep, transparan zemin.
+  // PDF arkaplanı DAHİL hiçbir arkaplan katılmaz (ekran görüntüsü değil, çizgi katmanıdır).
   const exportDataURL = (): string => {
-    if (!canvasRef.value) return ''
     const base = canvasRef.value
-    const overlay = overlayRef.value
+    if (!base || base.width === 0) return ''
     const tmp = document.createElement('canvas')
     tmp.width = base.width
     tmp.height = base.height
     const tctx = tmp.getContext('2d')
-    if (!tctx) return base.toDataURL('image/png')
-    tctx.fillStyle = EXPORT_BG
-    tctx.fillRect(0, 0, tmp.width, tmp.height)
-    tctx.drawImage(base, 0, 0)
-    if (overlay) tctx.drawImage(overlay, 0, 0, tmp.width, tmp.height)
+    if (!tctx) return ''
+    applyView(tctx, () => {
+      for (const s of activePage.value.strokes) paintStroke(tctx, s)
+    })
     return tmp.toDataURL('image/png')
   }
 
@@ -708,8 +707,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       clearOverlay()
       scheduleSave()
       return { pages: rendered.length }
-    } catch {
-      return { error: 'PDF açılamadı' }
+    } catch (e) {
+      console.error('[calem] PDF import hatası:', e)
+      return { error: `PDF açılamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
     } finally {
       pdfBusy.value = false
     }
@@ -749,8 +749,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       if ('error' in built) return built
       built.doc.save(`calem-${new Date().toISOString().slice(0, 10)}.pdf`)
       return { pages: built.pages }
-    } catch {
-      return { error: 'PDF yazılamadı' }
+    } catch (e) {
+      console.error('[calem] PDF export hatası:', e)
+      return { error: `PDF yazılamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
     } finally {
       pdfBusy.value = false
     }
