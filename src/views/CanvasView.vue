@@ -90,9 +90,18 @@
         @click="undo"
         :disabled="store.strokes.length === 0"
         class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
-        title="Geri al"
+        title="Geri al (Ctrl+Z)"
       >
         Geri al
+      </button>
+
+      <button
+        @click="redo"
+        :disabled="store.redoStack.length === 0"
+        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
+        title="Yinele (Ctrl+Y / Ctrl+Shift+Z)"
+      >
+        Yinele
       </button>
 
       <button
@@ -241,6 +250,28 @@ const undo = () => {
   updateHud(true)
 }
 
+const redo = () => {
+  store.redo()
+  updateHud(true)
+}
+
+// Input'ta yazarken tetiklenmez; çizim sırasında el klavyedeyse çalışır.
+const onKeyDown = (e: KeyboardEvent) => {
+  const t = e.target as HTMLElement | null
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+  const key = e.key.toLowerCase()
+  if (key === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    store.undoLastStroke()
+    updateHud(true)
+  } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
+    e.preventDefault()
+    store.redo()
+    updateHud(true)
+  }
+}
+
 const exportPng = () => {
   const url = store.exportDataURL()
   if (!url) return
@@ -273,12 +304,14 @@ onMounted(() => {
   updateHud(true)
 
   window.addEventListener('resize', sizeCanvas)
+  window.addEventListener('keydown', onKeyDown)
 })
 
 onUnmounted(() => {
   if (rafId !== 0) cancelAnimationFrame(rafId)
   activePointerId = null
   window.removeEventListener('resize', sizeCanvas)
+  window.removeEventListener('keydown', onKeyDown)
   store.setCanvasRef(null)
   store.setOverlayRef(null)
 })
