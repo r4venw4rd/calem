@@ -13,6 +13,23 @@ export interface Stroke {
 export interface Page {
   id: string
   strokes: Stroke[]
+  // PDF sayfa bitmap'inin CSS-px boyutu (oran için). Bitmap'in kendisi reaktivite-dışı
+  // side-map'te (bgCanvases) durur — DOM objesi reactive state'e girmez.
+  bgSize: { w: number; h: number } | null
+  // Hangi PDF'in kaçıncı sayfası (0-based). Yeniden yüklemede arkaplanı bulmak için.
+  pdfPageIndex?: number
+}
+
+// Sayfa arkaplan bitmap'leri: sayfa id → render edilmiş canvas. Persist edilmez,
+// PDF bytes'larından yeniden üretilir (C2b).
+const bgCanvases = new Map<string, HTMLCanvasElement>()
+
+// Contain-fit: bitmap CSS boyutu + hedef CSS boyut → ölçek + offset.
+const fitContain = (bw: number, bh: number, cssW: number, cssH: number) => {
+  const scale = Math.min(cssW / bw, cssH / bh)
+  const dw = bw * scale
+  const dh = bh * scale
+  return { scale, ox: (cssW - dw) / 2, oy: (cssH - dh) / 2, dw, dh }
 }
 
 export interface PerfStats {
@@ -42,6 +59,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   let cachedRect: DOMRect | null = null
   // Aktif çizginin kirli kutusu (CSS px) — overlay fullscreen değil, bu kutu temizlenir.
   let bb: { x0: number; y0: number; x1: number; y1: number } | null = null
+  // Son bilinen CSS boyutu — resize'da arkaplanlı sayfaların vektörlerini orantılı ölçeklemek için.
+  let lastCssW = 0
+  let lastCssH = 0
   const color = ref('#ffffff')
   // Araç başına kalınlık hafızası: kalem ince, silgi kocaman olabilir; araç değişince geri gelir.
   const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5 }
@@ -64,7 +84,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Stroke'lar sayfalarda durur; tüm çizim op'ları AKTİF sayfaya işler.
   const newPageId = () =>
     `p-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
-  const blankPage = (): Page => ({ id: newPageId(), strokes: [] })
+  const blankPage = (): Page => ({ id: newPageId(), strokes: [], bgSize: null })
 
   const pages = ref<Page[]>([blankPage()])
   const activePageIndex = ref(0)
@@ -175,6 +195,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     bb = null
     setupBackingStoreFor(canvasRef.value)
     setupBackingStoreFor(overlayRef.value)
+    if (canvasRef.value) {
+      lastCssW = canvasRef.value.clientWidth
+      lastCssH = canvasRef.value.clientHeight
+    }
     repaintBase()
     clearOverlay()
   }
@@ -429,13 +453,63 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Base katmanını geçmişten baştan çiz — sadece undo/clear/resize/setup'ta çalışır (nadir).
   const repaintBase = () => {
     const ctx = getCtx(canvasRef.value)
-    if (!ctx) return
+    if (!ctx || !canvasRef.value) return
     clearFull(ctx)
     withDpr(ctx, () => {
-      for (const s of activePage.value.strokes) {
-        paintStroke(ctx, s)
-      }
+      paintPage(ctx, activePage.value, canvasRef.value!.clientWidth, canvasRef.value!.clientHeight)
     })
+  }
+
+  // Bir sayfayı verilen ctx'e çiz: arkaplan (contain-fit) + stroke'lar. Transform dışarıda kurulur.
+  const paintPage = (ctx: CanvasRenderingContext2D, page: Page, cssW: number, cssH: number) => {
+    const bg = bgCanvases.get(page.id)
+    if (bg && page.bgSize) {
+      const f = fitContain(page.bgSize.w, page.bgSize.h, cssW, cssH)
+      ctx.drawImage(bg, f.ox, f.oy, f.dw, f.dh)
+    }
+    for (const s of page.strokes) {
+      paintStroke(ctx, s)
+    }
+  }
+
+  // Export için: sayfayı verilen canvas'a tam boy çiz (opak zemin + arkaplan + mürekkep).
+  const renderPageToCanvas = (page: Page, canvas: HTMLCanvasElement, cssW: number, cssH: number) => {
+    const ctx = getCtx(canvas)
+    if (!ctx) return false
+    const scale = dpr.value || getDPR()
+    canvas.width = Math.max(1, Math.round(cssW * scale))
+    canvas.height = Math.max(1, Math.round(cssH * scale))
+    withDpr(ctx, () => {
+      ctx.fillStyle = EXPORT_BG
+      ctx.fillRect(0, 0, cssW, cssH)
+      paintPage(ctx, page, cssW, cssH)
+    })
+    return true
+  }
+
+  // Arkaplan ata (PDF import yolu). Eski bitmap varsa ezilir.
+  const setPageBackground = (
+    pageId: string,
+    bmp: HTMLCanvasElement,
+    cssW: number,
+    cssH: number,
+    pdfPageIndex?: number,
+  ) => {
+    bgCanvases.set(pageId, bmp)
+    const p = pages.value.find((x) => x.id === pageId)
+    if (p) {
+      p.bgSize = { w: cssW, h: cssH }
+      if (pdfPageIndex !== undefined) p.pdfPageIndex = pdfPageIndex
+    }
+  }
+
+  const clearPageBackground = (pageId: string) => {
+    bgCanvases.delete(pageId)
+    const p = pages.value.find((x) => x.id === pageId)
+    if (p) {
+      p.bgSize = null
+      delete p.pdfPageIndex
+    }
   }
 
   // ✅ Aktif çizgiyi overlay'e çiz — per-frame tek maliyet bu (O(aktif çizgi), sahneden bağımsız).
@@ -548,7 +622,12 @@ export const useDrawingStore = defineStore('drawing', () => {
       const doc: PersistedDoc = {
         v: 2,
         savedAt: now,
-        pages: pages.value.map((p) => ({ id: p.id, strokes: p.strokes.map(snapshotStroke) })),
+        pages: pages.value.map((p) => ({
+          id: p.id,
+          strokes: p.strokes.map(snapshotStroke),
+          bgSize: null,
+          ...(p.pdfPageIndex !== undefined ? { pdfPageIndex: p.pdfPageIndex } : {}),
+        })),
         widths: { ...widths.value },
         activePageIndex: activePageIndex.value,
       }
@@ -611,12 +690,17 @@ export const useDrawingStore = defineStore('drawing', () => {
         .map((p) => ({
           id: typeof p.id === 'string' && p.id ? p.id : newPageId(),
           strokes: cleanStrokes(p.strokes),
+          bgSize: null as Page['bgSize'],
+          pdfPageIndex:
+            typeof p.pdfPageIndex === 'number' && Number.isFinite(p.pdfPageIndex)
+              ? Math.floor(p.pdfPageIndex)
+              : undefined,
         }))
       loaded = clean.length > 0 ? clean : null
     } else if (doc.v === 1 && Array.isArray((doc as { strokes?: unknown }).strokes)) {
       const v1 = (doc as unknown as { strokes: Stroke[] }).strokes
       const clean = cleanStrokes(v1)
-      loaded = clean.length > 0 ? [{ id: newPageId(), strokes: clean }] : null
+      loaded = clean.length > 0 ? [{ id: newPageId(), strokes: clean, bgSize: null }] : null
     }
     if (!loaded || loaded.length === 0) return false
     pages.value = loaded
@@ -683,7 +767,8 @@ export const useDrawingStore = defineStore('drawing', () => {
   const deletePage = (i: number): boolean => {
     if (pages.value.length <= 1) return false
     const clamped = Math.min(pages.value.length - 1, Math.max(0, Math.floor(i)))
-    pages.value.splice(clamped, 1)
+    const [removed] = pages.value.splice(clamped, 1)
+    if (removed) bgCanvases.delete(removed.id)
     redoStack.value = []
     if (clamped < activePageIndex.value) {
       activePageIndex.value -= 1
@@ -700,13 +785,41 @@ export const useDrawingStore = defineStore('drawing', () => {
     return true
   }
 
+  // Arkaplanlı sayfaların vektörlerini yeni fit'e orantılı ölçekle (contain uniform olduğu için tek oran).
+  const refitBackgrounds = (prevW: number, prevH: number, newW: number, newH: number) => {
+    if (!prevW || !prevH || !newW || !newH || (prevW === newW && prevH === newH)) return
+    for (const page of pages.value) {
+      if (!page.bgSize || !bgCanvases.has(page.id)) continue
+      const oldF = fitContain(page.bgSize.w, page.bgSize.h, prevW, prevH)
+      const newF = fitContain(page.bgSize.w, page.bgSize.h, newW, newH)
+      if (!oldF.scale) continue
+      const r = newF.scale / oldF.scale
+      if (!Number.isFinite(r) || r === 1) continue
+      for (const s of page.strokes) {
+        for (const p of s.points) {
+          p.x *= r
+          p.y *= r
+        }
+      }
+    }
+  }
+
   // ✅ Canvas boyutlarını yeniden hesapla — vektör geçmişi CSS px olduğu için
   // bitmap kopyaya gerek yok, sadece iki katmanı güncelle ve base'i redraw yap.
   const resizeCanvas = () => {
     cachedRect = null
     bb = null
+    const prevW = lastCssW
+    const prevH = lastCssH
     setupBackingStoreFor(canvasRef.value)
     setupBackingStoreFor(overlayRef.value)
+    if (canvasRef.value) {
+      const newW = canvasRef.value.clientWidth
+      const newH = canvasRef.value.clientHeight
+      refitBackgrounds(prevW, prevH, newW, newH)
+      lastCssW = newW
+      lastCssH = newH
+    }
     repaintBase()
     renderActiveStroke()
   }
@@ -734,6 +847,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     goToPage,
     addPage,
     deletePage,
+    setPageBackground,
+    clearPageBackground,
+    renderPageToCanvas,
     dpr,
     setTool,
     setColor,
