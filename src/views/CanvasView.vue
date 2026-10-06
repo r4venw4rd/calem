@@ -1,0 +1,180 @@
+<template>
+  <div class="h-screen flex flex-col bg-gray-950 overflow-hidden">
+    <header class="relative z-10 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-gray-900/90 backdrop-blur-sm border-b border-white/10">
+      <div class="flex items-center gap-2">
+        <button
+          @click="store.setTool('pen')"
+          :class="{ 'bg-indigo-600 text-white': store.currentTool === 'pen' }"
+          class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition flex items-center gap-1"
+          title="Kalem"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7l7 9z" />
+          </svg>
+          Kalem
+        </button>
+
+        <button
+          @click="store.setTool('eraser')"
+          :class="{ 'bg-red-600 text-white': store.currentTool === 'eraser' }"
+          class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition flex items-center gap-1"
+          title="Silgi"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m12 4h4m4-4v4m-4-6h4m-5.303-5.303L16 16" />
+          </svg>
+          Silgi
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-gray-400">Araç:</span>
+        <select
+          :value="store.currentTool"
+          @change="store.setTool(($event.target as HTMLSelectElement).value as 'pen' | 'eraser' | 'highlighter')"
+          class="px-2 py-1 rounded text-sm border border-white/30 bg-white/20 cursor-pointer text-white"
+        >
+          <option value="pen">Kalem</option>
+          <option value="eraser">Silgi</option>
+          <option value="highlighter">Vurgulayıcı</option>
+        </select>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-gray-400">Renk:</span>
+        <input
+          type="color"
+          :value="store.color"
+          @input="store.setColor(($event.target as HTMLInputElement).value)"
+          class="w-8 h-8 rounded bg-white/20 border border-white/30 cursor-pointer"
+        />
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-gray-400">Kalınlık:</span>
+        <input
+          type="range"
+          min="1"
+          max="20"
+          :value="store.strokeWidth"
+          @input="store.setStrokeWidth(Number(($event.target as HTMLInputElement).value))"
+          class="w-24 accent-indigo-600"
+        />
+        <span class="text-xs text-gray-300 w-6 text-right">{{ store.strokeWidth }}</span>
+      </div>
+
+      <button
+        @click="clearCanvas"
+        class="px-3 py-1 rounded text-xs font-medium text-gray-300 hover:text-white transition flex items-center gap-1"
+        title="Temizle"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m12 4h4m4-4v4m-4-6h4m-5.303-5.303L16 16" />
+        </svg>
+        Temizle
+      </button>
+    </header>
+
+    <div class="relative flex-1 bg-gray-900/50 min-h-0">
+      <canvas
+        ref="canvas"
+        class="absolute inset-0 w-full h-full cursor-crosshair touch-none select-none block"
+        @pointerdown="startDraw"
+        @pointermove="draw"
+        @pointerup="endDraw"
+        @pointerleave="endDraw"
+        @pointercancel="endDraw"
+      ></canvas>
+
+      <p class="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-gray-500 pointer-events-none">
+        Basılı tutun &amp; hareket edin - Smooth çizim
+      </p>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useDrawingStore } from '@/stores/drawing'
+
+const canvas = ref<HTMLCanvasElement | null>(null)
+const store = useDrawingStore()
+
+const getCtx = () => canvas.value?.getContext('2d') ?? null
+
+// Event handler'lar — template'teki @pointer* binding'leri yeterli.
+// onMounted'da addEventListener EKLEME (yoksa her olay 2 kez ateşlenir).
+const startDraw = (e: PointerEvent) => {
+  if (!canvas.value) return
+  // pointer capture ile canvas dışına taşınca bile çizmeye devam et
+  try {
+    canvas.value.setPointerCapture(e.pointerId)
+  } catch {
+    /* ignore */
+  }
+  store.startDrawing(e)
+  const ctx = getCtx()
+  if (ctx) store.renderCurrentStroke(ctx)
+}
+
+const draw = (e: PointerEvent) => {
+  if (!store.isDrawing) return
+  // Sadece basılıyken çiz (pointermove hover'da ateşlenir)
+  if (e.buttons === 0 && e.pointerType === 'mouse') return
+  store.draw(e)
+  const ctx = getCtx()
+  if (ctx) store.renderCurrentStroke(ctx)
+}
+
+const endDraw = () => {
+  if (!store.isDrawing) return
+  store.stopDrawing()
+  const ctx = getCtx()
+  if (ctx) store.renderAllStrokes(ctx)
+}
+
+const clearCanvas = () => {
+  store.clearCanvas()
+}
+
+const sizeCanvas = () => {
+  if (!canvas.value) return
+  const c = canvas.value
+  // Boyut değiştiyse güncelle (aynıysa dokunma — dokunmak temizler)
+  const w = c.clientWidth
+  const h = c.clientHeight
+  if (w === 0 || h === 0) return
+  if (c.width !== w || c.height !== h) {
+    // Geçmişi korumak için store üzerinden resize yap
+    store.resizeCanvas()
+  }
+}
+
+// Canvas initialization
+onMounted(() => {
+  if (!canvas.value) return
+  const c = canvas.value
+  // İlk boyutlandırma — sadece burada width/height ata
+  c.width = c.clientWidth
+  c.height = c.clientHeight
+
+  c.style.touchAction = 'none'
+
+  store.setCanvasRef(c)
+
+  window.addEventListener('resize', sizeCanvas)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', sizeCanvas)
+  store.setCanvasRef(null)
+})
+</script>
+
+<style scoped>
+canvas {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  user-select: none;
+}
+</style>
