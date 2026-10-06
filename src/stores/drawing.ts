@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, shallowRef } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 
 export type Tool = 'pen' | 'eraser' | 'highlighter'
 export interface Point { x: number; y: number; pressure?: number }
@@ -9,6 +9,18 @@ export interface Stroke {
   width: number
   points: Point[]
 }
+
+export interface PerfStats {
+  lastMs: number
+  emaMs: number
+  renders: number
+  totalPoints: number
+}
+
+// Bilerek reaktivite DIŞI (modül seviyesi): her frame yazılır.
+// Pinia state'i içinde olsaydı her yazım tüm store'u (tüm stroke'lar dahil)
+// reaktivite/devtools hattından geçirir → çizgi sayısı arttıkça kasar.
+export const drawingPerf: PerfStats = { lastMs: 0, emaMs: 0, renders: 0, totalPoints: 0 }
 
 export const useDrawingStore = defineStore('drawing', () => {
   const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -22,8 +34,6 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Reactive olsaydı her yazım Pinia/devtools'a mutation olarak düşer → oturum uzadıkça kasar.
   let lastPressure = 1
   let cachedRect: DOMRect | null = null
-  // HUD sayaçları: referans sabit, içi mutate edilir → store.perf üzerinden canlı okunur.
-  const perf = { lastMs: 0, emaMs: 0, renders: 0, totalPoints: 0 }
   const color = ref('#ffffff')
   const strokeWidth = ref(3)
   const currentTool = ref<Tool>('pen')
@@ -37,6 +47,13 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // Kalıcı geçmiş — yoktu, bu yüzden her bırakışta her şey siliniyordu
   const strokes = ref<Stroke[]>([])
+
+  // Silgi history'de durur (replay tutarlılığı için) ama "çizgi" sayılmaz — HUD/undo bunu kullanır.
+  const drawingCount = computed(() => {
+    let n = 0
+    for (const s of strokes.value) if (s.tool !== 'eraser') n += 1
+    return n
+  })
 
   // Tool change — highlighter artık rengi ezmez, seçili renk alpha ile kullanılır.
   const setTool = (tool: Tool) => {
@@ -221,7 +238,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         points: [...points.value],
       }
       strokes.value.push(stroke)
-      perf.totalPoints += stroke.points.length
+      drawingPerf.totalPoints += stroke.points.length
       if (stroke.tool !== 'eraser') {
         const ctx = getCtx(canvasRef.value)
         if (ctx) {
@@ -378,9 +395,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       })
     }
     const dt = performance.now() - t0
-    perf.lastMs = dt
-    perf.emaMs = perf.emaMs === 0 ? dt : perf.emaMs * 0.9 + dt * 0.1
-    perf.renders += 1
+    drawingPerf.lastMs = dt
+    drawingPerf.emaMs = drawingPerf.emaMs === 0 ? dt : drawingPerf.emaMs * 0.9 + dt * 0.1
+    drawingPerf.renders += 1
   }
 
   // Geriye uyumluluk: ctx'li eski çağrılar overlay/base'e yönlenir (ctx argümanı yok sayılır).
@@ -403,7 +420,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const clearCanvas = () => {
     strokes.value = []
     points.value = []
-    perf.totalPoints = 0
+    drawingPerf.totalPoints = 0
     isDrawing.value = false
     cachedRect = null
     const ctx = getCtx(canvasRef.value)
@@ -444,7 +461,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Son stroke'u geri al (undo)
   const undoLastStroke = () => {
     const popped = strokes.value.pop()
-    if (popped) perf.totalPoints = Math.max(0, perf.totalPoints - popped.points.length)
+    if (popped) drawingPerf.totalPoints = Math.max(0, drawingPerf.totalPoints - popped.points.length)
     points.value = []
     isDrawing.value = false
     repaintBase()
@@ -471,8 +488,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     pressureSensitivity,
     rejectTouch,
     strokes,
+    drawingCount,
     dpr,
-    perf,
     setTool,
     setColor,
     setStrokeWidth,
