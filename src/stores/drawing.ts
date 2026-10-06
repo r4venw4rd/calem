@@ -10,6 +10,10 @@ export interface Stroke {
   width: number
   points: Point[]
 }
+export interface Page {
+  id: string
+  strokes: Stroke[]
+}
 
 export interface PerfStats {
   lastMs: number
@@ -56,19 +60,40 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Böylece resize'da vektör geçmişi bozulmaz, hidpi'de bulanıklık olmaz.
   const dpr = ref(1)
 
-  // Kalıcı geçmiş — yoktu, bu yüzden her bırakışta her şey siliniyordu
-  const strokes = ref<Stroke[]>([])
-  // Undo ile çıkanlar buraya; yeni çizgi girince ölür (klasik redo semantiği).
+  // --- Sayfa modeli (PDF çok-sayfa + sayfa şeridinin zemini) ---
+  // Stroke'lar sayfalarda durur; tüm çizim op'ları AKTİF sayfaya işler.
+  const newPageId = () =>
+    `p-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+  const blankPage = (): Page => ({ id: newPageId(), strokes: [] })
+
+  const pages = ref<Page[]>([blankPage()])
+  const activePageIndex = ref(0)
+  const activePage = computed(() => pages.value[activePageIndex.value] ?? pages.value[0]!)
+
+  // Template uyumluluğu: store.strokes = aktif sayfanın çizgileri (salt-okunur görünüm).
+  // Store içi yazımlar activePage.value.strokes üzerindendir.
+  const strokes = computed(() => activePage.value.strokes)
+
+  // Undo ile çıkanlar buraya; yeni çizgi VEYA sayfa değişimi öldürür.
   const redoStack = ref<Stroke[]>([])
   // Son başarılı autosave saati (HH:MM) — header göstergesi, nadiren yazılır.
   const lastSavedAt = ref('')
 
   // Silgi history'de durur (replay tutarlılığı için) ama "çizgi" sayılmaz — HUD/undo bunu kullanır.
+  // Her zaman AKTİF sayfa sayılır.
   const drawingCount = computed(() => {
     let n = 0
-    for (const s of strokes.value) if (s.tool !== 'eraser') n += 1
+    for (const s of activePage.value.strokes) if (s.tool !== 'eraser') n += 1
     return n
   })
+
+  // Sayaçlar aktif sayfadan yeniden hesaplanır (nadir op'larda O(sayfa) — drift yok).
+  const recountActive = () => {
+    drawingPerf.totalPoints = activePage.value.strokes.reduce(
+      (n, s) => n + (s.tool === 'eraser' ? 0 : s.points.length),
+      0,
+    )
+  }
 
   // Tool change — highlighter artık rengi ezmez, seçili renk alpha ile kullanılır.
   const setTool = (tool: Tool) => {
@@ -260,11 +285,10 @@ export const useDrawingStore = defineStore('drawing', () => {
         width: strokeWidth.value,
         points: [...points.value],
       }
-      strokes.value.push(stroke)
+      activePage.value.strokes.push(stroke)
       // Yeni mürekkep redo'yu öldürür.
       redoStack.value = []
-      // Sayaç: sadece gerçek mürekkep (silgi history'de durur ama sayılmaz).
-      if (stroke.tool !== 'eraser') drawingPerf.totalPoints += stroke.points.length
+      recountActive()
       if (stroke.tool !== 'eraser') {
         const ctx = getCtx(canvasRef.value)
         if (ctx) {
@@ -408,7 +432,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (!ctx) return
     clearFull(ctx)
     withDpr(ctx, () => {
-      for (const s of strokes.value) {
+      for (const s of activePage.value.strokes) {
         paintStroke(ctx, s)
       }
     })
@@ -454,12 +478,12 @@ export const useDrawingStore = defineStore('drawing', () => {
     renderActiveStroke()
   }
 
-  // ✅ Canvası temizle
+  // ✅ Canvası temizle — sadece AKTİF sayfa (sayfalar varken global silme yok).
   const clearCanvas = () => {
-    strokes.value = []
+    activePage.value.strokes = []
     redoStack.value = []
     points.value = []
-    drawingPerf.totalPoints = 0
+    recountActive()
     isDrawing.value = false
     cachedRect = null
     bb = null
@@ -511,18 +535,23 @@ export const useDrawingStore = defineStore('drawing', () => {
     new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
 
   // Reactive proxy'leri düz veriye çevir — IDB structured-clone'a temiz girer.
-  const snapshot = (): Stroke[] =>
-    strokes.value.map((s) => ({
-      tool: s.tool,
-      color: s.color,
-      width: s.width,
-      points: s.points.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
-    }))
+  const snapshotStroke = (s: Stroke): Stroke => ({
+    tool: s.tool,
+    color: s.color,
+    width: s.width,
+    points: s.points.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
+  })
 
   const persistNow = async (): Promise<void> => {
     try {
       const now = Date.now()
-      const doc: PersistedDoc = { v: 1, savedAt: now, strokes: snapshot(), widths: { ...widths.value } }
+      const doc: PersistedDoc = {
+        v: 2,
+        savedAt: now,
+        pages: pages.value.map((p) => ({ id: p.id, strokes: p.strokes.map(snapshotStroke) })),
+        widths: { ...widths.value },
+        activePageIndex: activePageIndex.value,
+      }
       await idbSet(doc)
       lastSavedAt.value = fmtTime(now)
     } catch {
@@ -538,7 +567,25 @@ export const useDrawingStore = defineStore('drawing', () => {
     }, 800)
   }
 
+  // Bozuk kayda karşı stroke doğrulama (v1/v2 yükleme ortak).
+  const cleanStrokes = (input: Stroke[]): Stroke[] => {
+    const clean: Stroke[] = []
+    for (const s of input) {
+      if (!s || !Array.isArray(s.points)) continue
+      const pts = s.points.filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y))
+      if (pts.length === 0) continue
+      clean.push({
+        tool: s.tool === 'eraser' || s.tool === 'highlighter' ? s.tool : 'pen',
+        color: typeof s.color === 'string' ? s.color : '#ffffff',
+        width: typeof s.width === 'number' ? Math.min(120, Math.max(1, s.width)) : 3,
+        points: pts.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
+      })
+    }
+    return clean
+  }
+
   // Açılışta kayıtlı sahneyi yükler. Canvas ref'leri hazır olduktan sonra çağrılmalı.
+  // v1 (tek sayfa) kayıtları tek sayfaya göçer.
   const loadPersisted = async (): Promise<boolean> => {
     let doc: PersistedDoc | null = null
     try {
@@ -546,65 +593,109 @@ export const useDrawingStore = defineStore('drawing', () => {
     } catch {
       return false
     }
-    if (!doc || doc.v !== 1 || !Array.isArray(doc.strokes)) return false
-    // Araç kalınlıkları stroke'lardan bağımsızdır: kayıt boş olsa bile uygulanır.
-    if (doc.widths) {
+    if (!doc || typeof doc.v !== 'number') return false
+    // widths her sürümde ortak
+    const w = (doc as { widths?: unknown }).widths as Record<string, unknown> | undefined
+    if (w) {
       for (const t of ['pen', 'highlighter', 'eraser'] as const) {
-        const v = doc.widths[t]
+        const v = w[t]
         if (typeof v === 'number' && Number.isFinite(v)) {
           widths.value[t] = Math.min(WIDTH_MAX[t], Math.max(WIDTH_MIN[t], Math.round(v)))
         }
       }
     }
-    if (doc.strokes.length === 0) return false
-    const clean: Stroke[] = []
-    for (const s of doc.strokes) {
-      if (!s || !Array.isArray(s.points)) continue
-      const pts = s.points.filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y))
-      if (pts.length === 0) continue
-      clean.push({
-        tool: s.tool === 'eraser' || s.tool === 'highlighter' ? s.tool : 'pen',
-        color: typeof s.color === 'string' ? s.color : '#ffffff',
-        width: typeof s.width === 'number' ? Math.min(100, Math.max(1, s.width)) : 3,
-        points: pts.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
-      })
+    let loaded: Page[] | null = null
+    if (doc.v === 2 && Array.isArray(doc.pages)) {
+      const clean = doc.pages
+        .filter((p) => p && Array.isArray(p.strokes))
+        .map((p) => ({
+          id: typeof p.id === 'string' && p.id ? p.id : newPageId(),
+          strokes: cleanStrokes(p.strokes),
+        }))
+      loaded = clean.length > 0 ? clean : null
+    } else if (doc.v === 1 && Array.isArray((doc as { strokes?: unknown }).strokes)) {
+      const v1 = (doc as unknown as { strokes: Stroke[] }).strokes
+      const clean = cleanStrokes(v1)
+      loaded = clean.length > 0 ? [{ id: newPageId(), strokes: clean }] : null
     }
-    if (clean.length === 0) return false
-    strokes.value = clean
+    if (!loaded || loaded.length === 0) return false
+    pages.value = loaded
     redoStack.value = []
-    drawingPerf.totalPoints = clean.reduce(
-      (n, s) => n + (s.tool === 'eraser' ? 0 : s.points.length),
-      0,
-    )
+    const idx = (doc as { activePageIndex?: unknown }).activePageIndex
+    activePageIndex.value =
+      typeof idx === 'number' && Number.isFinite(idx)
+        ? Math.min(loaded.length - 1, Math.max(0, Math.floor(idx)))
+        : 0
+    recountActive()
     lastSavedAt.value = fmtTime(doc.savedAt)
     repaintBase()
     return true
   }
 
-  // ✅ Son stroke'u geri al (undo)
+  // ✅ Son stroke'u geri al (undo) — aktif sayfada
   const undoLastStroke = () => {
-    const popped = strokes.value.pop()
-    if (popped) {
-      redoStack.value.push(popped)
-      if (popped.tool !== 'eraser') {
-        drawingPerf.totalPoints = Math.max(0, drawingPerf.totalPoints - popped.points.length)
-      }
-    }
+    const popped = activePage.value.strokes.pop()
+    if (popped) redoStack.value.push(popped)
     points.value = []
     isDrawing.value = false
     repaintBase()
     clearOverlay()
     bb = null
+    recountActive()
     scheduleSave()
   }
 
-  // ✅ Yinele (redo) — undo ile çıkan en son stroke'u geri koyar.
+  // ✅ Yinele (redo) — undo ile çıkan en son stroke'u geri koyar (aktif sayfada).
   const redo = (): boolean => {
     const s = redoStack.value.pop()
     if (!s) return false
-    strokes.value.push(s)
-    if (s.tool !== 'eraser') drawingPerf.totalPoints += s.points.length
+    activePage.value.strokes.push(s)
+    recountActive()
     repaintBase()
+    scheduleSave()
+    return true
+  }
+
+  // --- Sayfa op'ları ---
+  const goToPage = (i: number) => {
+    const clamped = Math.min(pages.value.length - 1, Math.max(0, Math.floor(i)))
+    if (clamped === activePageIndex.value) return
+    activePageIndex.value = clamped
+    // Sayfa değişimi redo'yu öldürür (global stack sayfalar arası taşınmaz).
+    redoStack.value = []
+    points.value = []
+    isDrawing.value = false
+    bb = null
+    repaintBase()
+    clearOverlay()
+    recountActive()
+    scheduleSave()
+  }
+
+  const addPage = () => {
+    pages.value.push(blankPage())
+    goToPage(pages.value.length - 1)
+    scheduleSave()
+  }
+
+  // Silinen aktifse komşuya geçilir. Son sayfa silinemez. Veri kaybına karşı
+  // component confirm() sorar (undo sayfa silişini geri getirmez).
+  const deletePage = (i: number): boolean => {
+    if (pages.value.length <= 1) return false
+    const clamped = Math.min(pages.value.length - 1, Math.max(0, Math.floor(i)))
+    pages.value.splice(clamped, 1)
+    redoStack.value = []
+    if (clamped < activePageIndex.value) {
+      activePageIndex.value -= 1
+    } else if (activePageIndex.value >= pages.value.length) {
+      activePageIndex.value = pages.value.length - 1
+    }
+    points.value = []
+    isDrawing.value = false
+    bb = null
+    repaintBase()
+    clearOverlay()
+    recountActive()
     scheduleSave()
     return true
   }
@@ -637,6 +728,12 @@ export const useDrawingStore = defineStore('drawing', () => {
     rejectTouch,
     strokes,
     drawingCount,
+    pages,
+    activePage,
+    activePageIndex,
+    goToPage,
+    addPage,
+    deletePage,
     dpr,
     setTool,
     setColor,
