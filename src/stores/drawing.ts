@@ -698,6 +698,33 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
+  // PDF export: her sayfa PNG'ye çevrilip tek PDF'e gömülür (WYSIWYG).
+  const exportPdf = async (): Promise<{ pages: number } | { error: string }> => {
+    if (pdfBusy.value) return { error: 'işlem sürüyor' }
+    const base = canvasRef.value
+    if (!base || pages.value.length === 0) return { error: 'sayfa yok' }
+    pdfBusy.value = true
+    try {
+      const { jsPDF } = await import('jspdf')
+      const cssW = base.clientWidth || 800
+      const cssH = base.clientHeight || 600
+      const doc = new jsPDF({ unit: 'pt', format: [cssW, cssH], compress: true })
+      const tmp = document.createElement('canvas')
+      for (let i = 0; i < pages.value.length; i++) {
+        if (i > 0) doc.addPage([cssW, cssH])
+        if (!renderPageToCanvas(pages.value[i]!, tmp, cssW, cssH)) {
+          return { error: `sayfa ${i + 1} çizilemedi` }
+        }
+        doc.addImage(tmp.toDataURL('image/png'), 'PNG', 0, 0, cssW, cssH)
+      }
+      doc.save(`calem-${new Date().toISOString().slice(0, 10)}.pdf`)
+      return { pages: pages.value.length }
+    } catch {
+      return { error: 'PDF yazılamadı' }
+    } finally {
+      pdfBusy.value = false
+    }
+  }
   // PDF'i kapat: arkaplanlar gider, tek boş sayfaya dönülür, dosya kaydı silinir.
   const closePdf = () => {
     if (pdfId.value) void idbDeleteFile(pdfId.value).catch(() => {})
@@ -1023,6 +1050,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     pdfName,
     importPdf,
     closePdf,
+    exportPdf,
     resizeCanvas,
   }
 })
