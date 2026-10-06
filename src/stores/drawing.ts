@@ -20,6 +20,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   const strokeWidth = ref(3)
   const currentTool = ref<Tool>('pen')
   const pressureSensitivity = ref(1)
+  // Backing-store ölçeği — noktalar CSS px cinsinden saklanır, render DPR ile ölçeklenir.
+  // Böylece resize'da vektör geçmişi bozulmaz, hidpi'de bulanıklık olmaz.
+  const dpr = ref(1)
 
   // Kalıcı geçmiş — yoktu, bu yüzden her bırakışta her şey siliniyordu
   const strokes = ref<Stroke[]>([])
@@ -48,15 +51,42 @@ export const useDrawingStore = defineStore('drawing', () => {
     canvasRef.value = canvas
   }
 
+  const getDPR = () => Math.min(window.devicePixelRatio || 1, 3)
+
+  // Backing store'u CSS boyut x DPR yap. Boyut değiştiyse true döner.
+  const setupBackingStore = (): boolean => {
+    const canvas = canvasRef.value
+    if (!canvas) return false
+    const w = canvas.clientWidth
+    const h = canvas.clientHeight
+    if (w === 0 || h === 0) return false
+    const scale = getDPR()
+    dpr.value = scale
+    const bw = Math.round(w * scale)
+    const bh = Math.round(h * scale)
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw
+      canvas.height = bh
+      return true
+    }
+    return false
+  }
+
+  // İlk kurulum + resize için tek giriş noktası: boyutlandır ve vektörden redraw yap.
+  const setupCanvas = () => {
+    if (!canvasRef.value) return
+    setupBackingStore()
+    const ctx = canvasRef.value.getContext('2d')
+    if (ctx) redraw(ctx)
+  }
+
   const getPos = (e: PointerEvent) => {
     const canvas = canvasRef.value!
     const rect = canvas.getBoundingClientRect()
-    // CSS scale farkını hesaba kat (canvas.width != clientWidth olabilir)
-    const scaleX = canvas.width / rect.width || 1
-    const scaleY = canvas.height / rect.height || 1
+    // Noktalar CSS px cinsinden saklanır — DPR sadece render transform'unda uygulanır.
     return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
     }
   }
 
@@ -188,12 +218,11 @@ export const useDrawingStore = defineStore('drawing', () => {
     redraw(ctx)
   }
 
-  // ✅ Tüm sahneyi render et: geçmiş + devam eden
+  // ✅ Tüm sahneyi render et: geçmiş + devam eden (CSS px uzayında, DPR transform ile)
   const redraw = (ctx: CanvasRenderingContext2D) => {
-    ctx.save()
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
-    ctx.restore()
+    const scale = dpr.value || getDPR()
+    ctx.setTransform(scale, 0, 0, scale, 0, 0)
+    ctx.clearRect(0, 0, ctx.canvas.width / scale, ctx.canvas.height / scale)
 
     for (const s of strokes.value) {
       paintStroke(ctx, s)
@@ -221,10 +250,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (!canvasRef.value) return
     const ctx = canvasRef.value.getContext('2d')
     if (ctx) {
-      ctx.save()
-      ctx.setTransform(1, 0, 0, 1, 0, 0)
-      ctx.clearRect(0, 0, canvasRef.value.width, canvasRef.value.height)
-      ctx.restore()
+      const scale = dpr.value || getDPR()
+      ctx.setTransform(scale, 0, 0, scale, 0, 0)
+      ctx.clearRect(0, 0, canvasRef.value.width / scale, canvasRef.value.height / scale)
     }
   }
 
@@ -259,27 +287,13 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
-  // ✅ Canvas boyutlarını yeniden hesapla (boyut değişiminde geçmişi koru)
+  // ✅ Canvas boyutlarını yeniden hesapla — vektör geçmişi CSS px olduğu için
+  // bitmap kopyaya gerek yok, sadece backing store'u güncelle ve redraw yap.
   const resizeCanvas = () => {
     if (!canvasRef.value) return
-    const canvas = canvasRef.value
-    // Mevcut içeriği sakla
-    const tmp = document.createElement('canvas')
-    tmp.width = canvas.width
-    tmp.height = canvas.height
-    const tmpCtx = tmp.getContext('2d')
-    if (tmpCtx && canvas.width > 0 && canvas.height > 0) {
-      tmpCtx.drawImage(canvas, 0, 0)
-    }
-    canvas.width = canvas.clientWidth
-    canvas.height = canvas.clientHeight
-    const ctx = canvas.getContext('2d')
+    setupBackingStore()
+    const ctx = canvasRef.value.getContext('2d')
     if (!ctx) return
-    if (tmp.width > 0 && tmp.height > 0) {
-      // Basit ölçekli geri çiz (vektör geçmişi de ayrıca duruyor)
-      ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height)
-    }
-    // Vektör geçmişinden net redraw
     redraw(ctx)
   }
 
@@ -292,10 +306,12 @@ export const useDrawingStore = defineStore('drawing', () => {
     currentTool,
     pressureSensitivity,
     strokes,
+    dpr,
     setTool,
     setColor,
     setStrokeWidth,
     setCanvasRef,
+    setupCanvas,
     startDrawing,
     draw,
     stopDrawing,
