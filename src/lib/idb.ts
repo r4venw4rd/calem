@@ -13,22 +13,38 @@ export interface PersistedDocV2 {
   pages: Page[]
   widths?: Record<Tool, number>
   activePageIndex?: number
+  pdfId?: string
+  pdfName?: string
 }
 
 export type PersistedDoc = PersistedDocV1 | PersistedDocV2
 
 const DB_NAME = 'calem'
-const STORE_NAME = 'docs'
+const DOCS_STORE = 'docs'
+const FILES_STORE = 'files'
 const KEY = 'default'
+// v2: PDF bytes deposu eklendi (v1 kullanıcıları upgrade ile korunur).
+const DB_VERSION = 2
+
+export interface PdfFileRecord {
+  id: string
+  name: string
+  size: number
+  addedAt: number
+  pageCount: number
+  bytes: ArrayBuffer
+}
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise
   dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1)
+    const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = () => {
-      req.result.createObjectStore(STORE_NAME)
+      const db = req.result
+      if (!db.objectStoreNames.contains(DOCS_STORE)) db.createObjectStore(DOCS_STORE)
+      if (!db.objectStoreNames.contains(FILES_STORE)) db.createObjectStore(FILES_STORE)
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error ?? new Error('idb open failed'))
@@ -36,12 +52,12 @@ function openDb(): Promise<IDBDatabase> {
   return dbPromise
 }
 
-function tx<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   return openDb().then(
     (db) =>
       new Promise<T>((resolve, reject) => {
-        const t = db.transaction(STORE_NAME, mode)
-        const req = fn(t.objectStore(STORE_NAME))
+        const t = db.transaction(store, mode)
+        const req = fn(t.objectStore(store))
         req.onsuccess = () => resolve(req.result)
         req.onerror = () => reject(req.error ?? new Error('idb request failed'))
       }),
@@ -49,9 +65,21 @@ function tx<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBReque
 }
 
 export function idbGet(): Promise<PersistedDoc | null> {
-  return tx('readonly', (s) => s.get(KEY)).then((v) => (v as PersistedDoc | undefined) ?? null)
+  return tx(DOCS_STORE, 'readonly', (s) => s.get(KEY)).then((v) => (v as PersistedDoc | undefined) ?? null)
 }
 
 export function idbSet(doc: PersistedDoc): Promise<void> {
-  return tx('readwrite', (s) => s.put(doc, KEY)).then(() => undefined)
+  return tx(DOCS_STORE, 'readwrite', (s) => s.put(doc, KEY)).then(() => undefined)
+}
+
+export function idbGetFile(id: string): Promise<PdfFileRecord | null> {
+  return tx(FILES_STORE, 'readonly', (s) => s.get(id)).then((v) => (v as PdfFileRecord | undefined) ?? null)
+}
+
+export function idbSetFile(rec: PdfFileRecord): Promise<void> {
+  return tx(FILES_STORE, 'readwrite', (s) => s.put(rec, rec.id)).then(() => undefined)
+}
+
+export function idbDeleteFile(id: string): Promise<void> {
+  return tx(FILES_STORE, 'readwrite', (s) => s.delete(id)).then(() => undefined)
 }
