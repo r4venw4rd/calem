@@ -145,7 +145,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { useDrawingStore } from '@/stores/drawing'
+import { drawingPerf, useDrawingStore } from '@/stores/drawing'
 
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
@@ -164,7 +164,7 @@ const updateHud = (force = false) => {
   const now = performance.now()
   if (!force && now - lastHudAt < 250) return
   lastHudAt = now
-  el.textContent = `${store.perf.emaMs.toFixed(1)}ms · ${store.strokes.length} çizgi · ${fmtPts(store.perf.totalPoints)} nokta`
+  el.textContent = `${drawingPerf.emaMs.toFixed(1)}ms · ${store.drawingCount} çizgi · ${fmtPts(drawingPerf.totalPoints)} nokta`
 }
 
 const scheduleRender = () => {
