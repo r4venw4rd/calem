@@ -174,9 +174,10 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // ✅ Çek - hareket ederken smooth çizim.
-  // Desimasyon: birbirine çok yakın noktalar path'i şişirir, görsel fark yaratmaz — atla.
-  // (Basınç belirgin değiştiyse konumu aynı olsa da noktayı tut.)
-  const MIN_DIST = 1.25
+  // Desimasyon: saf mesafe filtresi. 1.25px'ten yakın noktalar path'i şişirir,
+  // görsel fark yaratmaz — atla. (Basınç ortalamayla genişliğe işlediği için
+  // noktasal basınç farkı için nokta tutmak sadece history'yi şişirirdi.)
+  const MIN_DIST = 1.5
   const draw = (e: PointerEvent) => {
     if (!isDrawing.value || !canvasRef.value) return
     if (shouldIgnoreEvent(e)) return
@@ -190,9 +191,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (last) {
       const dx = x - last.x
       const dy = y - last.y
-      const moved = dx * dx + dy * dy >= MIN_DIST * MIN_DIST
-      const pressChanged = Math.abs(pressureVal - (last.pressure ?? 1)) > 0.25
-      if (!moved && !pressChanged) return
+      if (dx * dx + dy * dy < MIN_DIST * MIN_DIST) return
     }
     pts.push({ x, y, pressure: pressureVal })
     // Silgi: yeni segmenti hemen base'e işle (overlay bypass).
@@ -238,7 +237,8 @@ export const useDrawingStore = defineStore('drawing', () => {
         points: [...points.value],
       }
       strokes.value.push(stroke)
-      drawingPerf.totalPoints += stroke.points.length
+      // Sayaç: sadece gerçek mürekkep (silgi history'de durur ama sayılmaz).
+      if (stroke.tool !== 'eraser') drawingPerf.totalPoints += stroke.points.length
       if (stroke.tool !== 'eraser') {
         const ctx = getCtx(canvasRef.value)
         if (ctx) {
@@ -461,7 +461,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Son stroke'u geri al (undo)
   const undoLastStroke = () => {
     const popped = strokes.value.pop()
-    if (popped) drawingPerf.totalPoints = Math.max(0, drawingPerf.totalPoints - popped.points.length)
+    if (popped && popped.tool !== 'eraser') {
+      drawingPerf.totalPoints = Math.max(0, drawingPerf.totalPoints - popped.points.length)
+    }
     points.value = []
     isDrawing.value = false
     repaintBase()
