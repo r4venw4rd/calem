@@ -27,12 +27,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Kalıcı geçmiş — yoktu, bu yüzden her bırakışta her şey siliniyordu
   const strokes = ref<Stroke[]>([])
 
-  // Tool change
+  // Tool change — highlighter artık rengi ezmez, seçili renk alpha ile kullanılır.
   const setTool = (tool: Tool) => {
     currentTool.value = tool
-    if (tool === 'highlighter') {
-      color.value = '#ffff00'
-    }
   }
 
   // Color change
@@ -129,6 +126,17 @@ export const useDrawingStore = defineStore('drawing', () => {
     points.value = []
   }
 
+  const hexToRgba = (hex: string, alpha: number): string => {
+    const h = hex.replace('#', '')
+    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
+    const n = parseInt(full, 16)
+    if (Number.isNaN(n)) return `rgba(255,255,0,${alpha})`
+    const r = (n >> 16) & 255
+    const g = (n >> 8) & 255
+    const b = n & 255
+    return `rgba(${r},${g},${b},${alpha})`
+  }
+
   const applyStyleForStroke = (
     ctx: CanvasRenderingContext2D,
     tool: Tool,
@@ -144,7 +152,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       ctx.globalAlpha = 1
     } else if (tool === 'highlighter') {
       ctx.globalCompositeOperation = 'source-over'
-      ctx.strokeStyle = 'rgba(255, 255, 0, 0.5)'
+      ctx.strokeStyle = hexToRgba(col, 0.5)
       ctx.lineWidth = Math.max(w * 2.5, 8)
       ctx.lineCap = 'round'
       ctx.lineJoin = 'round'
@@ -207,7 +215,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       const p = s.points[0]!
       ctx.beginPath()
       ctx.arc(p.x, p.y, Math.max(s.width / 2, 1), 0, Math.PI * 2)
-      ctx.fillStyle = s.tool === 'highlighter' ? 'rgba(255,255,0,0.5)' : s.color
+      ctx.fillStyle = s.tool === 'highlighter' ? hexToRgba(s.color, 0.5) : s.color
       ctx.fill()
     }
     ctx.restore()
