@@ -154,6 +154,7 @@ const store = useDrawingStore()
 // Her pointermove'da overlay redraw yapma — frame başına en fazla 1 (rAF throttle).
 let rafId = 0
 let lastHudAt = 0
+let lastFrameAt = 0
 
 const fmtPts = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`)
 
@@ -164,13 +165,26 @@ const updateHud = (force = false) => {
   const now = performance.now()
   if (!force && now - lastHudAt < 250) return
   lastHudAt = now
-  el.textContent = `${drawingPerf.emaMs.toFixed(1)}ms · ${store.drawingCount} çizgi · ${fmtPts(drawingPerf.totalPoints)} nokta`
+  el.textContent =
+    `${drawingPerf.emaMs.toFixed(1)}/${drawingPerf.frameMs.toFixed(0)}ms` +
+    ` · ${store.drawingCount} çizgi` +
+    ` · ${fmtPts(store.activePoints())}+${fmtPts(drawingPerf.totalPoints)}`
 }
 
 const scheduleRender = () => {
   if (rafId !== 0) return
   rafId = requestAnimationFrame(() => {
     rafId = 0
+    // Duvar-saati frame aralığı: JS + GPU + kompozit + dev vergisi hepsi dahil.
+    // JS süresi (emaMs) düşük ama bu yüksekse suç canvas dışında.
+    const now = performance.now()
+    if (lastFrameAt !== 0) {
+      const dt = now - lastFrameAt
+      if (dt > 0 && dt < 250) {
+        drawingPerf.frameMs = drawingPerf.frameMs === 0 ? dt : drawingPerf.frameMs * 0.9 + dt * 0.1
+      }
+    }
+    lastFrameAt = now
     store.renderActiveStroke()
     updateHud()
   })
