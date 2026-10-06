@@ -21,6 +21,7 @@ export interface Page {
 }
 
 // Uygulama ayarları (çizimden ayrı anahtar; çizim silinse de durur).
+export type UiTheme = 'koyu' | 'acik'
 export interface AppSettings {
   v: 1
   paper: string
@@ -28,6 +29,7 @@ export interface AppSettings {
   orientation: PageOrientation
   customW: number
   customH: number
+  uiTheme: UiTheme
 }
 
 // A4 punto — boş sayfaların varsayılan boyutu.
@@ -154,6 +156,20 @@ export const useDrawingStore = defineStore('drawing', () => {
     void persistSettings()
   }
 
+  // Arayüz teması (koyu/açık chrome). <html data-theme> üzerinden CSS var'ları besler.
+  const uiTheme = ref<UiTheme>('koyu')
+  const applyUiTheme = () => {
+    if (typeof document === 'undefined' || !document.documentElement) return
+    document.documentElement.dataset.theme = uiTheme.value
+  }
+  const setUiTheme = (t: string) => {
+    if (t !== 'koyu' && t !== 'acik') return
+    if (uiTheme.value === t) return
+    uiTheme.value = t
+    applyUiTheme()
+    void persistSettings()
+  }
+
   const persistSettings = async (): Promise<void> => {
     try {
       const doc: AppSettings = {
@@ -163,6 +179,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         orientation: pageOrientation.value,
         customW: customW.value,
         customH: customH.value,
+        uiTheme: uiTheme.value,
       }
       await idbSetKey(SETTINGS_KEY, doc)
     } catch {
@@ -187,6 +204,10 @@ export const useDrawingStore = defineStore('drawing', () => {
         customW.value = Math.min(3000, Math.max(100, Math.round(raw.customW)))
         customH.value = Math.min(3000, Math.max(100, Math.round(raw.customH)))
       }
+      if (raw.uiTheme === 'koyu' || raw.uiTheme === 'acik') {
+        uiTheme.value = raw.uiTheme
+      }
+      applyUiTheme()
     } catch {
       /* varsayılanlar */
     }
@@ -1467,6 +1488,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     setPageFormat,
     setPageOrientation,
     setCustomSize,
+    uiTheme,
+    setUiTheme,
     strokeWidth,
     widths,
     widthMin,
