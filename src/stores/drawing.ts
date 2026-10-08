@@ -540,6 +540,49 @@ export const useDrawingStore = defineStore('drawing', () => {
     scheduleSave()
     return removed
   }
+  // Seçiliyi ötele (sayfa-uzayı delta): şekli bozmamak için delta, seçim kutusu
+  // sayfada kalacak şekilde kelepçelenir, tüm noktalara AYNI delta uygulanır.
+  // Yapısal op: redo ölür, save kuyruğa girer. Seçim korunur (zincir taşıma için).
+  const moveSelected = (dx: number, dy: number): boolean => {
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return false
+    if (selectedIds.value.length === 0) return false
+    const set = new Set(selectedIds.value)
+    const size = activePage.value.size
+    let x0 = Infinity
+    let y0 = Infinity
+    let x1 = -Infinity
+    let y1 = -Infinity
+    let count = 0
+    for (const s of activePage.value.strokes) {
+      if (!set.has(s.id)) continue
+      for (const p of s.points) {
+        if (p.x < x0) x0 = p.x
+        if (p.y < y0) y0 = p.y
+        if (p.x > x1) x1 = p.x
+        if (p.y > y1) y1 = p.y
+        count++
+      }
+    }
+    if (count === 0) {
+      selectedIds.value = []
+      return false
+    }
+    dx = Math.min(size.w - x1, Math.max(-x0, dx))
+    dy = Math.min(size.h - y1, Math.max(-y0, dy))
+    if (!dx && !dy) return false
+    for (const s of activePage.value.strokes) {
+      if (!set.has(s.id)) continue
+      for (const p of s.points) {
+        p.x += dx
+        p.y += dy
+      }
+    }
+    redoStack.value = []
+    recountActive()
+    repaintBase()
+    scheduleSave()
+    return true
+  }
 
   // Tool change — highlighter artık rengi ezmez, seçili renk alpha ile kullanılır.
   const setTool = (tool: Tool) => {
@@ -1779,6 +1822,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     selectLassoArea,
     selectAll,
     deleteSelected,
+    moveSelected,
     setCanvasRef,
     setOverlayRef,
     setupCanvas,
