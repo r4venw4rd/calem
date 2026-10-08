@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
 import { idbDeleteFile, idbGet, idbGetFile, idbGetKey, idbSet, idbSetFile, idbSetKey, SETTINGS_KEY, type PersistedDoc } from '../lib/idb'
+import {
+  cleanPaperBackground,
+  DEFAULT_PAPER_BACKGROUND,
+  type PaperBackground,
+  type PaperBackgroundType,
+} from '../lib/paper'
 
 export type Tool = 'pen' | 'eraser' | 'highlighter'
 export interface Point { x: number; y: number; pressure?: number }
@@ -21,10 +27,12 @@ export interface Page {
 }
 
 // Uygulama ayarları (çizimden ayrı anahtar; çizim silinse de durur).
+// v1: kâğıt rengi + biçim; v2: + kâğıt deseni (background).
 export type UiTheme = 'koyu' | 'acik'
 export interface AppSettings {
-  v: 1
+  v: 1 | 2
   paper: string
+  background?: PaperBackground
   format: PageFormat
   orientation: PageOrientation
   customW: number
@@ -114,6 +122,26 @@ export const useDrawingStore = defineStore('drawing', () => {
       clearOverlay()
     }
   }
+  // Kâğıt deseni (global v1; per-page override Faz 5'te). PDF sayfalarında çizilmez.
+  const paperBackground = ref<PaperBackground>({ ...DEFAULT_PAPER_BACKGROUND })
+  const setPaperBackground = (patch: Partial<PaperBackground>) => {
+    const next = cleanPaperBackground({ ...paperBackground.value, ...patch })
+    const cur = paperBackground.value
+    if (
+      cur.type === next.type &&
+      cur.spacing === next.spacing &&
+      cur.lineColor === next.lineColor &&
+      cur.margin === next.margin &&
+      cur.marginColor === next.marginColor
+    )
+      return
+    paperBackground.value = next
+    void persistSettings()
+    if (canvasRef.value) {
+      repaintBase()
+      clearOverlay()
+    }
+  }
   // Sayfa için efektif kâğıt: PDF'li sayfada null (şeffaf mod).
   const paperFor = (page: Page): string | null =>
     page.pdfPageIndex !== undefined && page.pdfPageIndex !== null ? null : paper.value
@@ -173,8 +201,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   const persistSettings = async (): Promise<void> => {
     try {
       const doc: AppSettings = {
-        v: 1,
+        v: 2,
         paper: paper.value,
+        background: { ...paperBackground.value },
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
@@ -190,8 +219,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Ayar yedeği: indirilen JSON'u başka cihaza/tarayıcıya taşımak için.
   const exportSettingsJSON = (): string => {
     const doc: AppSettings = {
-      v: 1,
+      v: 2,
       paper: paper.value,
+      background: { ...paperBackground.value },
       format: pageFormat.value,
       orientation: pageOrientation.value,
       customW: customW.value,
@@ -216,6 +246,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     const paperHex = r.paper
     if (typeof paperHex === 'string' && /^#[0-9a-fA-F]{6}$/.test(paperHex)) {
       paper.value = paperHex
+      applied = true
+    }
+    if ('background' in r && r.background !== undefined) {
+      paperBackground.value = cleanPaperBackground(r.background)
       applied = true
     }
     const fmt = r.format
@@ -248,9 +282,12 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   const loadSettings = async (): Promise<void> => {    try {
       const raw = await idbGetKey<AppSettings>(SETTINGS_KEY)
-      if (!raw || raw.v !== 1) return
+      if (!raw || (raw.v !== 1 && raw.v !== 2)) return
       if (typeof raw.paper === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw.paper)) {
         paper.value = raw.paper
+      }
+      if (raw.v === 2 && raw.background !== undefined) {
+        paperBackground.value = cleanPaperBackground(raw.background)
       }
       if (raw.format === 'custom' || (typeof raw.format === 'string' && raw.format in PAGE_FORMATS)) {
         pageFormat.value = raw.format as PageFormat
@@ -1552,6 +1589,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     color,
     paper,
     setPaper,
+    paperBackground,
+    setPaperBackground,
     loadSettings,
     pageFormat,
     pageOrientation,
