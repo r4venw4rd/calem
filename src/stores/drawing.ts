@@ -2035,7 +2035,112 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
-  // PDF export: her sayfa GERÇEK boyutunda PNG'ye çevrilip tek PDF'e gömülür.
+  // --- Vektör PDF export (Faz 8): mürekkep path olarak gömülür ---
+  // Hibrit: şeffaf-zemin + standart-silgi sayfası raster'a düşer (destination-out'un
+  // vektör karşılığı yok). Diğer her şey vektör: küçük dosya, keskin baskı.
+  type PdfDoc = InstanceType<typeof import('jspdf').jsPDF>
+
+  const hexToRgb = (hex: string): [number, number, number] => {
+    const h = hex.replace('#', '')
+    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
+    const n = parseInt(full, 16)
+    if (Number.isNaN(n)) return [255, 255, 0]
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+  }
+
+  const paintStrokeVector = (doc: PdfDoc, GState: new (p: { opacity?: number }) => unknown, s: Stroke, paperHex: string | null) => {
+    if (s.points.length === 0) return
+    const w = s.tool === 'eraser' ? s.width : effectiveWidth(s.points, s.width)
+    doc.saveGraphicsState()
+    try {
+      if (s.tool === 'eraser') {
+        // Opak mod garantili (çağrı yeri şeffaf sayfayı raster'a yollar).
+        const [r, g, b] = hexToRgb(paperHex ?? '#ffffff')
+        doc.setDrawColor(r, g, b)
+        doc.setFillColor(r, g, b)
+        doc.setLineWidth(Math.max(w, 5))
+      } else if (s.tool === 'highlighter') {
+        const [r, g, b] = hexToRgb(s.color)
+        doc.setDrawColor(r, g, b)
+        doc.setFillColor(r, g, b)
+        doc.setLineWidth(Math.max(w * 2.5, 8))
+        doc.setGState(new GState({ opacity: 0.5 }) as never)
+      } else {
+        const [r, g, b] = hexToRgb(s.color)
+        doc.setDrawColor(r, g, b)
+        doc.setFillColor(r, g, b)
+        doc.setLineWidth(Math.max(w, 1))
+        if (s.opacity < 1) doc.setGState(new GState({ opacity: s.opacity }) as never)
+      }
+      doc.setLineCap('round')
+      doc.setLineJoin('round')
+      const dash = dashFor(s.tool, s.dash, w)
+      if (dash.length > 0) doc.setLineDashPattern(dash, 0)
+      if (isShapeTool(s.tool)) {
+        const ends = shapeEndpoints(s.points)
+        if (!ends || (ends[0].x === ends[1].x && ends[0].y === ends[1].y)) {
+          const p = s.points[0]!
+          doc.circle(p.x, p.y, Math.max(w / 2, 1), 'F')
+          return
+        }
+        const [a, b] = ends
+        if (s.tool === 'line' || s.tool === 'arrow') {
+          doc.moveTo(a.x, a.y)
+          doc.lineTo(b.x, b.y)
+          if (s.tool === 'arrow') {
+            const ang = Math.atan2(b.y - a.y, b.x - a.x)
+            const len = Math.max(8, doc.getLineWidth() * 4)
+            const spread = Math.PI / 7
+            for (const d of [-1, 1]) {
+              doc.moveTo(b.x, b.y)
+              doc.lineTo(b.x - len * Math.cos(ang + d * spread), b.y - len * Math.sin(ang + d * spread))
+            }
+          }
+          doc.stroke()
+          return
+        }
+        if (s.tool === 'rect') {
+          doc.rect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y))
+          return
+        }
+        doc.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.abs(b.x - a.x) / 2, Math.abs(b.y - a.y) / 2)
+        return
+      }
+      if (s.points.length === 1) {
+        const p = s.points[0]!
+        doc.circle(p.x, p.y, Math.max(w / 2, 1), 'F')
+        return
+      }
+      const p0 = s.points[0]!
+      doc.moveTo(p0.x, p0.y)
+      for (const p of s.points.slice(1)) doc.lineTo(p.x, p.y)
+      doc.stroke()
+    } finally {
+      doc.restoreGraphicsState()
+    }
+  }
+
+  const paintStrokesVector = (doc: PdfDoc, GState: new (p: { opacity?: number }) => unknown, page: Page, paperHex: string | null) => {
+    for (const layer of page.layers) {
+      if (!layer.visible) continue
+      for (const s of layer.strokes) paintStrokeVector(doc, GState, s, paperHex)
+    }
+  }
+
+  // Şeffaf zeminde standart-silgi varsa vektör sadakati bozulur → raster fallback.
+  // (Vuruş-silgi history'den söker, iz bırakmaz — her zaman vektör-güvenli.)
+  const pageNeedsRaster = (page: Page): boolean => {
+    if (paperFor(page) !== null) return false
+    for (const layer of page.layers) {
+      if (!layer.visible) continue
+      for (const s of layer.strokes) {
+        if (s.tool === 'eraser') return true
+      }
+    }
+    return false
+  }
+
+  // PDF export: vektör-öncelikli hibrit. Sayfa başına karar verilir.
   // Üretim ve kaydetme ayrı (test edilebilirlik + hata ayrımı).
   const buildPdfDocument = async (): Promise<
     { doc: InstanceType<typeof import('jspdf').jsPDF>; pages: number } | { error: string }
@@ -2044,6 +2149,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     // (yoksa export kendini kilitler — gerçek vaka).
     if (pages.value.length === 0) return { error: 'sayfa yok' }
     const { jsPDF } = await import('jspdf')
+    const GState = (jsPDF as unknown as { GState: new (p: { opacity?: number }) => unknown }).GState
     let doc: InstanceType<typeof jsPDF> | undefined
     for (let i = 0; i < pages.value.length; i++) {
       const page = pages.value[i]!
@@ -2055,9 +2161,25 @@ export const useDrawingStore = defineStore('drawing', () => {
       } else {
         doc.addPage([w, h], orientation)
       }
-      const rendered = exportPageToCanvas(page)
-      if (!rendered) return { error: `sayfa ${i + 1} çizilemedi` }
-      doc.addImage(rendered.toDataURL('image/png'), 'PNG', 0, 0, w, h)
+      if (pageNeedsRaster(page)) {
+        const rendered = exportPageToCanvas(page)
+        if (!rendered) return { error: `sayfa ${i + 1} çizilemedi` }
+        doc.addImage(rendered.toDataURL('image/png'), 'PNG', 0, 0, w, h)
+        continue
+      }
+      const paperHex = paperFor(page)
+      if (paperHex) {
+        const [r, g, b] = hexToRgb(paperHex)
+        doc.setFillColor(r, g, b)
+        doc.rect(0, 0, w, h, 'F')
+      }
+      const bg = bgCanvases.get(page.id)
+      if (bg) doc.addImage(bg.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, w, h)
+      for (const img of page.images) {
+        const bmp = imgBitmaps.get(img.fileId)
+        if (bmp) doc.addImage(bmp.toDataURL('image/png'), 'PNG', img.x, img.y, img.w, img.h)
+      }
+      paintStrokesVector(doc, GState, page, paperHex)
     }
     return { doc: doc!, pages: pages.value.length }
   }
