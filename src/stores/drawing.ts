@@ -52,9 +52,18 @@ export interface ImageItem {
   h: number
   fileId: string
 }
+// Katman (Faz 5): mürekkep katmanlarda durur. Metin/resim sayfa-seviyesidir (v1 kısıtı).
+// layers[0] en alttır; görünmez katman boyanmaz ve seçime girmez (seçim aktif katmandadır).
+export interface Layer {
+  id: string
+  name: string
+  visible: boolean
+  strokes: Stroke[]
+}
 export interface Page {
   id: string
-  strokes: Stroke[]
+  layers: Layer[]
+  activeLayerId: string
   texts: TextItem[]
   images: ImageItem[]
   // Sayfanın mantıksal boyutu (punto). Çizgiler BU uzayda saklanır: ekrandan, DPR'dan
@@ -376,7 +385,15 @@ export const useDrawingStore = defineStore('drawing', () => {
   let strokeSeq = 0
   const newStrokeId = () =>
     `s-${Date.now().toString(36)}-${(strokeSeq++).toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
-  const blankPage = (): Page => ({ id: newPageId(), strokes: [], texts: [], images: [], size: defaultPageSize() })
+  const blankPage = (): Page => {
+    const layerId = newStrokeId()
+    return { id: newPageId(), layers: [{ id: layerId, name: 'Katman 1', visible: true, strokes: [] }], activeLayerId: layerId, texts: [], images: [], size: defaultPageSize() }
+  }
+  // Tek katmanlı göç/sıfırlama yardımcısı (v4 kayıtlar, PDF sayfaları).
+  const singleLayerPage = (id: string, strokes: Stroke[], size: { w: number; h: number }): Page => {
+    const layerId = newStrokeId()
+    return { id, layers: [{ id: layerId, name: 'Katman 1', visible: true, strokes }], activeLayerId: layerId, texts: [], images: [], size }
+  }
 
   // View transform (non-reactive): aktif sayfa → ekran contain-fit.
   // Tüm giriş (getPos) ve çıkış (paint) bu uzaydan geçer; zoom/pan'in zemini.
@@ -502,10 +519,14 @@ export const useDrawingStore = defineStore('drawing', () => {
   const pages = ref<Page[]>([blankPage()])
   const activePageIndex = ref(0)
   const activePage = computed(() => pages.value[activePageIndex.value] ?? pages.value[0]!)
+  // Aktif katman: id tutmazsa ilk katmana düşer (bozuk kayda karşı emniyet).
+  const activeLayer = computed(
+    () => activePage.value.layers.find((l) => l.id === activePage.value.activeLayerId) ?? activePage.value.layers[0]!,
+  )
 
-  // Template uyumluluğu: store.strokes = aktif sayfanın çizgileri (salt-okunur görünüm).
-  // Store içi yazımlar activePage.value.strokes üzerindendir.
-  const strokes = computed(() => activePage.value.strokes)
+  // Template uyumluluğu: store.strokes = aktif katmanın çizgileri (salt-okunur görünüm).
+  // Store içi yazımlar activeLayer.value.strokes üzerindendir.
+  const strokes = computed(() => activeLayer.value.strokes)
 
   // Undo ile çıkanlar buraya; yeni çizgi VEYA sayfa değişimi öldürür.
   const redoStack = ref<Stroke[]>([])
@@ -518,13 +539,23 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Her zaman AKTİF sayfa sayılır.
   const drawingCount = computed(() => {
     let n = 0
-    for (const s of activePage.value.strokes) if (s.tool !== 'eraser') n += 1
+    for (const s of activeLayer.value.strokes) if (s.tool !== 'eraser') n += 1
     return n
   })
 
+  // Yıkıcı dosya op'ları öncesi soru: herhangi bir sayfada mürekkep/metin/resim var mı.
+  const hasInk = computed(() =>
+    pages.value.some(
+      (p) =>
+        p.texts.length > 0 ||
+        p.images.length > 0 ||
+        p.layers.some((l) => l.strokes.length > 0),
+    ),
+  )
+
   // Sayaçlar aktif sayfadan yeniden hesaplanır (nadir op'larda O(sayfa) — drift yok).
   const recountActive = () => {
-    drawingPerf.totalPoints = activePage.value.strokes.reduce(
+    drawingPerf.totalPoints = activeLayer.value.strokes.reduce(
       (n, s) => n + (s.tool === 'eraser' ? 0 : s.points.length),
       0,
     )
@@ -548,24 +579,24 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   // Alan seçimi: sayfa-uzayı koordinatlarla çağrılır (getPos çıktısı).
   const selectRectArea = (a: { x: number; y: number }, b: { x: number; y: number }): number => {
-    selectedIds.value = selByRect(activePage.value.strokes, a, b)
+    selectedIds.value = selByRect(activeLayer.value.strokes, a, b)
     return selectedIds.value.length
   }
   const selectLassoArea = (poly: { x: number; y: number }[]): number => {
-    selectedIds.value = selByLasso(activePage.value.strokes, poly)
+    selectedIds.value = selByLasso(activeLayer.value.strokes, poly)
     return selectedIds.value.length
   }
   const selectAll = (): number => {
-    selectedIds.value = activePage.value.strokes.map((s) => s.id)
+    selectedIds.value = activeLayer.value.strokes.map((s) => s.id)
     return selectedIds.value.length
   }
   // Seçiliyi sil: yapısal op — redo ölür, base baştan boyanır, autosave kuyruğa girer.
   const deleteSelected = (): number => {
     if (selectedIds.value.length === 0) return 0
     const set = new Set(selectedIds.value)
-    const before = activePage.value.strokes.length
-    activePage.value.strokes = activePage.value.strokes.filter((s) => !set.has(s.id))
-    const removed = before - activePage.value.strokes.length
+    const before = activeLayer.value.strokes.length
+    activeLayer.value.strokes = activeLayer.value.strokes.filter((s) => !set.has(s.id))
+    const removed = before - activeLayer.value.strokes.length
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -589,7 +620,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     let x1 = -Infinity
     let y1 = -Infinity
     let count = 0
-    for (const s of activePage.value.strokes) {
+    for (const s of activeLayer.value.strokes) {
       if (!set.has(s.id)) continue
       for (const p of s.points) {
         if (p.x < x0) x0 = p.x
@@ -606,7 +637,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     dx = Math.min(size.w - x1, Math.max(-x0, dx))
     dy = Math.min(size.h - y1, Math.max(-y0, dy))
     if (!dx && !dy) return false
-    for (const s of activePage.value.strokes) {
+    for (const s of activeLayer.value.strokes) {
       if (!set.has(s.id)) continue
       for (const p of s.points) {
         p.x += dx
@@ -626,7 +657,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const copySelected = (): number => {
     if (selectedIds.value.length === 0) return 0
     const set = new Set(selectedIds.value)
-    clipboard = activePage.value.strokes
+    clipboard = activeLayer.value.strokes
       .filter((s) => set.has(s.id))
       .map((s) => ({
         tool: s.tool,
@@ -672,7 +703,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       points: s.points.map((p) => ({ x: p.x + dx, y: p.y + dy, pressure: p.pressure })),
     }))
     if (pasted.length === 0) return 0
-    for (const s of pasted) activePage.value.strokes.push(s)
+    for (const s of pasted) activeLayer.value.strokes.push(s)
     selectedIds.value = pasted.map((s) => s.id)
     redoStack.value = []
     recountActive()
@@ -1190,7 +1221,7 @@ export const useDrawingStore = defineStore('drawing', () => {
             ]
           : [...points.value],
       }
-      activePage.value.strokes.push(stroke)
+      activeLayer.value.strokes.push(stroke)
       // Yeni mürekkep redo'yu ve eski seçimi öldürür.
       redoStack.value = []
       selectedIds.value = []
@@ -1531,8 +1562,12 @@ export const useDrawingStore = defineStore('drawing', () => {
     const bg = bgCanvases.get(page.id)
     if (bg) ctx.drawImage(bg, 0, 0, page.size.w, page.size.h)
     paintImages(ctx, page)
-    for (const s of page.strokes) {
-      paintStroke(ctx, s, paperHex)
+    // Katmanlar sırayla (0 en alt); görünmez katman atlanır.
+    for (const layer of page.layers) {
+      if (!layer.visible) continue
+      for (const s of layer.strokes) {
+        paintStroke(ctx, s, paperHex)
+      }
     }
     paintTexts(ctx, page)
   }
@@ -1620,7 +1655,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Canvası temizle — sadece AKTİF sayfa (sayfalar varken global silme yok).
   const clearCanvas = () => {
     deleteImageFilesOf([activePage.value])
-    activePage.value.strokes = []
+    activeLayer.value.strokes = []
     activePage.value.texts = []
     activePage.value.images = []
     redoStack.value = []
@@ -1775,7 +1810,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       pdfBytesCache = new Uint8Array(stored)
       deleteImageFilesOf(pages.value)
       // Sayfa boyutu = PDF puntosu (bitmap aspect ile aynı, inşa gereği).
-      pages.value = rendered.map((r) => ({ id: newPageId(), strokes: [], texts: [], images: [], size: { w: r.cssW, h: r.cssH } }))
+      pages.value = rendered.map((r) => singleLayerPage(newPageId(), [], { w: r.cssW, h: r.cssH }))
       rendered.forEach((r, i) => {
         const p = pages.value[i]!
         bgCanvases.set(p.id, r.canvas)
@@ -1996,15 +2031,23 @@ export const useDrawingStore = defineStore('drawing', () => {
     fileId: t.fileId,
   })
 
+  const snapshotLayer = (l: Layer): Layer => ({
+    id: l.id,
+    name: l.name,
+    visible: l.visible,
+    strokes: l.strokes.map(snapshotStroke),
+  })
+
   const persistNow = async (): Promise<void> => {
     try {
       const now = Date.now()
       const doc: PersistedDoc = {
-        v: 4,
+        v: 5,
         savedAt: now,
         pages: pages.value.map((p) => ({
           id: p.id,
-          strokes: p.strokes.map(snapshotStroke),
+          layers: p.layers.map(snapshotLayer),
+          activeLayerId: p.activeLayerId,
           texts: p.texts.map(snapshotText),
           images: p.images.map(snapshotImage),
           size: { w: p.size.w, h: p.size.h },
@@ -2098,6 +2141,69 @@ export const useDrawingStore = defineStore('drawing', () => {
     return clean
   }
 
+  // Bozuk kayda karşı katman doğrulama (v5; öncesi tek katmana sarılır).
+  // Boş/geçersiz katman listesi → tek boş katman (boyama/seçim çökmesin).
+  const cleanLayers = (input: unknown): Layer[] => {
+    if (!Array.isArray(input)) return []
+    const out: Layer[] = []
+    for (const l of input) {
+      if (!l || typeof l !== 'object') continue
+      const r = l as Record<string, unknown>
+      if (!Array.isArray(r.strokes)) continue
+      out.push({
+        id: typeof r.id === 'string' && r.id ? r.id : newStrokeId(),
+        name: typeof r.name === 'string' && r.name ? r.name.slice(0, 40) : `Katman ${out.length + 1}`,
+        visible: r.visible !== false,
+        strokes: cleanStrokes(r.strokes as Stroke[]),
+      })
+    }
+    return out
+  }
+
+  // Ham kayıt sayfası (sürümler arası şekil farkı — tip yalanına karşı bilinçli unknown).
+  interface RawPage {
+    id?: unknown
+    strokes?: unknown
+    layers?: unknown
+    activeLayerId?: unknown
+    texts?: unknown
+    images?: unknown
+    size?: unknown
+    bgSize?: unknown
+    pdfPageIndex?: unknown
+  }
+
+  const pageFromRaw = (p: RawPage, fallback: { w: number; h: number }): Page | null => {
+    if (!p || typeof p !== 'object') return null
+    const layers = cleanLayers(p.layers)
+    if (layers.length === 0 && Array.isArray(p.strokes)) {
+      // v2/v3/v4 göçü: tüm mürekkep tek katmana.
+      layers.push(
+        { id: newStrokeId(), name: 'Katman 1', visible: true, strokes: cleanStrokes(p.strokes as Stroke[]) },
+      )
+    }
+    if (layers.length === 0) {
+      // Metin/resim-sadece sayfa da sayfadır — boş katmanla yaşat.
+      layers.push({ id: newStrokeId(), name: 'Katman 1', visible: true, strokes: [] })
+    }
+    const activeLayerId =
+      typeof p.activeLayerId === 'string' && layers.some((l) => l.id === p.activeLayerId)
+        ? p.activeLayerId
+        : layers[0]!.id
+    return {
+      id: typeof p.id === 'string' && p.id ? p.id : newPageId(),
+      layers,
+      activeLayerId,
+      texts: cleanTexts(p.texts),
+      images: cleanImages(p.images),
+      size: pageSizeOf(p, fallback),
+      pdfPageIndex:
+        typeof p.pdfPageIndex === 'number' && Number.isFinite(p.pdfPageIndex)
+          ? Math.floor(p.pdfPageIndex)
+          : undefined,
+    }
+  }
+
   // Eski kayıtlarda size yok: bgSize (PDF) varsa o, yoksa o anki ekran boyutu
   // (eski çizgiler 1:1 korunur — aynı ekranda görünüm değişmez).
   const pageSizeOf = (
@@ -2131,14 +2237,18 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     let pages = 0
     let strokes = 0
-    if ((doc.v === 2 || doc.v === 3 || doc.v === 4) && Array.isArray(doc.pages)) {
+    if ((doc.v === 2 || doc.v === 3 || doc.v === 4 || doc.v === 5) && Array.isArray(doc.pages)) {
       pages = doc.pages.length
-      for (const p of doc.pages) {
-        if (p && Array.isArray(p.strokes)) strokes += p.strokes.length
-        const tx = (p as { texts?: unknown }).texts
-        if (Array.isArray(tx)) strokes += tx.length
-        const im = (p as { images?: unknown }).images
-        if (Array.isArray(im)) strokes += im.length
+      for (const raw of doc.pages as unknown as RawPage[]) {
+        if (!raw || typeof raw !== 'object') continue
+        if (Array.isArray(raw.strokes)) strokes += raw.strokes.length
+        if (Array.isArray(raw.texts)) strokes += raw.texts.length
+        if (Array.isArray(raw.images)) strokes += raw.images.length
+        if (Array.isArray(raw.layers)) {
+          for (const l of raw.layers as { strokes?: unknown }[]) {
+            if (l && Array.isArray(l.strokes)) strokes += l.strokes.length
+          }
+        }
       }
     } else if (doc.v === 1 && Array.isArray((doc as { strokes?: unknown }).strokes)) {
       pages = 1
@@ -2185,25 +2295,15 @@ export const useDrawingStore = defineStore('drawing', () => {
       w: canvasRef.value?.clientWidth || 800,
       h: canvasRef.value?.clientHeight || 600,
     }
-    if ((doc.v === 2 || doc.v === 3 || doc.v === 4) && Array.isArray(doc.pages)) {
-      const clean = doc.pages
-        .filter((p) => p && Array.isArray(p.strokes))
-        .map((p) => ({
-          id: typeof p.id === 'string' && p.id ? p.id : newPageId(),
-          strokes: cleanStrokes(p.strokes),
-          texts: cleanTexts((p as { texts?: unknown }).texts),
-          images: cleanImages((p as { images?: unknown }).images),
-          size: pageSizeOf(p, viewFallback),
-          pdfPageIndex:
-            typeof p.pdfPageIndex === 'number' && Number.isFinite(p.pdfPageIndex)
-              ? Math.floor(p.pdfPageIndex)
-              : undefined,
-        }))
+    if ((doc.v === 2 || doc.v === 3 || doc.v === 4 || doc.v === 5) && Array.isArray(doc.pages)) {
+      const clean = (doc.pages as unknown as RawPage[])
+        .map((p) => pageFromRaw(p, viewFallback))
+        .filter((p): p is Page => p !== null)
       loaded = clean.length > 0 ? clean : null
     } else if (doc.v === 1 && Array.isArray((doc as { strokes?: unknown }).strokes)) {
       const v1 = (doc as unknown as { strokes: Stroke[] }).strokes
       const clean = cleanStrokes(v1)
-      loaded = clean.length > 0 ? [{ id: newPageId(), strokes: clean, texts: [], images: [], size: { ...viewFallback } }] : null
+      loaded = clean.length > 0 ? [singleLayerPage(newPageId(), clean, { ...viewFallback })] : null
     }
     if (!loaded || loaded.length === 0) return false
     pages.value = loaded
@@ -2219,7 +2319,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         : 0
     layoutView()
     // PDF kaydı varsa arkaplanları bytes'tan yeniden üret (yoksa mürekkep tek başına durur).
-    if ((doc.v === 2 || doc.v === 3 || doc.v === 4) && doc.pdfId) {
+    if ((doc.v === 2 || doc.v === 3 || doc.v === 4 || doc.v === 5) && doc.pdfId) {
       pdfId.value = doc.pdfId
       pdfName.value = doc.pdfName ?? ''
       await restorePdfBackgrounds(doc.pdfId)
@@ -2236,7 +2336,7 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // ✅ Son stroke'u geri al (undo) — aktif sayfada
   const undoLastStroke = () => {
-    const popped = activePage.value.strokes.pop()
+    const popped = activeLayer.value.strokes.pop()
     if (popped) redoStack.value.push(popped)
     selectedIds.value = []
     activeTextId.value = null
@@ -2254,7 +2354,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const redo = (): boolean => {
     const s = redoStack.value.pop()
     if (!s) return false
-    activePage.value.strokes.push(s)
+    activeLayer.value.strokes.push(s)
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -2366,6 +2466,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     rejectTouch,
     strokes,
     drawingCount,
+    hasInk,
     pages,
     activePage,
     activePageIndex,
@@ -2423,6 +2524,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     deleteImage,
     imgBusy,
     addImage,
+    activeLayer,
     setCanvasRef,
     setOverlayRef,
     setupCanvas,

@@ -1480,7 +1480,7 @@ const onPdfFile = async (e: Event) => {
   const f = input.files?.[0]
   input.value = ''
   if (!f) return
-  const hasInk = store.pages.some((p) => p.strokes.length > 0)
+  const hasInk = store.hasInk
   if (hasInk && !confirm('Mevcut çizimler PDF sayfalarıyla değişecek. Devam?')) return
   const res = await store.importPdf(f)
   if ('error' in res) showPdfError(res.error)
@@ -1496,7 +1496,7 @@ const exportPdfDoc = async () => {
 
 const askClosePdf = () => {
   showFile.value = false
-  const hasInk = store.pages.some((p) => p.strokes.length > 0)
+  const hasInk = store.hasInk
   if (hasInk && !confirm('PDF kapatılıp tek boş sayfaya dönülsün mü?')) return
   store.closePdf()
   updateHud(true)
