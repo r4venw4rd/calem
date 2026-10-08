@@ -31,9 +31,21 @@ export interface Stroke {
   width: number
   points: Point[]
 }
+// Metin kutusu (sayfa-uzayı pt; x,y sol-üst). Çok satır \n ile.
+export interface TextItem {
+  id: string
+  x: number
+  y: number
+  text: string
+  color: string
+  size: number
+}
+export const TEXT_SIZE_MIN = 8
+export const TEXT_SIZE_MAX = 120
 export interface Page {
   id: string
   strokes: Stroke[]
+  texts: TextItem[]
   // Sayfanın mantıksal boyutu (punto). Çizgiler BU uzayda saklanır: ekrandan, DPR'dan
   // ve resize'dan bağımsız. Boş sayfa A4, PDF sayfası orijinal punto.
   size: { w: number; h: number }
@@ -349,7 +361,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   let strokeSeq = 0
   const newStrokeId = () =>
     `s-${Date.now().toString(36)}-${(strokeSeq++).toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
-  const blankPage = (): Page => ({ id: newPageId(), strokes: [], size: defaultPageSize() })
+  const blankPage = (): Page => ({ id: newPageId(), strokes: [], texts: [], size: defaultPageSize() })
 
   // View transform (non-reactive): aktif sayfa → ekran contain-fit.
   // Tüm giriş (getPos) ve çıkış (paint) bu uzaydan geçer; zoom/pan'in zemini.
@@ -1181,6 +1193,27 @@ export const useDrawingStore = defineStore('drawing', () => {
     ctx.restore()
   }
 
+  // Metin kutuları: mürekkebin ÜSTÜNDE (silgi metni yemez — v1 kısıtı, Xournal katman sırası gibi).
+  // Çok satır desteklenir; kaydırma yok, taşma kesilmez (sayfa-içi kalması kullananın işi).
+  const paintTexts = (ctx: CanvasRenderingContext2D, page: Page) => {
+    const items = page.texts
+    if (!items || items.length === 0) return
+    ctx.save()
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
+    for (const t of items) {
+      if (!t.text) continue
+      ctx.fillStyle = t.color
+      ctx.font = `${t.size}px sans-serif`
+      const lh = t.size * 1.25
+      const lines = t.text.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i]!, t.x, t.y + i * lh)
+      }
+    }
+    ctx.restore()
+  }
+
   const paintPage = (ctx: CanvasRenderingContext2D, page: Page) => {
     const paperHex = paperFor(page)
     if (paperHex) {
@@ -1193,6 +1226,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     for (const s of page.strokes) {
       paintStroke(ctx, s, paperHex)
     }
+    paintTexts(ctx, page)
   }
 
   // Export sayfa boyutu = sayfanın kendi boyutu (bg'li: orijinal punto, boş: A4).
@@ -1427,7 +1461,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       pdfRenderScales.clear()
       pdfBytesCache = new Uint8Array(stored)
       // Sayfa boyutu = PDF puntosu (bitmap aspect ile aynı, inşa gereği).
-      pages.value = rendered.map((r) => ({ id: newPageId(), strokes: [], size: { w: r.cssW, h: r.cssH } }))
+      pages.value = rendered.map((r) => ({ id: newPageId(), strokes: [], texts: [], size: { w: r.cssW, h: r.cssH } }))
       rendered.forEach((r, i) => {
         const p = pages.value[i]!
         bgCanvases.set(p.id, r.canvas)
@@ -1625,15 +1659,25 @@ export const useDrawingStore = defineStore('drawing', () => {
     points: s.points.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
   })
 
+  const snapshotText = (t: TextItem): TextItem => ({
+    id: t.id,
+    x: t.x,
+    y: t.y,
+    text: t.text,
+    color: t.color,
+    size: t.size,
+  })
+
   const persistNow = async (): Promise<void> => {
     try {
       const now = Date.now()
       const doc: PersistedDoc = {
-        v: 2,
+        v: 3,
         savedAt: now,
         pages: pages.value.map((p) => ({
           id: p.id,
           strokes: p.strokes.map(snapshotStroke),
+          texts: p.texts.map(snapshotText),
           size: { w: p.size.w, h: p.size.h },
           ...(p.pdfPageIndex !== undefined ? { pdfPageIndex: p.pdfPageIndex } : {}),
         })),
@@ -1675,6 +1719,30 @@ export const useDrawingStore = defineStore('drawing', () => {
     return clean
   }
 
+  // Bozuk kayda karşı metin doğrulama (v2'de yok → boş; boş metinler atılır).
+  const cleanTexts = (input: unknown): TextItem[] => {
+    if (!Array.isArray(input)) return []
+    const clean: TextItem[] = []
+    for (const t of input) {
+      if (!t || typeof t !== 'object') continue
+      const r = t as Record<string, unknown>
+      if (typeof r.text !== 'string' || r.text === '') continue
+      if (!Number.isFinite(r.x) || !Number.isFinite(r.y)) continue
+      clean.push({
+        id: typeof r.id === 'string' && r.id ? r.id : newStrokeId(),
+        x: r.x as number,
+        y: r.y as number,
+        text: (r.text as string).slice(0, 2000),
+        color: typeof r.color === 'string' ? r.color : '#ffffff',
+        size:
+          typeof r.size === 'number' && Number.isFinite(r.size)
+            ? Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, Math.round(r.size)))
+            : 24,
+      })
+    }
+    return clean
+  }
+
   // Eski kayıtlarda size yok: bgSize (PDF) varsa o, yoksa o anki ekran boyutu
   // (eski çizgiler 1:1 korunur — aynı ekranda görünüm değişmez).
   const pageSizeOf = (
@@ -1708,10 +1776,12 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     let pages = 0
     let strokes = 0
-    if (doc.v === 2 && Array.isArray(doc.pages)) {
+    if ((doc.v === 2 || doc.v === 3) && Array.isArray(doc.pages)) {
       pages = doc.pages.length
       for (const p of doc.pages) {
         if (p && Array.isArray(p.strokes)) strokes += p.strokes.length
+        const tx = (p as { texts?: unknown }).texts
+        if (Array.isArray(tx)) strokes += tx.length
       }
     } else if (doc.v === 1 && Array.isArray((doc as { strokes?: unknown }).strokes)) {
       pages = 1
@@ -1758,12 +1828,13 @@ export const useDrawingStore = defineStore('drawing', () => {
       w: canvasRef.value?.clientWidth || 800,
       h: canvasRef.value?.clientHeight || 600,
     }
-    if (doc.v === 2 && Array.isArray(doc.pages)) {
+    if ((doc.v === 2 || doc.v === 3) && Array.isArray(doc.pages)) {
       const clean = doc.pages
         .filter((p) => p && Array.isArray(p.strokes))
         .map((p) => ({
           id: typeof p.id === 'string' && p.id ? p.id : newPageId(),
           strokes: cleanStrokes(p.strokes),
+          texts: cleanTexts((p as { texts?: unknown }).texts),
           size: pageSizeOf(p, viewFallback),
           pdfPageIndex:
             typeof p.pdfPageIndex === 'number' && Number.isFinite(p.pdfPageIndex)
@@ -1774,7 +1845,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     } else if (doc.v === 1 && Array.isArray((doc as { strokes?: unknown }).strokes)) {
       const v1 = (doc as unknown as { strokes: Stroke[] }).strokes
       const clean = cleanStrokes(v1)
-      loaded = clean.length > 0 ? [{ id: newPageId(), strokes: clean, size: { ...viewFallback } }] : null
+      loaded = clean.length > 0 ? [{ id: newPageId(), strokes: clean, texts: [], size: { ...viewFallback } }] : null
     }
     if (!loaded || loaded.length === 0) return false
     pages.value = loaded
@@ -1788,7 +1859,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         : 0
     layoutView()
     // PDF kaydı varsa arkaplanları bytes'tan yeniden üret (yoksa mürekkep tek başına durur).
-    if (doc.v === 2 && doc.pdfId) {
+    if ((doc.v === 2 || doc.v === 3) && doc.pdfId) {
       pdfId.value = doc.pdfId
       pdfName.value = doc.pdfName ?? ''
       await restorePdfBackgrounds(doc.pdfId)
