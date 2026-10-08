@@ -28,7 +28,18 @@ export interface PersistedDocV3 {
   pdfName?: string
 }
 
-export type PersistedDoc = PersistedDocV1 | PersistedDocV2 | PersistedDocV3
+// v4: sayfalara resim kutuları eklendi (images yoksa boş sayılır, v3 göçer).
+export interface PersistedDocV4 {
+  v: 4
+  savedAt: number
+  pages: Page[]
+  widths?: Record<Tool, number>
+  activePageIndex?: number
+  pdfId?: string
+  pdfName?: string
+}
+
+export type PersistedDoc = PersistedDocV1 | PersistedDocV2 | PersistedDocV3 | PersistedDocV4
 
 const DB_NAME = 'calem'
 const DOCS_STORE = 'docs'

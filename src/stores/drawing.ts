@@ -17,7 +17,7 @@ import {
   selectByRect as selByRect,
 } from '../lib/select'
 
-export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text'
+export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text' | 'image'
 export type ShapeTool = 'line' | 'rect' | 'ellipse' | 'arrow'
 // Şekil araçları: serbest path değil, ilk+son noktadan primitif çizilir.
 export const isShapeTool = (t: Tool): t is ShapeTool =>
@@ -42,10 +42,21 @@ export interface TextItem {
 }
 export const TEXT_SIZE_MIN = 8
 export const TEXT_SIZE_MAX = 120
+// Resim kutusu (sayfa-uzayı pt; x,y sol-üst). Piksel bytes IDB files deposunda,
+// burada sadece referans durur (oturum external dosya gibidir).
+export interface ImageItem {
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+  fileId: string
+}
 export interface Page {
   id: string
   strokes: Stroke[]
   texts: TextItem[]
+  images: ImageItem[]
   // Sayfanın mantıksal boyutu (punto). Çizgiler BU uzayda saklanır: ekrandan, DPR'dan
   // ve resize'dan bağımsız. Boş sayfa A4, PDF sayfası orijinal punto.
   size: { w: number; h: number }
@@ -91,6 +102,10 @@ export type PageOrientation = 'portrait' | 'landscape'
 // Sayfa arkaplan bitmap'leri: sayfa id → render edilmiş canvas. Persist edilmez,
 // PDF bytes'larından yeniden üretilir. Aspect her zaman page.size ile aynıdır (inşa gereği).
 const bgCanvases = new Map<string, HTMLCanvasElement>()
+
+// Resim bitmap'leri: fileId → decode edilmiş canvas. Persist edilmez,
+// IDB files deposundaki bytes'tan üretilir (PDF arkaplan deseni).
+const imgBitmaps = new Map<string, HTMLCanvasElement>()
 
 // Test edilebilir saf kural: ihtiyaç mevcudun %20 üstündeyse yeniden render et.
 // (Sürekli üret-tüket döngüsüne girmemesi için histerezis şart.)
@@ -337,9 +352,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   const color = ref('#ffffff')
   // Araç başına kalınlık hafızası: kalem ince, silgi kocaman olabilir; araç değişince geri gelir.
   // select/şekil mürekkep değil ya da kalem-aralığı kullanır (kayıtlı dursun yeter).
-  const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5, select: 1, line: 1, rect: 1, ellipse: 1, arrow: 1, text: 1 }
-  const WIDTH_MAX: Record<Tool, number> = { pen: 20, highlighter: 50, eraser: 120, select: 20, line: 20, rect: 20, ellipse: 20, arrow: 20, text: 20 }
-  const widths = ref<Record<Tool, number>>({ pen: 3, highlighter: 10, eraser: 24, select: 3, line: 3, rect: 3, ellipse: 3, arrow: 3, text: 3 })
+  const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5, select: 1, line: 1, rect: 1, ellipse: 1, arrow: 1, text: 1, image: 1 }
+  const WIDTH_MAX: Record<Tool, number> = { pen: 20, highlighter: 50, eraser: 120, select: 20, line: 20, rect: 20, ellipse: 20, arrow: 20, text: 20, image: 20 }
+  const widths = ref<Record<Tool, number>>({ pen: 3, highlighter: 10, eraser: 24, select: 3, line: 3, rect: 3, ellipse: 3, arrow: 3, text: 3, image: 3 })
   // Mevcut aracın kalınlığı — template ve çizim buradan okur (eski strokeWidth ile aynı isim).
   const strokeWidth = computed(() => widths.value[currentTool.value])
   const widthMin = computed(() => WIDTH_MIN[currentTool.value])
@@ -361,7 +376,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   let strokeSeq = 0
   const newStrokeId = () =>
     `s-${Date.now().toString(36)}-${(strokeSeq++).toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
-  const blankPage = (): Page => ({ id: newPageId(), strokes: [], texts: [], size: defaultPageSize() })
+  const blankPage = (): Page => ({ id: newPageId(), strokes: [], texts: [], images: [], size: defaultPageSize() })
 
   // View transform (non-reactive): aktif sayfa → ekran contain-fit.
   // Tüm giriş (getPos) ve çıkış (paint) bu uzaydan geçer; zoom/pan'in zemini.
@@ -529,6 +544,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (selectedIds.value.length === 0) return
     selectedIds.value = []
     activeTextId.value = null
+    activeImageId.value = null
   }
   // Alan seçimi: sayfa-uzayı koordinatlarla çağrılır (getPos çıktısı).
   const selectRectArea = (a: { x: number; y: number }, b: { x: number; y: number }): number => {
@@ -552,6 +568,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     const removed = before - activePage.value.strokes.length
     selectedIds.value = []
     activeTextId.value = null
+    activeImageId.value = null
     redoStack.value = []
     recountActive()
     repaintBase()
@@ -680,6 +697,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   const clearActiveText = () => {
     activeTextId.value = null
+    activeImageId.value = null
   }
   // Tıklanan noktadaki en üst metin (kaba kutu: ölçümsüz tahmin, editör gerçeği gösterir).
   const textAt = (x: number, y: number): TextItem | null => {
@@ -708,6 +726,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     activeTextId.value = item.id
     selectedIds.value = []
     activeTextId.value = null
+    activeImageId.value = null
     redoStack.value = []
     scheduleSave()
     return item.id
@@ -761,6 +780,65 @@ export const useDrawingStore = defineStore('drawing', () => {
     return true
   }
 
+  // --- Resimler (Faz 4b): taşı/boyutlandır/sil; ekleme import pipeline'da ---
+  const activeImageId = ref<string | null>(null)
+  const activeImage = (): ImageItem | null => {
+    if (!activeImageId.value) return null
+    return activePage.value.images.find((t) => t.id === activeImageId.value) ?? null
+  }
+  // Tıklanan noktadaki en üst resim.
+  const imageAt = (x: number, y: number): ImageItem | null => {
+    const items = activePage.value.images
+    for (let i = items.length - 1; i >= 0; i--) {
+      const img = items[i]!
+      if (x >= img.x && x <= img.x + img.w && y >= img.y && y <= img.y + img.h) return img
+    }
+    return null
+  }
+  const moveImage = (id: string, dx: number, dy: number): boolean => {
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return false
+    const img = activePage.value.images.find((x) => x.id === id)
+    if (!img) return false
+    const size = activePage.value.size
+    const nx = Math.min(size.w - 8, Math.max(-img.w + 8, img.x + dx))
+    const ny = Math.min(size.h - 8, Math.max(-img.h + 8, img.y + dy))
+    if (nx === img.x && ny === img.y) return false
+    img.x = nx
+    img.y = ny
+    redoStack.value = []
+    repaintBase()
+    scheduleSave()
+    return true
+  }
+  const resizeImage = (id: string, w: number, h: number): boolean => {
+    if (!Number.isFinite(w) || !Number.isFinite(h)) return false
+    const img = activePage.value.images.find((x) => x.id === id)
+    if (!img) return false
+    const nw = Math.min(3000, Math.max(16, Math.round(w)))
+    const nh = Math.min(3000, Math.max(16, Math.round(h)))
+    if (nw === img.w && nh === img.h) return false
+    img.w = nw
+    img.h = nh
+    redoStack.value = []
+    repaintBase()
+    scheduleSave()
+    return true
+  }
+  const deleteImage = (id: string): boolean => {
+    const img = activePage.value.images.find((x) => x.id === id)
+    if (!img) return false
+    activePage.value.images = activePage.value.images.filter((t) => t.id !== id)
+    if (activeImageId.value === id) activeImageId.value = null
+    // Bytes'ı da sil (paylaşım yok — her ekleme kendi dosyasını yazar).
+    void idbDeleteFile(img.fileId).catch(() => {})
+    redoStack.value = []
+    recountActive()
+    repaintBase()
+    clearOverlay()
+    scheduleSave()
+    return true
+  }
+
   // Tool change — highlighter artık rengi ezmez, seçili renk alpha ile kullanılır.
   // Araç değişimi seçimi ve metin editörünü temizler (gizli durumla mürekkep karışmasın).
   const setTool = (tool: Tool) => {
@@ -768,7 +846,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     currentTool.value = tool
     selectedIds.value = []
     activeTextId.value = null
-    activeTextId.value = null
+    activeImageId.value = null
   }
 
   // Color change
@@ -881,7 +959,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Sayfa DIŞINA basım yok sayılır (kenar dışı nokta tıklamasından mürekkep doğmaz).
   const startDrawing = (e: PointerEvent): boolean => {
     if (!canvasRef.value || isDrawing.value) return false
-    if (currentTool.value === 'select' || currentTool.value === 'text') return false
+    if (currentTool.value === 'select' || currentTool.value === 'text' || currentTool.value === 'image') return false
     if (shouldIgnoreEvent(e)) return false
     isDrawing.value = true
 
@@ -1001,6 +1079,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       redoStack.value = []
       selectedIds.value = []
       activeTextId.value = null
+    activeImageId.value = null
       recountActive()
       if (stroke.tool !== 'eraser') {
         const ctx = getCtx(canvasRef.value)
@@ -1315,6 +1394,17 @@ export const useDrawingStore = defineStore('drawing', () => {
     ctx.restore()
   }
 
+  // Resimler: arkaplanın üstü, mürekkebin altı. Bitmap yoksa (yüklenemediyse) atlanır.
+  const paintImages = (ctx: CanvasRenderingContext2D, page: Page) => {
+    const items = page.images
+    if (!items || items.length === 0) return
+    for (const img of items) {
+      const bmp = imgBitmaps.get(img.fileId)
+      if (!bmp) continue
+      ctx.drawImage(bmp, img.x, img.y, img.w, img.h)
+    }
+  }
+
   const paintPage = (ctx: CanvasRenderingContext2D, page: Page) => {
     const paperHex = paperFor(page)
     if (paperHex) {
@@ -1324,6 +1414,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     const bg = bgCanvases.get(page.id)
     if (bg) ctx.drawImage(bg, 0, 0, page.size.w, page.size.h)
+    paintImages(ctx, page)
     for (const s of page.strokes) {
       paintStroke(ctx, s, paperHex)
     }
@@ -1368,7 +1459,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Aktif çizgiyi overlay'e çiz — per-frame tek maliyet bu (O(aktif çizgi), sahneden bağımsız).
   // Silgi overlay kullanmaz (doğrudan base'e işlenir) → burada iş yok.
   const renderActiveStroke = () => {
-    if (currentTool.value === 'eraser' || currentTool.value === 'select' || currentTool.value === 'text') return
+    if (currentTool.value === 'eraser' || currentTool.value === 'select' || currentTool.value === 'text' || currentTool.value === 'image') return
     const t0 = performance.now()
     const ctx = getCtx(overlayRef.value)
     if (!ctx) return
@@ -1414,9 +1505,11 @@ export const useDrawingStore = defineStore('drawing', () => {
   const clearCanvas = () => {
     activePage.value.strokes = []
     activePage.value.texts = []
+    activePage.value.images = []
     redoStack.value = []
     selectedIds.value = []
     activeTextId.value = null
+    activeImageId.value = null
     points.value = []
     recountActive()
     isDrawing.value = false
@@ -1564,7 +1657,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       pdfRenderScales.clear()
       pdfBytesCache = new Uint8Array(stored)
       // Sayfa boyutu = PDF puntosu (bitmap aspect ile aynı, inşa gereği).
-      pages.value = rendered.map((r) => ({ id: newPageId(), strokes: [], texts: [], size: { w: r.cssW, h: r.cssH } }))
+      pages.value = rendered.map((r) => ({ id: newPageId(), strokes: [], texts: [], images: [], size: { w: r.cssW, h: r.cssH } }))
       rendered.forEach((r, i) => {
         const p = pages.value[i]!
         bgCanvases.set(p.id, r.canvas)
@@ -1577,6 +1670,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       redoStack.value = []
       selectedIds.value = []
       activeTextId.value = null
+    activeImageId.value = null
       points.value = []
       isDrawing.value = false
       bb = null
@@ -1686,6 +1780,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     redoStack.value = []
     selectedIds.value = []
     activeTextId.value = null
+    activeImageId.value = null
     points.value = []
     isDrawing.value = false
     bb = null
@@ -1773,16 +1868,26 @@ export const useDrawingStore = defineStore('drawing', () => {
     size: t.size,
   })
 
+  const snapshotImage = (t: ImageItem): ImageItem => ({
+    id: t.id,
+    x: t.x,
+    y: t.y,
+    w: t.w,
+    h: t.h,
+    fileId: t.fileId,
+  })
+
   const persistNow = async (): Promise<void> => {
     try {
       const now = Date.now()
       const doc: PersistedDoc = {
-        v: 3,
+        v: 4,
         savedAt: now,
         pages: pages.value.map((p) => ({
           id: p.id,
           strokes: p.strokes.map(snapshotStroke),
           texts: p.texts.map(snapshotText),
+          images: p.images.map(snapshotImage),
           size: { w: p.size.w, h: p.size.h },
           ...(p.pdfPageIndex !== undefined ? { pdfPageIndex: p.pdfPageIndex } : {}),
         })),
@@ -1848,6 +1953,32 @@ export const useDrawingStore = defineStore('drawing', () => {
     return clean
   }
 
+  // Bozuk kayda karşı resim doğrulama (v3'te yok → boş). Bitmap'siz kayıt
+  // boyamada atlanır ama referans korunur (restore sessiz dener).
+  const cleanImages = (input: unknown): ImageItem[] => {
+    if (!Array.isArray(input)) return []
+    const clean: ImageItem[] = []
+    for (const t of input) {
+      if (!t || typeof t !== 'object') continue
+      const r = t as Record<string, unknown>
+      if (typeof r.fileId !== 'string' || !r.fileId) continue
+      if (!Number.isFinite(r.x) || !Number.isFinite(r.y)) continue
+      if (!Number.isFinite(r.w) || !Number.isFinite(r.h)) continue
+      const w = Math.round(r.w as number)
+      const h = Math.round(r.h as number)
+      if (w < 16 || h < 16 || w > 3000 || h > 3000) continue
+      clean.push({
+        id: typeof r.id === 'string' && r.id ? r.id : newStrokeId(),
+        x: r.x as number,
+        y: r.y as number,
+        w,
+        h,
+        fileId: r.fileId,
+      })
+    }
+    return clean
+  }
+
   // Eski kayıtlarda size yok: bgSize (PDF) varsa o, yoksa o anki ekran boyutu
   // (eski çizgiler 1:1 korunur — aynı ekranda görünüm değişmez).
   const pageSizeOf = (
@@ -1881,12 +2012,14 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     let pages = 0
     let strokes = 0
-    if ((doc.v === 2 || doc.v === 3) && Array.isArray(doc.pages)) {
+    if ((doc.v === 2 || doc.v === 3 || doc.v === 4) && Array.isArray(doc.pages)) {
       pages = doc.pages.length
       for (const p of doc.pages) {
         if (p && Array.isArray(p.strokes)) strokes += p.strokes.length
         const tx = (p as { texts?: unknown }).texts
         if (Array.isArray(tx)) strokes += tx.length
+        const im = (p as { images?: unknown }).images
+        if (Array.isArray(im)) strokes += im.length
       }
     } else if (doc.v === 1 && Array.isArray((doc as { strokes?: unknown }).strokes)) {
       pages = 1
@@ -1921,7 +2054,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     // widths her sürümde ortak
     const w = (doc as { widths?: unknown }).widths as Record<string, unknown> | undefined
     if (w) {
-      for (const t of ['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow', 'text'] as const) {
+      for (const t of ['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow', 'text', 'image'] as const) {
         const v = w[t]
         if (typeof v === 'number' && Number.isFinite(v)) {
           widths.value[t] = Math.min(WIDTH_MAX[t], Math.max(WIDTH_MIN[t], Math.round(v)))
@@ -1933,13 +2066,14 @@ export const useDrawingStore = defineStore('drawing', () => {
       w: canvasRef.value?.clientWidth || 800,
       h: canvasRef.value?.clientHeight || 600,
     }
-    if ((doc.v === 2 || doc.v === 3) && Array.isArray(doc.pages)) {
+    if ((doc.v === 2 || doc.v === 3 || doc.v === 4) && Array.isArray(doc.pages)) {
       const clean = doc.pages
         .filter((p) => p && Array.isArray(p.strokes))
         .map((p) => ({
           id: typeof p.id === 'string' && p.id ? p.id : newPageId(),
           strokes: cleanStrokes(p.strokes),
           texts: cleanTexts((p as { texts?: unknown }).texts),
+          images: cleanImages((p as { images?: unknown }).images),
           size: pageSizeOf(p, viewFallback),
           pdfPageIndex:
             typeof p.pdfPageIndex === 'number' && Number.isFinite(p.pdfPageIndex)
@@ -1950,7 +2084,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     } else if (doc.v === 1 && Array.isArray((doc as { strokes?: unknown }).strokes)) {
       const v1 = (doc as unknown as { strokes: Stroke[] }).strokes
       const clean = cleanStrokes(v1)
-      loaded = clean.length > 0 ? [{ id: newPageId(), strokes: clean, texts: [], size: { ...viewFallback } }] : null
+      loaded = clean.length > 0 ? [{ id: newPageId(), strokes: clean, texts: [], images: [], size: { ...viewFallback } }] : null
     }
     if (!loaded || loaded.length === 0) return false
     pages.value = loaded
@@ -1958,6 +2092,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     redoStack.value = []
     selectedIds.value = []
     activeTextId.value = null
+    activeImageId.value = null
     const idx = (doc as { activePageIndex?: unknown }).activePageIndex
     activePageIndex.value =
       typeof idx === 'number' && Number.isFinite(idx)
@@ -1965,7 +2100,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         : 0
     layoutView()
     // PDF kaydı varsa arkaplanları bytes'tan yeniden üret (yoksa mürekkep tek başına durur).
-    if ((doc.v === 2 || doc.v === 3) && doc.pdfId) {
+    if ((doc.v === 2 || doc.v === 3 || doc.v === 4) && doc.pdfId) {
       pdfId.value = doc.pdfId
       pdfName.value = doc.pdfName ?? ''
       await restorePdfBackgrounds(doc.pdfId)
@@ -1985,6 +2120,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (popped) redoStack.value.push(popped)
     selectedIds.value = []
     activeTextId.value = null
+    activeImageId.value = null
     points.value = []
     isDrawing.value = false
     repaintBase()
@@ -2001,6 +2137,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     activePage.value.strokes.push(s)
     selectedIds.value = []
     activeTextId.value = null
+    activeImageId.value = null
     recountActive()
     repaintBase()
     scheduleSave()
@@ -2016,6 +2153,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     redoStack.value = []
     selectedIds.value = []
     activeTextId.value = null
+    activeImageId.value = null
     points.value = []
     isDrawing.value = false
     bb = null
@@ -2045,6 +2183,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     redoStack.value = []
     selectedIds.value = []
     activeTextId.value = null
+    activeImageId.value = null
     if (clamped < activePageIndex.value) {
       activePageIndex.value -= 1
     } else if (activePageIndex.value >= pages.value.length) {
@@ -2155,6 +2294,12 @@ export const useDrawingStore = defineStore('drawing', () => {
     updateTextStyle,
     moveText,
     deleteText,
+    activeImageId,
+    activeImage,
+    imageAt,
+    moveImage,
+    resizeImage,
+    deleteImage,
     setCanvasRef,
     setOverlayRef,
     setupCanvas,
