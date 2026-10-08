@@ -156,6 +156,14 @@
         >
           Ok
         </button>
+        <button
+          @click="store.setTool('text')"
+          :class="store.currentTool === 'text' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="px-2 py-1 rounded text-xs font-medium transition"
+          title="Metin (T)"
+        >
+          Metin
+        </button>
       </div>
 
       <div
@@ -233,7 +241,7 @@
         />
       </div>
 
-      <div v-if="store.currentTool !== 'select'" class="flex items-center gap-2">
+      <div v-if="store.currentTool !== 'select' && store.currentTool !== 'text'" class="flex items-center gap-2">
         <span class="text-sm text-[var(--chrome-muted)]">Kalınlık:</span>
         <input
           type="range"
@@ -244,6 +252,21 @@
           class="w-24 accent-indigo-600"
         />
         <span class="text-xs text-[var(--chrome-text)] w-6 text-right">{{ store.strokeWidth }}</span>
+      </div>
+
+      <div v-if="store.currentTool === 'text'" class="flex items-center gap-2">
+        <span class="text-sm text-[var(--chrome-muted)]">Yazı:</span>
+        <input
+          type="range"
+          min="8"
+          max="72"
+          step="1"
+          :value="store.textSize"
+          @input="store.setTextSize(Number(($event.target as HTMLInputElement).value))"
+          class="w-24 accent-indigo-600"
+          title="Yeni metinlerin boyu (pt)"
+        />
+        <span class="text-xs text-[var(--chrome-text)] w-6 text-right">{{ store.textSize }}</span>
       </div>
 
       <button
@@ -474,13 +497,64 @@
       ></canvas>
       <canvas
         ref="overlayCanvas"
-        class="absolute inset-0 w-full h-full cursor-crosshair touch-none select-none block"
+        class="absolute inset-0 w-full h-full touch-none select-none block"
+        :style="{ cursor: store.currentTool === 'text' ? 'text' : store.currentTool === 'select' ? 'default' : 'crosshair' }"
         @pointerdown="startDraw"
         @pointermove="draw"
         @pointerup="endDraw"
         @pointerleave="endDraw"
         @pointercancel="endDraw"
       ></canvas>
+
+      <div
+        v-if="store.currentTool === 'text' && store.activeTextId"
+        class="absolute top-3 left-1/2 -translate-x-1/2 z-10 w-80 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
+        role="dialog"
+        aria-label="Metin düzenle"
+      >
+        <textarea
+          ref="textArea"
+          rows="3"
+          :value="store.activeText()?.text ?? ''"
+          @input="onTextInput"
+          @keydown.escape="closeTextEditor"
+          placeholder="Metni yaz… (boş bırakılırsa silinir)"
+          class="w-full px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)] resize-y"
+        ></textarea>
+        <div class="flex items-center gap-2 mt-2">
+          <input
+            type="range"
+            min="8"
+            max="72"
+            step="1"
+            :value="store.activeText()?.size ?? store.textSize"
+            @input="onTextSizeInput(Number(($event.target as HTMLInputElement).value))"
+            class="flex-1 accent-indigo-600"
+            title="Yazı boyu"
+          />
+          <input
+            type="color"
+            :value="store.activeText()?.color ?? store.color"
+            @input="onTextColorInput(($event.target as HTMLInputElement).value)"
+            class="w-7 h-7 rounded bg-transparent border border-[var(--chrome-border-strong)] cursor-pointer p-0.5"
+            title="Yazı rengi"
+          />
+          <button
+            @click="delActiveText"
+            class="px-2 py-1 rounded hover:bg-red-600/40 text-[var(--chrome-text)] hover:text-white transition"
+            title="Metni sil"
+          >
+            Sil
+          </button>
+          <button
+            @click="closeTextEditor"
+            class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
+            title="Kapat (Esc)"
+          >
+            Tamam
+          </button>
+        </div>
+      </div>
 
       <div
         class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border)] text-xs text-[var(--chrome-text)] select-none"
@@ -579,7 +653,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { drawingPerf, PAGE_FORMATS, PAPER_THEMES, useDrawingStore } from '@/stores/drawing'
 import { selectionBBox } from '@/lib/select'
 
@@ -829,12 +903,119 @@ const selDelete = () => {
   updateHud(true)
 }
 
+const textArea = ref<HTMLTextAreaElement | null>(null)
+
+// --- Metin jesti (text aracı): tıkla-oluştur/düzenle, sürükle-taşı ---
+// Düzenleme HTML panelde; canvas sadece konum + taşıma için.
+let textDownPos: { x: number; y: number } | null = null
+let textDownHit: string | null = null
+let textMoving = false
+let textMoveId: string | null = null
+let textMoveLast: { x: number; y: number } | null = null
+
+const cancelTextGesture = () => {
+  textDownPos = null
+  textDownHit = null
+  textMoving = false
+  textMoveId = null
+  textMoveLast = null
+}
+
+const textDown = (e: PointerEvent) => {
+  if (store.rejectTouch && e.pointerType === 'touch') return
+  try {
+    overlayCanvas.value!.setPointerCapture(e.pointerId)
+  } catch {
+    /* ignore */
+  }
+  activePointerId = e.pointerId
+  const p = store.eventToPage(e)
+  const hit = store.textAt(p.x, p.y)
+  textDownPos = p
+  textDownHit = hit ? hit.id : null
+  textMoving = false
+  textMoveId = null
+  textMoveLast = null
+}
+
+const textMove = (e: PointerEvent) => {
+  if (e.pointerId !== activePointerId || !textDownPos) return
+  if (e.buttons === 0 && e.pointerType === 'mouse') return
+  const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
+  for (const ev of events) {
+    const p = store.eventToPage(ev as PointerEvent)
+    if (!textMoving && textDownHit) {
+      const dx = p.x - textDownPos.x
+      const dy = p.y - textDownPos.y
+      if (dx * dx + dy * dy >= 9) {
+        textMoving = true
+        textMoveId = textDownHit
+        textMoveLast = p
+        store.clearActiveText()
+      }
+    } else if (textMoving && textMoveId && textMoveLast) {
+      store.moveText(textMoveId, p.x - textMoveLast.x, p.y - textMoveLast.y)
+      textMoveLast = p
+    }
+  }
+}
+
+const textUp = (e?: PointerEvent) => {
+  if (e && activePointerId !== null && e.pointerId !== activePointerId) return
+  const wasMoving = textMoving
+  const hit = textDownHit
+  const at = textDownPos
+  cancelTextGesture()
+  activePointerId = null
+  if (wasMoving) {
+    updateHud(true)
+    return
+  }
+  if (hit) {
+    // Mevcut metne tık: düzenle.
+    store.activeTextId = hit
+  } else if (at) {
+    // Boşa tık: yeni metin + düzenle.
+    store.createText(at.x, at.y)
+  }
+  updateHud(true)
+}
+
+const onTextInput = (e: Event) => {
+  if (!store.activeTextId) return
+  store.updateText(store.activeTextId, (e.target as HTMLTextAreaElement).value)
+}
+
+const onTextSizeInput = (n: number) => {
+  if (!store.activeTextId) return
+  store.updateTextStyle(store.activeTextId, { size: n })
+}
+
+const onTextColorInput = (hex: string) => {
+  if (!store.activeTextId) return
+  store.updateTextStyle(store.activeTextId, { color: hex })
+}
+
+const closeTextEditor = () => {
+  const t = store.activeText()
+  // Boş bırakılan kutu çöp olmasın.
+  if (t && !t.text) store.deleteText(t.id)
+  else store.clearActiveText()
+}
+
+const delActiveText = () => {
+  const t = store.activeText()
+  if (t) store.deleteText(t.id)
+  updateHud(true)
+}
+
 const startDraw = (e: PointerEvent) => {
   if (!overlayCanvas.value) return
   pointers.set(e.pointerId, ptrPos(e))
   if (pointers.size === 2) {
     store.cancelActiveStroke()
     cancelSelGesture()
+    cancelTextGesture()
     if (rafId !== 0) {
       cancelAnimationFrame(rafId)
       rafId = 0
@@ -848,6 +1029,10 @@ const startDraw = (e: PointerEvent) => {
   if (pointers.size !== 1 || gesture || gestureConsumed) return
   if (store.currentTool === 'select') {
     selectDown(e)
+    return
+  }
+  if (store.currentTool === 'text') {
+    textDown(e)
     return
   }
   if (store.rejectTouch && e.pointerType === 'touch') return
@@ -885,6 +1070,10 @@ const draw = (e: PointerEvent) => {
     selectMove(e)
     return
   }
+  if (store.currentTool === 'text') {
+    textMove(e)
+    return
+  }
   if (!store.isDrawing || activePointerId === null || e.pointerId !== activePointerId) return
   // Sadece basılıyken çiz (pointermove hover'da ateşlenir)
   if (e.buttons === 0 && e.pointerType === 'mouse') return
@@ -907,6 +1096,10 @@ const endDraw = (e?: PointerEvent) => {
   }
   if (selActive || store.currentTool === 'select') {
     selectUp(e)
+    return
+  }
+  if (textDownPos || store.currentTool === 'text') {
+    textUp(e)
     return
   }
   if (!store.isDrawing) {
@@ -969,7 +1162,20 @@ const onKeyDown = (e: KeyboardEvent) => {
       return
     }
   }
-  // Araç kısayolları (modsuz): V seç, P kalem, H vurgu, E silgi, L/R/O/A şekiller.
+  // Metin aracı kısayolları (modsuz): sil / kapat.
+  if (!mod && !e.altKey && store.currentTool === 'text') {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && store.activeTextId) {
+      e.preventDefault()
+      store.deleteText(store.activeTextId)
+      updateHud(true)
+      return
+    }
+    if (e.key === 'Escape' && store.activeTextId) {
+      closeTextEditor()
+      return
+    }
+  }
+  // Araç kısayolları (modsuz): V seç, P kalem, H vurgu, E silgi, L/R/O/A şekiller, T metin.
   if (!mod && !e.altKey) {
     const k = e.key.toLowerCase()
     if (k === 'v') {
@@ -1002,6 +1208,10 @@ const onKeyDown = (e: KeyboardEvent) => {
     }
     if (k === 'a') {
       store.setTool('arrow')
+      return
+    }
+    if (k === 't') {
+      store.setTool('text')
       return
     }
   }
@@ -1185,6 +1395,7 @@ const sizeCanvas = () => {
 
 // Seçim değişince bbox'ı tazele (taşıma nokta-mutasyonu, id aynı — orası explicit redraw).
 let stopSelWatch: (() => void) | null = null
+let stopTextWatch: (() => void) | null = null
 
 // Canvas initialization
 onMounted(() => {
@@ -1211,16 +1422,26 @@ onMounted(() => {
     () => store.selectedIds,
     () => drawSelectionOverlay(),
   )
+  // Editör açılınca fareyi bekletme — klavye hazır gelsin.
+  stopTextWatch = watch(
+    () => store.activeTextId,
+    (id) => {
+      if (id) nextTick(() => textArea.value?.focus())
+    },
+  )
 })
 
 onUnmounted(() => {
   if (rafId !== 0) cancelAnimationFrame(rafId)
   activePointerId = null
   cancelSelGesture()
+  cancelTextGesture()
   pointers.clear()
   gesture = null
   stopSelWatch?.()
   stopSelWatch = null
+  stopTextWatch?.()
+  stopTextWatch = null
   window.removeEventListener('resize', sizeCanvas)
   window.removeEventListener('keydown', onKeyDown)
   overlayCanvas.value?.removeEventListener('wheel', onWheel)

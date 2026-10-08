@@ -1413,6 +1413,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Canvası temizle — sadece AKTİF sayfa (sayfalar varken global silme yok).
   const clearCanvas = () => {
     activePage.value.strokes = []
+    activePage.value.texts = []
     redoStack.value = []
     selectedIds.value = []
     activeTextId.value = null
