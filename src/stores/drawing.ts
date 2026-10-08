@@ -583,6 +583,68 @@ export const useDrawingStore = defineStore('drawing', () => {
     scheduleSave()
     return true
   }
+  // Pano: sayfalar-arası çalışır, içerik idsiz saklanır (yapıştırma yeni id verir).
+  // Reaktivite dışı; buton durumu için sayacı ayrıca senkronlanır.
+  let clipboard: Omit<Stroke, 'id'>[] = []
+  const clipboardCount = ref(0)
+  const copySelected = (): number => {
+    if (selectedIds.value.length === 0) return 0
+    const set = new Set(selectedIds.value)
+    clipboard = activePage.value.strokes
+      .filter((s) => set.has(s.id))
+      .map((s) => ({
+        tool: s.tool,
+        color: s.color,
+        width: s.width,
+        points: s.points.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
+      }))
+    clipboardCount.value = clipboard.length
+    return clipboard.length
+  }
+  const cutSelected = (): number => {
+    const n = copySelected()
+    if (n === 0) return 0
+    deleteSelected()
+    return n
+  }
+  // Yapıştırma hafif ötelenir (üst üste binmesin), kutu sayfada kalır.
+  // Yapışanlar seçili gelir (zincir taşıma/yapıştırma için). Redo ölür.
+  const pasteClipboard = (dx = 12, dy = 12): number => {
+    if (clipboard.length === 0) return 0
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return 0
+    const size = activePage.value.size
+    let x0 = Infinity
+    let y0 = Infinity
+    let x1 = -Infinity
+    let y1 = -Infinity
+    for (const s of clipboard) {
+      for (const p of s.points) {
+        if (p.x < x0) x0 = p.x
+        if (p.y < y0) y0 = p.y
+        if (p.x > x1) x1 = p.x
+        if (p.y > y1) y1 = p.y
+      }
+    }
+    if (!Number.isFinite(x0) || !Number.isFinite(y0)) return 0
+    dx = Math.min(size.w - x1, Math.max(-x0, dx))
+    dy = Math.min(size.h - y1, Math.max(-y0, dy))
+    const pasted: Stroke[] = clipboard.map((s) => ({
+      id: newStrokeId(),
+      tool: s.tool,
+      color: s.color,
+      width: s.width,
+      points: s.points.map((p) => ({ x: p.x + dx, y: p.y + dy, pressure: p.pressure })),
+    }))
+    if (pasted.length === 0) return 0
+    for (const s of pasted) activePage.value.strokes.push(s)
+    selectedIds.value = pasted.map((s) => s.id)
+    redoStack.value = []
+    recountActive()
+    repaintBase()
+    clearOverlay()
+    scheduleSave()
+    return pasted.length
+  }
 
   // Tool change — highlighter artık rengi ezmez, seçili renk alpha ile kullanılır.
   const setTool = (tool: Tool) => {
@@ -1823,6 +1885,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     selectAll,
     deleteSelected,
     moveSelected,
+    clipboardCount,
+    copySelected,
+    cutSelected,
+    pasteClipboard,
     setCanvasRef,
     setOverlayRef,
     setupCanvas,
