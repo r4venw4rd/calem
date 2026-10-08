@@ -25,11 +25,15 @@ export const isShapeTool = (t: Tool): t is ShapeTool =>
   t === 'line' || t === 'rect' || t === 'ellipse' || t === 'arrow'
 export type SelectMode = 'rect' | 'lasso'
 export interface Point { x: number; y: number; pressure?: number }
+// Çizgi stili: kalem + şekillerde kesikli/noktalı ve opaklık. Vurgu/silgi sabit stillidir.
+export type DashStyle = 'solid' | 'dash' | 'dot'
 export interface Stroke {
   id: string
   tool: Tool
   color: string
   width: number
+  dash: DashStyle
+  opacity: number
   points: Point[]
 }
 // Metin kutusu (sayfa-uzayı pt; x,y sol-üst). Çok satır \n ile.
@@ -388,6 +392,17 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (eraserMode.value === m) return
     eraserMode.value = m
     void persistSettings()
+  }
+  // Yeni çizgilerin stili (kalem + şekiller; vurgu/silgi sabit).
+  const strokeDash = ref<DashStyle>('solid')
+  const setStrokeDash = (d: string) => {
+    if (d !== 'solid' && d !== 'dash' && d !== 'dot') return
+    strokeDash.value = d
+  }
+  const strokeOpacity = ref(1)
+  const setStrokeOpacity = (n: number) => {
+    if (!Number.isFinite(n)) return
+    strokeOpacity.value = Math.min(1, Math.max(0.1, Math.round(n * 20) / 20))
   }
   // 0 = basınç kapalı, 2 = çok hassas. UI slider'dan ayarlanır.
   const pressureSensitivity = ref(1)
@@ -1371,6 +1386,8 @@ export const useDrawingStore = defineStore('drawing', () => {
         tool: currentTool.value,
         color: color.value,
         width: strokeWidth.value,
+        dash: strokeDash.value,
+        opacity: strokeOpacity.value,
         points: shapeEnds
           ? [
               { x: shapeEnds[0].x, y: shapeEnds[0].y, pressure: shapeEnds[0].pressure },
@@ -1418,6 +1435,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     col: string,
     w: number,
     paperHex: string | null,
+    opacity = 1,
   ) => {
     if (tool === 'eraser') {
       if (paperHex) {
@@ -1450,8 +1468,16 @@ export const useDrawingStore = defineStore('drawing', () => {
       ctx.lineWidth = Math.max(w, 1)
       ctx.lineCap = 'round'
       ctx.lineJoin = 'round'
-      ctx.globalAlpha = 0.95
+      ctx.globalAlpha = 0.95 * opacity
     }
+  }
+
+  // Kesikli desen (kalem + şekiller; vurgu/silgi düz). Genişliğe oranlı tireler.
+  const dashFor = (tool: Tool, dash: DashStyle, w: number): number[] => {
+    if (dash === 'solid') return []
+    if (tool === 'highlighter' || tool === 'eraser' || tool === 'select' || tool === 'text' || tool === 'image') return []
+    if (dash === 'dash') return [Math.max(5, w * 3), Math.max(3, w * 1.8)]
+    return [0.5, Math.max(2.5, w * 1.5)]
   }
 
   // ✅ Catmull-Rom spline ile smooth path (verilen noktalar için)
@@ -1542,13 +1568,14 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   const paintStroke = (
     ctx: CanvasRenderingContext2D,
-    s: Pick<Stroke, 'tool' | 'color' | 'width' | 'points'>,
+    s: Pick<Stroke, 'tool' | 'color' | 'width' | 'dash' | 'opacity' | 'points'>,
     paperHex: string | null,
   ) => {
     if (s.points.length === 0) return
     ctx.save()
     const w = s.tool === 'eraser' ? s.width : effectiveWidth(s.points, s.width)
-    applyStyleForStroke(ctx, s.tool, s.color, w, paperHex)
+    applyStyleForStroke(ctx, s.tool, s.color, w, paperHex, s.opacity)
+    ctx.setLineDash(dashFor(s.tool, s.dash, w))
     // Dejenere şekil (tek nokta / sıfır boy) nokta olarak düşer.
     let dotted = false
     if (isShapeTool(s.tool)) {
@@ -1782,6 +1809,8 @@ export const useDrawingStore = defineStore('drawing', () => {
             tool: currentTool.value,
             color: color.value,
             width: strokeWidth.value,
+            dash: strokeDash.value,
+            opacity: strokeOpacity.value,
             points: points.value,
           },
           paperHex,
@@ -2169,6 +2198,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     tool: s.tool,
     color: s.color,
     width: s.width,
+    dash: s.dash,
+    opacity: s.opacity,
     points: s.points.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
   })
 
@@ -2244,6 +2275,11 @@ export const useDrawingStore = defineStore('drawing', () => {
         tool: s.tool === 'eraser' || s.tool === 'highlighter' || isShapeTool(s.tool) ? s.tool : 'pen',
         color: typeof s.color === 'string' ? s.color : '#ffffff',
         width: typeof s.width === 'number' ? Math.min(120, Math.max(1, s.width)) : 3,
+        dash: (s as Stroke).dash === 'dash' || (s as Stroke).dash === 'dot' ? (s as Stroke).dash : 'solid',
+        opacity:
+          typeof (s as Stroke).opacity === 'number' && Number.isFinite((s as Stroke).opacity)
+            ? Math.min(1, Math.max(0.1, (s as Stroke).opacity))
+            : 1,
         points: pts.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
       })
     }
@@ -2667,6 +2703,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     setColor,
     setStrokeWidth,
     setRejectTouch,
+    strokeDash,
+    setStrokeDash,
+    strokeOpacity,
+    setStrokeOpacity,
     eraserMode,
     setEraserMode,
     selectMode,
