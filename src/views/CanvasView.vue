@@ -109,9 +109,77 @@
           </svg>
           Silgi
         </button>
+
+        <button
+          @click="store.setTool('select')"
+          :class="store.currentTool === 'select' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="px-3 py-1 rounded text-xs font-medium transition flex items-center gap-1"
+          title="Seç/Taşı (V)"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 7-6 2-2 6-6-15z" />
+          </svg>
+          Seç
+        </button>
       </div>
 
-      <div class="flex items-center gap-1.5" role="toolbar" aria-label="Renk paleti">
+      <div
+        v-if="store.currentTool === 'select'"
+        class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]"
+        role="toolbar"
+        aria-label="Seçim işlemleri"
+      >
+        <button
+          @click="store.setSelectMode('rect')"
+          :class="store.selectMode === 'rect' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="px-2 py-1 rounded text-xs font-medium transition"
+          title="Kare seçim"
+        >
+          Kare
+        </button>
+        <button
+          @click="store.setSelectMode('lasso')"
+          :class="store.selectMode === 'lasso' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="px-2 py-1 rounded text-xs font-medium transition"
+          title="Kement seçim"
+        >
+          Kement
+        </button>
+        <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
+        <button
+          @click="selAll"
+          class="px-2 py-1 rounded text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
+          title="Tümünü seç (Ctrl+A)"
+        >
+          Tümü
+        </button>
+        <button
+          @click="selCopy"
+          :disabled="store.selectionCount === 0"
+          class="px-2 py-1 rounded text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Kopyala (Ctrl+C)"
+        >
+          Kopyala
+        </button>
+        <button
+          @click="selPaste"
+          :disabled="store.clipboardCount === 0"
+          class="px-2 py-1 rounded text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Yapıştır (Ctrl+V)"
+        >
+          Yapıştır
+        </button>
+        <button
+          @click="selDelete"
+          :disabled="store.selectionCount === 0"
+          class="px-2 py-1 rounded text-xs text-[var(--chrome-text)] hover:text-red-400 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Seçiliyi sil (Del)"
+        >
+          Sil<span v-if="store.selectionCount > 0" class="font-mono"> ({{ store.selectionCount }})</span>
+        </button>
+      </div>
+
+      <div v-if="store.currentTool !== 'select'" class="flex items-center gap-1.5" role="toolbar" aria-label="Renk paleti">
         <button
           v-for="hex in PALETTE"
           :key="hex"
@@ -130,7 +198,7 @@
         />
       </div>
 
-      <div class="flex items-center gap-2">
+      <div v-if="store.currentTool !== 'select'" class="flex items-center gap-2">
         <span class="text-sm text-[var(--chrome-muted)]">Kalınlık:</span>
         <input
           type="range"
@@ -476,8 +544,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { drawingPerf, PAGE_FORMATS, PAPER_THEMES, useDrawingStore } from '@/stores/drawing'
+import { selectionBBox } from '@/lib/select'
 
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
@@ -542,11 +611,195 @@ const ptrPos = (e: PointerEvent) => {
   return { x: e.clientX - r.left, y: e.clientY - r.top }
 }
 
+// --- Seçim jesti (select aracı): sayfa-uzayında marquee/lasso/taşıma ---
+// Önizleme + bbox DOĞRUDAN overlay'e çizilir (reactive değil, rAF yok — pointer olayı kadar).
+let selActive = false
+let selAnchor: { x: number; y: number } | null = null
+let selCurrent: { x: number; y: number } | null = null
+let selPoly: { x: number; y: number }[] | null = null
+let selMoving = false
+let selLast: { x: number; y: number } | null = null
+
+const cancelSelGesture = () => {
+  selActive = false
+  selMoving = false
+  selLast = null
+  selAnchor = null
+  selCurrent = null
+  selPoly = null
+  activePointerId = null
+}
+
+const drawSelectionOverlay = () => {
+  const c = overlayCanvas.value
+  if (!c) return
+  const ctx = c.getContext('2d')
+  if (!ctx) return
+  const dpr = store.dpr || window.devicePixelRatio || 1
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.clearRect(0, 0, c.width, c.height)
+  const hasMarquee = selAnchor && selCurrent
+  const hasPoly = selPoly && selPoly.length > 1
+  const hasSel = store.selectionCount > 0
+  if (store.currentTool !== 'select' || (!hasMarquee && !hasPoly && !hasSel)) return
+  const t = store.getViewTransform()
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  const sx = (x: number) => x * t.scale + t.ox
+  const sy = (y: number) => y * t.scale + t.oy
+  ctx.save()
+  ctx.setLineDash([6, 4])
+  ctx.lineWidth = 1.2
+  if (hasMarquee && selAnchor && selCurrent) {
+    const x0 = sx(Math.min(selAnchor.x, selCurrent.x))
+    const y0 = sy(Math.min(selAnchor.y, selCurrent.y))
+    const x1 = sx(Math.max(selAnchor.x, selCurrent.x))
+    const y1 = sy(Math.max(selAnchor.y, selCurrent.y))
+    ctx.strokeStyle = '#818cf8'
+    ctx.fillStyle = 'rgba(99,102,241,0.08)'
+    ctx.beginPath()
+    ctx.rect(x0, y0, x1 - x0, y1 - y0)
+    ctx.fill()
+    ctx.stroke()
+  }
+  if (hasPoly && selPoly) {
+    ctx.strokeStyle = '#818cf8'
+    ctx.beginPath()
+    selPoly.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(sx(p.x), sy(p.y))
+      else ctx.lineTo(sx(p.x), sy(p.y))
+    })
+    ctx.stroke()
+  }
+  if (hasSel) {
+    const bb = selectionBBox(store.strokes, store.selectedIds)
+    if (bb) {
+      const x0 = sx(bb.x0)
+      const y0 = sy(bb.y0)
+      const x1 = sx(bb.x1)
+      const y1 = sy(bb.y1)
+      ctx.strokeStyle = '#6366f1'
+      ctx.setLineDash([6, 4])
+      ctx.beginPath()
+      ctx.rect(x0, y0, x1 - x0, y1 - y0)
+      ctx.stroke()
+      // Köşe tutamaçları
+      ctx.setLineDash([])
+      ctx.fillStyle = '#6366f1'
+      for (const [hx, hy] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]] as const) {
+        ctx.fillRect(hx - 3, hy - 3, 6, 6)
+      }
+    }
+  }
+  ctx.restore()
+}
+
+const selInside = (p: { x: number; y: number }): boolean => {
+  const bb = selectionBBox(store.strokes, store.selectedIds)
+  if (!bb) return false
+  return p.x >= bb.x0 && p.x <= bb.x1 && p.y >= bb.y0 && p.y <= bb.y1
+}
+
+const selectDown = (e: PointerEvent) => {
+  if (store.rejectTouch && e.pointerType === 'touch') return
+  try {
+    overlayCanvas.value!.setPointerCapture(e.pointerId)
+  } catch {
+    /* ignore */
+  }
+  activePointerId = e.pointerId
+  const p = store.eventToPage(e)
+  if (store.selectionCount > 0 && selInside(p)) {
+    selMoving = true
+    selLast = p
+    selActive = true
+  } else if (store.selectMode === 'lasso') {
+    selPoly = [p]
+    selActive = true
+  } else {
+    selAnchor = p
+    selCurrent = p
+    selActive = true
+  }
+  drawSelectionOverlay()
+}
+
+const selectMove = (e: PointerEvent) => {
+  if (!selActive || e.pointerId !== activePointerId) return
+  if (e.buttons === 0 && e.pointerType === 'mouse') return
+  const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
+  for (const ev of events) {
+    const p = store.eventToPage(ev as PointerEvent)
+    if (selMoving && selLast) {
+      store.moveSelected(p.x - selLast.x, p.y - selLast.y)
+      selLast = p
+    } else if (selPoly) {
+      const last = selPoly[selPoly.length - 1]!
+      const dx = p.x - last.x
+      const dy = p.y - last.y
+      if (dx * dx + dy * dy >= 4) selPoly.push(p)
+    } else if (selAnchor) {
+      selCurrent = p
+    }
+  }
+  drawSelectionOverlay()
+}
+
+const selectUp = (e?: PointerEvent) => {
+  if (e && activePointerId !== null && e.pointerId !== activePointerId) return
+  if (!selActive) {
+    activePointerId = null
+    return
+  }
+  selActive = false
+  activePointerId = null
+  if (selMoving) {
+    selMoving = false
+    selLast = null
+  } else if (selPoly) {
+    const poly = selPoly
+    selPoly = null
+    if (poly.length >= 3) store.selectLassoArea(poly)
+    else if (poly.length > 0) store.selectRectArea(poly[0]!, poly[0]!)
+  } else if (selAnchor && selCurrent) {
+    const a = selAnchor
+    const b = selCurrent
+    selAnchor = null
+    selCurrent = null
+    store.selectRectArea(a, b)
+  }
+  drawSelectionOverlay()
+  updateHud(true)
+}
+
+const selAll = () => {
+  store.selectAll()
+  drawSelectionOverlay()
+  updateHud(true)
+}
+
+const selCopy = () => {
+  store.copySelected()
+  updateHud(true)
+}
+
+const selPaste = () => {
+  store.pasteClipboard()
+  drawSelectionOverlay()
+  updateHud(true)
+}
+
+const selDelete = () => {
+  store.deleteSelected()
+  drawSelectionOverlay()
+  updateHud(true)
+}
+
 const startDraw = (e: PointerEvent) => {
   if (!overlayCanvas.value) return
   pointers.set(e.pointerId, ptrPos(e))
   if (pointers.size === 2) {
     store.cancelActiveStroke()
+    cancelSelGesture()
     if (rafId !== 0) {
       cancelAnimationFrame(rafId)
       rafId = 0
@@ -558,6 +811,10 @@ const startDraw = (e: PointerEvent) => {
     return
   }
   if (pointers.size !== 1 || gesture || gestureConsumed) return
+  if (store.currentTool === 'select') {
+    selectDown(e)
+    return
+  }
   if (store.rejectTouch && e.pointerType === 'touch') return
   // pointer capture ile canvas dışına taşınca bile çizmeye devam et
   try {
@@ -586,6 +843,11 @@ const draw = (e: PointerEvent) => {
     if (gesture.d0 > 0) store.pinch(d1 / gesture.d0, mx, my, mx - gesture.mx0, my - gesture.my0)
     gesture = { d0: d1, mx0: mx, my0: my }
     updateHud()
+    drawSelectionOverlay()
+    return
+  }
+  if (store.currentTool === 'select') {
+    selectMove(e)
     return
   }
   if (!store.isDrawing || activePointerId === null || e.pointerId !== activePointerId) return
@@ -608,6 +870,10 @@ const endDraw = (e?: PointerEvent) => {
     if (gesture && pointers.size < 2) gesture = null
     return
   }
+  if (selActive || store.currentTool === 'select') {
+    selectUp(e)
+    return
+  }
   if (!store.isDrawing) {
     activePointerId = null
     return
@@ -625,11 +891,13 @@ const endDraw = (e?: PointerEvent) => {
 
 const undo = () => {
   store.undoLastStroke()
+  drawSelectionOverlay()
   updateHud(true)
 }
 
 const redo = () => {
   store.redo()
+  drawSelectionOverlay()
   updateHud(true)
 }
 
@@ -637,15 +905,88 @@ const redo = () => {
 const onKeyDown = (e: KeyboardEvent) => {
   const t = e.target as HTMLElement | null
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
-  if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+  const mod = e.ctrlKey || e.metaKey
+  // Seçim aracı kısayolları (modsuz): sil / kaç / oklarla dürt.
+  if (!mod && !e.altKey && store.currentTool === 'select') {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault()
+      store.deleteSelected()
+      drawSelectionOverlay()
+      updateHud(true)
+      return
+    }
+    if (e.key === 'Escape') {
+      if (selActive) cancelSelGesture()
+      else store.clearSelection()
+      drawSelectionOverlay()
+      return
+    }
+    if (e.key.startsWith('Arrow')) {
+      e.preventDefault()
+      const step = e.shiftKey ? 10 : 2
+      const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
+      const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
+      if (dx || dy) {
+        store.moveSelected(dx, dy)
+        drawSelectionOverlay()
+        updateHud(true)
+      }
+      return
+    }
+  }
+  // Araç kısayolları (modsuz): V seç, P kalem, H vurgu, E silgi.
+  if (!mod && !e.altKey) {
+    const k = e.key.toLowerCase()
+    if (k === 'v') {
+      store.setTool('select')
+      return
+    }
+    if (k === 'p') {
+      store.setTool('pen')
+      return
+    }
+    if (k === 'h') {
+      store.setTool('highlighter')
+      return
+    }
+    if (k === 'e') {
+      store.setTool('eraser')
+      return
+    }
+  }
+  if (!mod || e.altKey) return
   const key = e.key.toLowerCase()
   if (key === 'z' && !e.shiftKey) {
     e.preventDefault()
     store.undoLastStroke()
+    drawSelectionOverlay()
     updateHud(true)
   } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
     e.preventDefault()
     store.redo()
+    drawSelectionOverlay()
+    updateHud(true)
+  } else if (key === 'a' && store.currentTool === 'select') {
+    e.preventDefault()
+    store.selectAll()
+    drawSelectionOverlay()
+    updateHud(true)
+  } else if (key === 'c' && store.currentTool === 'select') {
+    e.preventDefault()
+    store.copySelected()
+    updateHud(true)
+  } else if (key === 'x' && store.currentTool === 'select') {
+    e.preventDefault()
+    store.cutSelected()
+    drawSelectionOverlay()
+    updateHud(true)
+  } else if (key === 'v') {
+    // Panoda içerik varsa seçime geçip yapıştır.
+    if (store.clipboardCount === 0) return
+    e.preventDefault()
+    if (store.currentTool !== 'select') store.setTool('select')
+    store.pasteClipboard()
+    drawSelectionOverlay()
     updateHud(true)
   }
 }
@@ -733,21 +1074,25 @@ const onWheel = (e: WheelEvent) => {
   } else {
     store.panBy(-e.deltaX, -e.deltaY)
   }
+  drawSelectionOverlay()
   updateHud(true)
 }
 
 const zoomIn = () => {
   store.zoomStep(1.25)
+  drawSelectionOverlay()
   updateHud(true)
 }
 
 const zoomOut = () => {
   store.zoomStep(1 / 1.25)
+  drawSelectionOverlay()
   updateHud(true)
 }
 
 const resetZoom = () => {
   store.resetView()
+  drawSelectionOverlay()
   updateHud(true)
 }
 
@@ -784,7 +1129,11 @@ const restoreSession = async () => {
 const sizeCanvas = () => {
   if (!baseCanvas.value || !overlayCanvas.value) return
   store.resizeCanvas()
+  drawSelectionOverlay()
 }
+
+// Seçim değişince bbox'ı tazele (taşıma nokta-mutasyonu, id aynı — orası explicit redraw).
+let stopSelWatch: (() => void) | null = null
 
 // Canvas initialization
 onMounted(() => {
@@ -807,13 +1156,20 @@ onMounted(() => {
   window.addEventListener('resize', sizeCanvas)
   window.addEventListener('keydown', onKeyDown)
   overlayCanvas.value.addEventListener('wheel', onWheel, { passive: false })
+  stopSelWatch = watch(
+    () => store.selectedIds,
+    () => drawSelectionOverlay(),
+  )
 })
 
 onUnmounted(() => {
   if (rafId !== 0) cancelAnimationFrame(rafId)
   activePointerId = null
+  cancelSelGesture()
   pointers.clear()
   gesture = null
+  stopSelWatch?.()
+  stopSelWatch = null
   window.removeEventListener('resize', sizeCanvas)
   window.removeEventListener('keydown', onKeyDown)
   overlayCanvas.value?.removeEventListener('wheel', onWheel)
