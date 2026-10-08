@@ -870,12 +870,19 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Silgi zaten çizilirken base'e işlendiği için tekrar boyanmaz (idempotent olurdu ama gereksiz).
   const stopDrawing = () => {
     if (isDrawing.value && points.value.length > 0) {
+      // Şekiller uç-noktayla saklanır (ara noktalar sürükleme artığıdır, export'u şişirmesin).
+      const shapeEnds = isShapeTool(currentTool.value) ? shapeEndpoints(points.value) : null
       const stroke: Stroke = {
         id: newStrokeId(),
         tool: currentTool.value,
         color: color.value,
         width: strokeWidth.value,
-        points: [...points.value],
+        points: shapeEnds
+          ? [
+              { x: shapeEnds[0].x, y: shapeEnds[0].y, pressure: shapeEnds[0].pressure },
+              { x: shapeEnds[1].x, y: shapeEnds[1].y, pressure: shapeEnds[1].pressure },
+            ]
+          : [...points.value],
       }
       activePage.value.strokes.push(stroke)
       // Yeni mürekkep redo'yu ve eski seçimi öldürür.
