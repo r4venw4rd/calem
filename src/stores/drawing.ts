@@ -17,7 +17,7 @@ import {
   selectByRect as selByRect,
 } from '../lib/select'
 
-export type Tool = 'pen' | 'eraser' | 'highlighter'
+export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select'
 export type SelectMode = 'rect' | 'lasso'
 export interface Point { x: number; y: number; pressure?: number }
 export interface Stroke {
@@ -320,9 +320,10 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   const color = ref('#ffffff')
   // Araç başına kalınlık hafızası: kalem ince, silgi kocaman olabilir; araç değişince geri gelir.
-  const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5 }
-  const WIDTH_MAX: Record<Tool, number> = { pen: 20, highlighter: 50, eraser: 120 }
-  const widths = ref<Record<Tool, number>>({ pen: 3, highlighter: 10, eraser: 24 })
+  // select mürekkep değil, genişliği kullanılmaz (kayıtlı dursun yeter).
+  const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5, select: 1 }
+  const WIDTH_MAX: Record<Tool, number> = { pen: 20, highlighter: 50, eraser: 120, select: 20 }
+  const widths = ref<Record<Tool, number>>({ pen: 3, highlighter: 10, eraser: 24, select: 3 })
   // Mevcut aracın kalınlığı — template ve çizim buradan okur (eski strokeWidth ile aynı isim).
   const strokeWidth = computed(() => widths.value[currentTool.value])
   const widthMin = computed(() => WIDTH_MIN[currentTool.value])
@@ -647,8 +648,11 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // Tool change — highlighter artık rengi ezmez, seçili renk alpha ile kullanılır.
+  // Araç değişimi seçimi temizler (gizli seçimle mürekkep karışmasın).
   const setTool = (tool: Tool) => {
+    if (currentTool.value === tool) return
     currentTool.value = tool
+    selectedIds.value = []
   }
 
   // Color change
@@ -747,6 +751,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
+  // Seçim etkileşimi için sayfa koordinatı (component marquee/lasso/taşıma buradan beslenir).
+  const eventToPage = (e: PointerEvent): { x: number; y: number } => getPos(e)
+
   const readPressure = (e: PointerEvent): number => {
     // mouse her zaman 1; stylus/touch basıncı yoksa nötr 0.5 (çizgi kaybolmasın)
     if (e.pointerType === 'mouse') return 1
@@ -758,6 +765,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Sayfa DIŞINA basım yok sayılır (kenar dışı nokta tıklamasından mürekkep doğmaz).
   const startDrawing = (e: PointerEvent): boolean => {
     if (!canvasRef.value || isDrawing.value) return false
+    if (currentTool.value === 'select') return false
     if (shouldIgnoreEvent(e)) return false
     isDrawing.value = true
 
@@ -1160,7 +1168,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Aktif çizgiyi overlay'e çiz — per-frame tek maliyet bu (O(aktif çizgi), sahneden bağımsız).
   // Silgi overlay kullanmaz (doğrudan base'e işlenir) → burada iş yok.
   const renderActiveStroke = () => {
-    if (currentTool.value === 'eraser') return
+    if (currentTool.value === 'eraser' || currentTool.value === 'select') return
     const t0 = performance.now()
     const ctx = getCtx(overlayRef.value)
     if (!ctx) return
@@ -1869,6 +1877,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     zoomStep,
     cancelActiveStroke,
     getViewTransform,
+    eventToPage,
     dpr,
     setTool,
     setColor,
