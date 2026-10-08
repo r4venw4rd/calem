@@ -15,6 +15,7 @@ import {
 import {
   selectByLasso as selByLasso,
   selectByRect as selByRect,
+  strokeBBox,
 } from '../lib/select'
 
 export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text' | 'image'
@@ -74,12 +75,14 @@ export interface Page {
 }
 
 // Uygulama ayarları (çizimden ayrı anahtar; çizim silinse de durur).
-// v1: kâğıt rengi + biçim; v2: + kâğıt deseni (background).
+// v1: kâğıt rengi + biçim; v2: + kâğıt deseni; v3: + silgi modu.
 export type UiTheme = 'koyu' | 'acik'
+export type EraserMode = 'standard' | 'stroke'
 export interface AppSettings {
-  v: 1 | 2
+  v: 1 | 2 | 3
   paper: string
   background?: PaperBackground
+  eraserMode?: EraserMode
   format: PageFormat
   orientation: PageOrientation
   customW: number
@@ -252,9 +255,10 @@ export const useDrawingStore = defineStore('drawing', () => {
   const persistSettings = async (): Promise<void> => {
     try {
       const doc: AppSettings = {
-        v: 2,
+        v: 3,
         paper: paper.value,
         background: { ...paperBackground.value },
+        eraserMode: eraserMode.value,
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
@@ -270,9 +274,10 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Ayar yedeği: indirilen JSON'u başka cihaza/tarayıcıya taşımak için.
   const exportSettingsJSON = (): string => {
     const doc: AppSettings = {
-      v: 2,
+      v: 3,
       paper: paper.value,
       background: { ...paperBackground.value },
+      eraserMode: eraserMode.value,
       format: pageFormat.value,
       orientation: pageOrientation.value,
       customW: customW.value,
@@ -301,6 +306,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     if ('background' in r && r.background !== undefined) {
       paperBackground.value = cleanPaperBackground(r.background)
+      applied = true
+    }
+    if (r.eraserMode === 'standard' || r.eraserMode === 'stroke') {
+      eraserMode.value = r.eraserMode
       applied = true
     }
     const fmt = r.format
@@ -333,12 +342,15 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   const loadSettings = async (): Promise<void> => {    try {
       const raw = await idbGetKey<AppSettings>(SETTINGS_KEY)
-      if (!raw || (raw.v !== 1 && raw.v !== 2)) return
+      if (!raw || (raw.v !== 1 && raw.v !== 2 && raw.v !== 3)) return
       if (typeof raw.paper === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw.paper)) {
         paper.value = raw.paper
       }
-      if (raw.v === 2 && raw.background !== undefined) {
+      if ((raw.v === 2 || raw.v === 3) && raw.background !== undefined) {
         paperBackground.value = cleanPaperBackground(raw.background)
+      }
+      if (raw.v === 3 && (raw.eraserMode === 'standard' || raw.eraserMode === 'stroke')) {
+        eraserMode.value = raw.eraserMode
       }
       if (raw.format === 'custom' || (typeof raw.format === 'string' && raw.format in PAGE_FORMATS)) {
         pageFormat.value = raw.format as PageFormat
@@ -369,6 +381,14 @@ export const useDrawingStore = defineStore('drawing', () => {
   const widthMin = computed(() => WIDTH_MIN[currentTool.value])
   const widthMax = computed(() => WIDTH_MAX[currentTool.value])
   const currentTool = ref<Tool>('pen')
+  // Silgi modu: standard (boya-kapat) vs stroke (dokunduğu çizgiyi tümden sil, undo'lu).
+  const eraserMode = ref<EraserMode>('standard')
+  const setEraserMode = (m: string) => {
+    if (m !== 'standard' && m !== 'stroke') return
+    if (eraserMode.value === m) return
+    eraserMode.value = m
+    void persistSettings()
+  }
   // 0 = basınç kapalı, 2 = çok hassas. UI slider'dan ayarlanır.
   const pressureSensitivity = ref(1)
   // Açıkken touch ile çizim engellenir (stylus + mouse serbest) — Chromebook avuç reddi.
@@ -601,6 +621,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     activeTextId.value = null
     activeImageId.value = null
     redoStack.value = []
+    erasedGrave.length = 0
     recountActive()
     repaintBase()
     clearOverlay()
@@ -1026,6 +1047,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     activeTextId.value = null
     activeImageId.value = null
     redoStack.value = []
+    erasedGrave.length = 0
     recountActive()
     repaintBase()
     clearOverlay()
@@ -1185,12 +1207,48 @@ export const useDrawingStore = defineStore('drawing', () => {
     return 0.5
   }
 
+  // --- Vuruş-silgi (stroke-eraser): dokunduğu çizgiyi tümden söker ---
+  // Silgi stroke'ları hedef değildir (mürekkep hortlamasın). Sökülenler mezara
+  // (sayfa+katman kimlikli) konur → undo kronolojik olmasa da geri getirir.
+  // 200'de cap'lenir (bellek emniyeti).
+  let erasedGrave: { pageId: string; layerId: string; stroke: Stroke; index: number }[] = []
+  const eraseStrokeAt = (x: number, y: number): boolean => {
+    const arr = activeLayer.value.strokes
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const s = arr[i]!
+      if (s.tool === 'eraser') continue
+      const bb = strokeBBox(s)
+      if (!bb) continue
+      if (x < bb.x0 || x > bb.x1 || y < bb.y0 || y > bb.y1) continue
+      const [gone] = arr.splice(i, 1)
+      erasedGrave.push({ pageId: activePage.value.id, layerId: activeLayer.value.id, stroke: gone!, index: i })
+      if (erasedGrave.length > 200) erasedGrave.shift()
+      redoStack.value = []
+      if (selectedIds.value.includes(gone!.id)) {
+        selectedIds.value = selectedIds.value.filter((id) => id !== gone!.id)
+      }
+      return true
+    }
+    return false
+  }
+
   // ✅ Başlat - basılı tutunca. rejectTouch'ta touch yok sayılır.
   // Sayfa DIŞINA basım yok sayılır (kenar dışı nokta tıklamasından mürekkep doğmaz).
   const startDrawing = (e: PointerEvent): boolean => {
     if (!canvasRef.value || isDrawing.value) return false
     if (currentTool.value === 'select' || currentTool.value === 'text' || currentTool.value === 'image') return false
     if (shouldIgnoreEvent(e)) return false
+    // Vuruş-silgi nokta toplamaz: dokunduğu anda söker.
+    if (currentTool.value === 'eraser' && eraserMode.value === 'stroke') {
+      isDrawing.value = true
+      const { x, y } = getPos(e)
+      if (eraseStrokeAt(x, y)) {
+        recountActive()
+        repaintBase()
+        scheduleSave()
+      }
+      return true
+    }
     isDrawing.value = true
 
     const { x, y } = getPos(e)
@@ -1221,6 +1279,22 @@ export const useDrawingStore = defineStore('drawing', () => {
   const draw = (e: PointerEvent) => {
     if (!isDrawing.value || !canvasRef.value) return
     if (shouldIgnoreEvent(e)) return
+
+    // Vuruş-silgi: birikmiş olaylarda tek tek sök, tur başına tek boya.
+    if (currentTool.value === 'eraser' && eraserMode.value === 'stroke') {
+      const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
+      let hit = false
+      for (const ev of events) {
+        const p = getPos(ev as PointerEvent)
+        if (eraseStrokeAt(p.x, p.y)) hit = true
+      }
+      if (hit) {
+        recountActive()
+        repaintBase()
+        scheduleSave()
+      }
+      return
+    }
 
     const raw = getPos(e)
     const size = activePage.value.size
@@ -1305,8 +1379,9 @@ export const useDrawingStore = defineStore('drawing', () => {
           : [...points.value],
       }
       activeLayer.value.strokes.push(stroke)
-      // Yeni mürekkep redo'yu ve eski seçimi öldürür.
+      // Yeni mürekkep redo'yu ve eski seçimi öldürür (vuruş-silgi mezarı da kapanır).
       redoStack.value = []
+      erasedGrave.length = 0
       selectedIds.value = []
       activeTextId.value = null
     activeImageId.value = null
@@ -1742,6 +1817,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     activePage.value.texts = []
     activePage.value.images = []
     redoStack.value = []
+    erasedGrave.length = 0
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -2419,6 +2495,24 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // ✅ Son stroke'u geri al (undo) — aktif sayfada
   const undoLastStroke = () => {
+    // Önce mezar: vuruş-silgiyle sökülen aynı sayfa+katmandaysa yerine konur.
+    // Başka sayfaya geçildiyse bayat kayıtlar sessizce düşer.
+    let g = erasedGrave.pop()
+    while (g && (g.pageId !== activePage.value.id || g.layerId !== activeLayer.value.id)) {
+      g = erasedGrave.pop()
+    }
+    if (g) {
+      const arr = activeLayer.value.strokes
+      arr.splice(Math.min(g.index, arr.length), 0, g.stroke)
+      points.value = []
+      isDrawing.value = false
+      repaintBase()
+      clearOverlay()
+      bb = null
+      recountActive()
+      scheduleSave()
+      return
+    }
     const popped = activeLayer.value.strokes.pop()
     if (popped) redoStack.value.push(popped)
     selectedIds.value = []
@@ -2573,6 +2667,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     setColor,
     setStrokeWidth,
     setRejectTouch,
+    eraserMode,
+    setEraserMode,
     selectMode,
     setSelectMode,
     selectedIds,
