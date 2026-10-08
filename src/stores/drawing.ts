@@ -17,7 +17,7 @@ import {
   selectByRect as selByRect,
 } from '../lib/select'
 
-export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow'
+export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text'
 export type ShapeTool = 'line' | 'rect' | 'ellipse' | 'arrow'
 // Şekil araçları: serbest path değil, ilk+son noktadan primitif çizilir.
 export const isShapeTool = (t: Tool): t is ShapeTool =>
@@ -337,9 +337,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   const color = ref('#ffffff')
   // Araç başına kalınlık hafızası: kalem ince, silgi kocaman olabilir; araç değişince geri gelir.
   // select/şekil mürekkep değil ya da kalem-aralığı kullanır (kayıtlı dursun yeter).
-  const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5, select: 1, line: 1, rect: 1, ellipse: 1, arrow: 1 }
-  const WIDTH_MAX: Record<Tool, number> = { pen: 20, highlighter: 50, eraser: 120, select: 20, line: 20, rect: 20, ellipse: 20, arrow: 20 }
-  const widths = ref<Record<Tool, number>>({ pen: 3, highlighter: 10, eraser: 24, select: 3, line: 3, rect: 3, ellipse: 3, arrow: 3 })
+  const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5, select: 1, line: 1, rect: 1, ellipse: 1, arrow: 1, text: 1 }
+  const WIDTH_MAX: Record<Tool, number> = { pen: 20, highlighter: 50, eraser: 120, select: 20, line: 20, rect: 20, ellipse: 20, arrow: 20, text: 20 }
+  const widths = ref<Record<Tool, number>>({ pen: 3, highlighter: 10, eraser: 24, select: 3, line: 3, rect: 3, ellipse: 3, arrow: 3, text: 3 })
   // Mevcut aracın kalınlığı — template ve çizim buradan okur (eski strokeWidth ile aynı isim).
   const strokeWidth = computed(() => widths.value[currentTool.value])
   const widthMin = computed(() => WIDTH_MIN[currentTool.value])
@@ -528,6 +528,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const clearSelection = () => {
     if (selectedIds.value.length === 0) return
     selectedIds.value = []
+    activeTextId.value = null
   }
   // Alan seçimi: sayfa-uzayı koordinatlarla çağrılır (getPos çıktısı).
   const selectRectArea = (a: { x: number; y: number }, b: { x: number; y: number }): number => {
@@ -550,6 +551,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     activePage.value.strokes = activePage.value.strokes.filter((s) => !set.has(s.id))
     const removed = before - activePage.value.strokes.length
     selectedIds.value = []
+    activeTextId.value = null
     redoStack.value = []
     recountActive()
     repaintBase()
@@ -663,12 +665,110 @@ export const useDrawingStore = defineStore('drawing', () => {
     return pasted.length
   }
 
+  // --- Metin kutuları (Faz 4): aktif sayfa kapsamlı, stroke seçiminden bağımsız ---
+  // Düzenlenen kutu activeTextId'de durur; araç değişimi/sayfa geçişi/undo kapatır.
+  // Metin op'ları undo stack'inde DEĞİL (v1 kısıtı) ama redo'yu öldürür.
+  const textSize = ref(24)
+  const setTextSize = (n: number) => {
+    if (!Number.isFinite(n)) return
+    textSize.value = Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, Math.round(n)))
+  }
+  const activeTextId = ref<string | null>(null)
+  const activeText = (): TextItem | null => {
+    if (!activeTextId.value) return null
+    return activePage.value.texts.find((t) => t.id === activeTextId.value) ?? null
+  }
+  const clearActiveText = () => {
+    activeTextId.value = null
+  }
+  // Tıklanan noktadaki en üst metin (kaba kutu: ölçümsüz tahmin, editör gerçeği gösterir).
+  const textAt = (x: number, y: number): TextItem | null => {
+    const items = activePage.value.texts
+    for (let i = items.length - 1; i >= 0; i--) {
+      const t = items[i]!
+      if (!t.text) continue
+      const lines = t.text.split('\n')
+      const w = Math.max(...lines.map((l) => l.length)) * t.size * 0.62 + 8
+      const h = lines.length * t.size * 1.25 + 4
+      if (x >= t.x - 4 && x <= t.x + w && y >= t.y - 4 && y <= t.y + h) return t
+    }
+    return null
+  }
+  const createText = (x: number, y: number): string => {
+    const size = activePage.value.size
+    const item: TextItem = {
+      id: newStrokeId(),
+      x: Math.min(size.w - 8, Math.max(0, x)),
+      y: Math.min(size.h - 8, Math.max(0, y)),
+      text: '',
+      color: color.value,
+      size: textSize.value,
+    }
+    activePage.value.texts.push(item)
+    activeTextId.value = item.id
+    selectedIds.value = []
+    activeTextId.value = null
+    redoStack.value = []
+    scheduleSave()
+    return item.id
+  }
+  const updateText = (id: string, text: string): boolean => {
+    const t = activePage.value.texts.find((x) => x.id === id)
+    if (!t) return false
+    t.text = text.slice(0, 2000)
+    recountActive()
+    repaintBase()
+    scheduleSave()
+    return true
+  }
+  const updateTextStyle = (id: string, patch: { color?: string; size?: number }): boolean => {
+    const t = activePage.value.texts.find((x) => x.id === id)
+    if (!t) return false
+    if (patch.color !== undefined && /^#[0-9a-fA-F]{6}$/.test(patch.color)) t.color = patch.color
+    if (patch.size !== undefined && Number.isFinite(patch.size)) {
+      t.size = Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, Math.round(patch.size)))
+    }
+    recountActive()
+    repaintBase()
+    scheduleSave()
+    return true
+  }
+  const moveText = (id: string, dx: number, dy: number): boolean => {
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return false
+    const t = activePage.value.texts.find((x) => x.id === id)
+    if (!t) return false
+    const size = activePage.value.size
+    const nx = Math.min(size.w - 8, Math.max(0, t.x + dx))
+    const ny = Math.min(size.h - 8, Math.max(0, t.y + dy))
+    if (nx === t.x && ny === t.y) return false
+    t.x = nx
+    t.y = ny
+    redoStack.value = []
+    repaintBase()
+    scheduleSave()
+    return true
+  }
+  const deleteText = (id: string): boolean => {
+    const before = activePage.value.texts.length
+    activePage.value.texts = activePage.value.texts.filter((t) => t.id !== id)
+    if (activePage.value.texts.length === before) return false
+    if (activeTextId.value === id) activeTextId.value = null
+    redoStack.value = []
+    recountActive()
+    repaintBase()
+    clearOverlay()
+    scheduleSave()
+    return true
+  }
+
   // Tool change — highlighter artık rengi ezmez, seçili renk alpha ile kullanılır.
-  // Araç değişimi seçimi temizler (gizli seçimle mürekkep karışmasın).
+  // Araç değişimi seçimi ve metin editörünü temizler (gizli durumla mürekkep karışmasın).
   const setTool = (tool: Tool) => {
     if (currentTool.value === tool) return
     currentTool.value = tool
     selectedIds.value = []
+    activeTextId.value = null
+    activeTextId.value = null
   }
 
   // Color change
@@ -781,7 +881,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Sayfa DIŞINA basım yok sayılır (kenar dışı nokta tıklamasından mürekkep doğmaz).
   const startDrawing = (e: PointerEvent): boolean => {
     if (!canvasRef.value || isDrawing.value) return false
-    if (currentTool.value === 'select') return false
+    if (currentTool.value === 'select' || currentTool.value === 'text') return false
     if (shouldIgnoreEvent(e)) return false
     isDrawing.value = true
 
@@ -900,6 +1000,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       // Yeni mürekkep redo'yu ve eski seçimi öldürür.
       redoStack.value = []
       selectedIds.value = []
+      activeTextId.value = null
       recountActive()
       if (stroke.tool !== 'eraser') {
         const ctx = getCtx(canvasRef.value)
@@ -1267,7 +1368,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Aktif çizgiyi overlay'e çiz — per-frame tek maliyet bu (O(aktif çizgi), sahneden bağımsız).
   // Silgi overlay kullanmaz (doğrudan base'e işlenir) → burada iş yok.
   const renderActiveStroke = () => {
-    if (currentTool.value === 'eraser' || currentTool.value === 'select') return
+    if (currentTool.value === 'eraser' || currentTool.value === 'select' || currentTool.value === 'text') return
     const t0 = performance.now()
     const ctx = getCtx(overlayRef.value)
     if (!ctx) return
@@ -1314,6 +1415,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     activePage.value.strokes = []
     redoStack.value = []
     selectedIds.value = []
+    activeTextId.value = null
     points.value = []
     recountActive()
     isDrawing.value = false
@@ -1473,6 +1575,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       activePageIndex.value = 0
       redoStack.value = []
       selectedIds.value = []
+      activeTextId.value = null
       points.value = []
       isDrawing.value = false
       bb = null
@@ -1581,6 +1684,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     activePageIndex.value = 0
     redoStack.value = []
     selectedIds.value = []
+    activeTextId.value = null
     points.value = []
     isDrawing.value = false
     bb = null
@@ -1816,7 +1920,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     // widths her sürümde ortak
     const w = (doc as { widths?: unknown }).widths as Record<string, unknown> | undefined
     if (w) {
-      for (const t of ['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow'] as const) {
+      for (const t of ['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow', 'text'] as const) {
         const v = w[t]
         if (typeof v === 'number' && Number.isFinite(v)) {
           widths.value[t] = Math.min(WIDTH_MAX[t], Math.max(WIDTH_MIN[t], Math.round(v)))
@@ -1852,6 +1956,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     savedSession.value = null
     redoStack.value = []
     selectedIds.value = []
+    activeTextId.value = null
     const idx = (doc as { activePageIndex?: unknown }).activePageIndex
     activePageIndex.value =
       typeof idx === 'number' && Number.isFinite(idx)
@@ -1878,6 +1983,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     const popped = activePage.value.strokes.pop()
     if (popped) redoStack.value.push(popped)
     selectedIds.value = []
+    activeTextId.value = null
     points.value = []
     isDrawing.value = false
     repaintBase()
@@ -1893,6 +1999,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (!s) return false
     activePage.value.strokes.push(s)
     selectedIds.value = []
+    activeTextId.value = null
     recountActive()
     repaintBase()
     scheduleSave()
@@ -1907,6 +2014,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     // Sayfa değişimi redo'yu ve seçimi öldürür (global stack sayfalar arası taşınmaz).
     redoStack.value = []
     selectedIds.value = []
+    activeTextId.value = null
     points.value = []
     isDrawing.value = false
     bb = null
@@ -1935,6 +2043,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     redoStack.value = []
     selectedIds.value = []
+    activeTextId.value = null
     if (clamped < activePageIndex.value) {
       activePageIndex.value -= 1
     } else if (activePageIndex.value >= pages.value.length) {
@@ -2034,6 +2143,17 @@ export const useDrawingStore = defineStore('drawing', () => {
     copySelected,
     cutSelected,
     pasteClipboard,
+    textSize,
+    setTextSize,
+    activeTextId,
+    activeText,
+    clearActiveText,
+    textAt,
+    createText,
+    updateText,
+    updateTextStyle,
+    moveText,
+    deleteText,
     setCanvasRef,
     setOverlayRef,
     setupCanvas,
