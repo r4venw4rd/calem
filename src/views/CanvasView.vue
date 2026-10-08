@@ -121,6 +121,41 @@
           </svg>
           Seç
         </button>
+
+        <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
+
+        <button
+          @click="store.setTool('line')"
+          :class="store.currentTool === 'line' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="px-2 py-1 rounded text-xs font-medium transition"
+          title="Çizgi (L)"
+        >
+          Çizgi
+        </button>
+        <button
+          @click="store.setTool('rect')"
+          :class="store.currentTool === 'rect' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="px-2 py-1 rounded text-xs font-medium transition"
+          title="Kare (R)"
+        >
+          Kare
+        </button>
+        <button
+          @click="store.setTool('ellipse')"
+          :class="store.currentTool === 'ellipse' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="px-2 py-1 rounded text-xs font-medium transition"
+          title="Elips (O)"
+        >
+          Elips
+        </button>
+        <button
+          @click="store.setTool('arrow')"
+          :class="store.currentTool === 'arrow' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="px-2 py-1 rounded text-xs font-medium transition"
+          title="Ok (A)"
+        >
+          Ok
+        </button>
       </div>
 
       <div
@@ -934,7 +969,7 @@ const onKeyDown = (e: KeyboardEvent) => {
       return
     }
   }
-  // Araç kısayolları (modsuz): V seç, P kalem, H vurgu, E silgi.
+  // Araç kısayolları (modsuz): V seç, P kalem, H vurgu, E silgi, L/R/O/A şekiller.
   if (!mod && !e.altKey) {
     const k = e.key.toLowerCase()
     if (k === 'v') {
@@ -951,6 +986,22 @@ const onKeyDown = (e: KeyboardEvent) => {
     }
     if (k === 'e') {
       store.setTool('eraser')
+      return
+    }
+    if (k === 'l') {
+      store.setTool('line')
+      return
+    }
+    if (k === 'r') {
+      store.setTool('rect')
+      return
+    }
+    if (k === 'o') {
+      store.setTool('ellipse')
+      return
+    }
+    if (k === 'a') {
+      store.setTool('arrow')
       return
     }
   }
