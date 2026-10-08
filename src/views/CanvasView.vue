@@ -1,6 +1,6 @@
 <template>
   <div class="h-screen flex flex-col bg-[var(--page-bg)] overflow-hidden">
-    <header class="relative z-10 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-[var(--chrome-bg)] border-b border-[var(--chrome-border)]">
+    <header v-if="!presenting" class="relative z-10 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-[var(--chrome-bg)] border-b border-[var(--chrome-border)]">
       <div class="relative">
         <button
           @click="showFile = !showFile"
@@ -656,6 +656,14 @@
         </svg>
         Temizle
       </button>
+
+      <button
+        @click="togglePresent"
+        class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
+        title="Sunum modu (F)"
+      >
+        Sunum
+      </button>
     </header>
 
     <div class="relative flex-1 bg-[var(--page-bg)] min-h-0">
@@ -683,7 +691,7 @@
       />
 
       <div
-        v-if="store.currentTool === 'text' && store.activeTextId"
+        v-if="store.currentTool === 'text' && store.activeTextId && !presenting"
         class="absolute top-3 left-1/2 -translate-x-1/2 z-10 w-80 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
         role="dialog"
         aria-label="Metin düzenle"
@@ -733,7 +741,7 @@
       </div>
 
       <div
-        v-if="store.currentTool === 'image' && store.activeImageId"
+        v-if="store.currentTool === 'image' && store.activeImageId && !presenting"
         class="absolute top-3 left-1/2 -translate-x-1/2 z-10 w-72 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
         role="dialog"
         aria-label="Resim"
@@ -840,12 +848,13 @@
       </div>
       <!-- Perf HUD: reaktivite dışı güncellenir (kendisi render tetiklemez) -->
       <div
+        v-if="!presenting"
         ref="hud"
         class="absolute bottom-2 right-2 text-[10px] leading-tight text-[var(--chrome-faint)] bg-[var(--chrome-bg)] rounded px-1.5 py-0.5 pointer-events-none font-mono"
       ></div>
 
       <div
-        v-if="store.pages.length > 1"
+        v-if="store.pages.length > 1 && !presenting"
         class="absolute left-2 top-2 bottom-14 z-10 w-24 overflow-y-auto flex flex-col gap-2 p-1.5 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border)]"
         role="navigation"
         aria-label="Sayfa şeridi"
@@ -864,7 +873,23 @@
       </div>
 
       <div
-        v-if="store.savedSession"
+        v-if="presenting"
+        class="absolute top-3 right-3 z-20 flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border)] text-xs text-[var(--chrome-text)] select-none"
+        role="toolbar"
+        aria-label="Sunum"
+      >
+        <span class="font-mono px-1">{{ store.activePageIndex + 1 }} / {{ store.pages.length }}</span>
+        <button
+          @click="togglePresent"
+          class="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
+          title="Sunumu kapat (Esc)"
+        >
+          Çık
+        </button>
+      </div>
+
+      <div
+        v-if="store.savedSession && !presenting"
         class="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)] select-none"
         role="dialog"
         aria-label="Önceki oturum"
@@ -902,6 +927,7 @@ const pdfError = ref('')
 const showSettings = ref(false)
 const showFile = ref(false)
 const showLayers = ref(false)
+const presenting = ref(false)
 const store = useDrawingStore()
 
 // Katman listesi üstte-ilk (dizi 0 = en alt).
@@ -1576,6 +1602,11 @@ const onKeyDown = (e: KeyboardEvent) => {
   const t = e.target as HTMLElement | null
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
   const mod = e.ctrlKey || e.metaKey
+  // Sunumda Esc her şeyden önce çıkar (editör dalları sunumda gizlidir).
+  if (!mod && !e.altKey && e.key === 'Escape' && presenting.value) {
+    void togglePresent()
+    return
+  }
   // Space basılı kaydırma (önce Space, sonra sürükle). Tekrarlanan keydown yoksayılır.
   if (!mod && !e.altKey && e.key === ' ' && !e.repeat) {
     if (t && t.tagName === 'BUTTON') return
@@ -1638,7 +1669,7 @@ const onKeyDown = (e: KeyboardEvent) => {
       return
     }
   }
-  // Araç kısayolları (modsuz): V seç, P kalem, H vurgu, E silgi, L/R/O/A şekiller, T metin, G resim.
+  // Araç kısayolları (modsuz): V seç, P kalem, H vurgu, E silgi, L/R/O/A şekiller, T metin, G resim, F sunum.
   if (!mod && !e.altKey) {
     const k = e.key.toLowerCase()
     if (k === 'v') {
@@ -1679,6 +1710,10 @@ const onKeyDown = (e: KeyboardEvent) => {
     }
     if (k === 'g') {
       store.setTool('image')
+      return
+    }
+    if (k === 'f') {
+      void togglePresent()
       return
     }
   }
@@ -1811,6 +1846,43 @@ const clearCanvas = () => {
   updateHud(true)
 }
 
+// Sunum modu: fullscreen + sade chrome (header/şerit/panel/HUD gizli, pager durur).
+// Fullscreen desteklenmiyorsa sade-görünüm fallback'i (Esc yine çıkarır).
+const togglePresent = async () => {
+  if (!presenting.value) {
+    showFile.value = false
+    showSettings.value = false
+    showLayers.value = false
+    presenting.value = true
+    try {
+      await document.documentElement.requestFullscreen()
+    } catch {
+      /* sade mod yeter */
+    }
+  } else {
+    presenting.value = false
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen()
+    } catch {
+      /* zaten çıkılmış */
+    }
+  }
+  await nextTick()
+  sizeCanvas()
+  updateHud(true)
+}
+
+// Tarayıcı-Esc ile fullscreen'den çıkılınca sade mod da kapanır.
+const onFullscreenChange = () => {
+  if (!document.fullscreenElement && presenting.value) {
+    presenting.value = false
+    nextTick(() => {
+      sizeCanvas()
+      updateHud(true)
+    })
+  }
+}
+
 // Trackpad/mause tekeri: yalın = pan, ctrl/cmd = imleç sabitli zoom.
 // passive:false ŞART (sayfa-zoom'u engellemek için preventDefault).
 const onWheel = (e: WheelEvent) => {
@@ -1936,6 +2008,7 @@ onMounted(() => {
   window.addEventListener('resize', sizeCanvas)
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
   overlayCanvas.value.addEventListener('wheel', onWheel, { passive: false })
   stopSelWatch = watch(
     () => store.selectedIds,
@@ -1973,6 +2046,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', sizeCanvas)
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
   overlayCanvas.value?.removeEventListener('wheel', onWheel)
   store.setCanvasRef(null)
   store.setOverlayRef(null)
