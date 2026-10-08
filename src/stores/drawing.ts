@@ -17,7 +17,11 @@ import {
   selectByRect as selByRect,
 } from '../lib/select'
 
-export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select'
+export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow'
+export type ShapeTool = 'line' | 'rect' | 'ellipse' | 'arrow'
+// Şekil araçları: serbest path değil, ilk+son noktadan primitif çizilir.
+export const isShapeTool = (t: Tool): t is ShapeTool =>
+  t === 'line' || t === 'rect' || t === 'ellipse' || t === 'arrow'
 export type SelectMode = 'rect' | 'lasso'
 export interface Point { x: number; y: number; pressure?: number }
 export interface Stroke {
@@ -320,10 +324,10 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   const color = ref('#ffffff')
   // Araç başına kalınlık hafızası: kalem ince, silgi kocaman olabilir; araç değişince geri gelir.
-  // select mürekkep değil, genişliği kullanılmaz (kayıtlı dursun yeter).
-  const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5, select: 1 }
-  const WIDTH_MAX: Record<Tool, number> = { pen: 20, highlighter: 50, eraser: 120, select: 20 }
-  const widths = ref<Record<Tool, number>>({ pen: 3, highlighter: 10, eraser: 24, select: 3 })
+  // select/şekil mürekkep değil ya da kalem-aralığı kullanır (kayıtlı dursun yeter).
+  const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5, select: 1, line: 1, rect: 1, ellipse: 1, arrow: 1 }
+  const WIDTH_MAX: Record<Tool, number> = { pen: 20, highlighter: 50, eraser: 120, select: 20, line: 20, rect: 20, ellipse: 20, arrow: 20 }
+  const widths = ref<Record<Tool, number>>({ pen: 3, highlighter: 10, eraser: 24, select: 3, line: 3, rect: 3, ellipse: 3, arrow: 3 })
   // Mevcut aracın kalınlığı — template ve çizim buradan okur (eski strokeWidth ile aynı isim).
   const strokeWidth = computed(() => widths.value[currentTool.value])
   const widthMin = computed(() => WIDTH_MIN[currentTool.value])
@@ -1601,7 +1605,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (pts.length === 0) continue
       clean.push({
         id: typeof (s as Stroke).id === 'string' && (s as Stroke).id ? (s as Stroke).id : newStrokeId(),
-        tool: s.tool === 'eraser' || s.tool === 'highlighter' ? s.tool : 'pen',
+        tool: s.tool === 'eraser' || s.tool === 'highlighter' || isShapeTool(s.tool) ? s.tool : 'pen',
         color: typeof s.color === 'string' ? s.color : '#ffffff',
         width: typeof s.width === 'number' ? Math.min(120, Math.max(1, s.width)) : 3,
         points: pts.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
@@ -1681,7 +1685,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     // widths her sürümde ortak
     const w = (doc as { widths?: unknown }).widths as Record<string, unknown> | undefined
     if (w) {
-      for (const t of ['pen', 'highlighter', 'eraser'] as const) {
+      for (const t of ['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow'] as const) {
         const v = w[t]
         if (typeof v === 'number' && Number.isFinite(v)) {
           widths.value[t] = Math.min(WIDTH_MAX[t], Math.max(WIDTH_MIN[t], Math.round(v)))
