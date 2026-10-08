@@ -107,16 +107,16 @@
 - Kabul: vektör PDF'te text seçilebilir, dosya boyutu raster'a göre <1/3.
 
 ### FAZ 9 — Toolbar / Polish (P3)
-- [ ] Özelleştirilebilir toolbar (sürükle-sırala, preset kaydet — mevcut `exportSettingsJSON` genişler).
-- [ ] Kısayollar: `P/E/H/S/T/L/R/O`, `Ctrl +/-/0`, `PgUp/PgDn`, `[ ]` kalınlık.
-- [ ] Yüzen mini-toolbar + tam ekran/sunum modu.
-- [ ] Eklenti kancası (Xournal plugin API'nin mini hali) — kapsam dışı sayılabilir.
+- [x] Kısayollar: `V/P/H/E/L/R/O/A/T/G`, `Space`, `F`, `Ctrl+Z/Y/A/C/X/V`, `Del/Esc/oklar` (+ Ayarlar panelinde referans).
+- [x] Tam ekran/sunum modu (sade chrome, Esc ile çıkış).
+- [ ] Özelleştirilebilir toolbar (sürükle-sırala) — ertelendi.
+- Eklenti kancası YOK (kapsam dışı bırakıldı).
 
-## 3. Migration Zinciri
+## 3. Migration Zinciri (gerçekleşen)
 
 ```
-settings: v1 (mevcut) → v2 (+background)
-doc:      v2 (mevcut) → v3 (+Page.background) → v4 (+layers, Faz 5)
+settings: v1 → v2 (+background) → v3 (+eraserMode)
+doc:      v2 → v3 (+texts) → v4 (+images) → v5 (+layers)
 ```
 
 Kurallar:
