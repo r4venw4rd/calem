@@ -39,7 +39,18 @@ export interface PersistedDocV4 {
   pdfName?: string
 }
 
-export type PersistedDoc = PersistedDocV1 | PersistedDocV2 | PersistedDocV3 | PersistedDocV4
+// v5: mürekkep katmanlara taşındı (eski strokes tek katmana sarılır).
+export interface PersistedDocV5 {
+  v: 5
+  savedAt: number
+  pages: Page[]
+  widths?: Record<Tool, number>
+  activePageIndex?: number
+  pdfId?: string
+  pdfName?: string
+}
+
+export type PersistedDoc = PersistedDocV1 | PersistedDocV2 | PersistedDocV3 | PersistedDocV4 | PersistedDocV5
 
 const DB_NAME = 'calem'
 const DOCS_STORE = 'docs'
