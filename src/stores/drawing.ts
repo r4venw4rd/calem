@@ -1768,16 +1768,18 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // Export raster: sayfayı GERÇEK boyutunda çizer (~144dpi). Remap YOK —
   // mürekkep zaten sayfa uzayında, arkaplan tam kanama. Kâğıt varsa dolar, PDF modu şeffaf kalır.
+  // scale parametreli: thumbnail seridi düşük çözünürlük ister.
   const EXPORT_SCALE = 2
-  const exportPageToCanvas = (page: Page): HTMLCanvasElement | null => {
+  const exportPageToCanvas = (page: Page, scale = EXPORT_SCALE): HTMLCanvasElement | null => {
     const { w, h } = page.size
     if (!(w > 0 && h > 0)) return null
+    if (!Number.isFinite(scale) || scale <= 0) return null
     const canvas = document.createElement('canvas')
-    canvas.width = Math.max(1, Math.round(w * EXPORT_SCALE))
-    canvas.height = Math.max(1, Math.round(h * EXPORT_SCALE))
+    canvas.width = Math.max(1, Math.round(w * scale))
+    canvas.height = Math.max(1, Math.round(h * scale))
     const ctx = canvas.getContext('2d')
     if (!ctx) return null
-    ctx.setTransform(EXPORT_SCALE, 0, 0, EXPORT_SCALE, 0, 0)
+    ctx.setTransform(scale, 0, 0, scale, 0, 0)
     paintPage(ctx, page)
     return canvas
   }
@@ -2264,7 +2266,13 @@ export const useDrawingStore = defineStore('drawing', () => {
       saveTimer = undefined
       void persistNow()
     }, 800)
+    // Tüm içerik mutasyonları buradan geçer → thumbnail seridi kirlenir.
+    // Görünüm-only op'lar (zoom/pan) buraya uğramaz, serit boşuna yanmaz.
+    thumbTick.value += 1
   }
+
+  // Thumbnail serit sürümü: her içerik mutasyonunda artar (component debounce'lu okur).
+  const thumbTick = ref(0)
 
   // Bozuk kayda karşı stroke doğrulama (v1/v2 yükleme ortak).
   // idsiz eski kayıtlar backfill alır (seçim çalışsın diye).
@@ -2693,6 +2701,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     setPageBackground,
     clearPageBackground,
     exportPageToCanvas,
+    thumbTick,
     zoomLabel,
     zoomBy,
     panBy,
