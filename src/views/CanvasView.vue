@@ -822,6 +822,25 @@
       ></div>
 
       <div
+        v-if="store.pages.length > 1"
+        class="absolute left-2 top-2 bottom-14 z-10 w-24 overflow-y-auto flex flex-col gap-2 p-1.5 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border)]"
+        role="navigation"
+        aria-label="Sayfa şeridi"
+      >
+        <button
+          v-for="(src, i) in thumbs"
+          :key="store.pages[i]?.id ?? i"
+          @click="goStrip(i)"
+          class="shrink-0 rounded border overflow-hidden transition"
+          :class="i === store.activePageIndex ? 'border-indigo-500 ring-2 ring-indigo-500/60' : 'border-[var(--chrome-border)] opacity-70 hover:opacity-100'"
+          :title="`Sayfa ${i + 1}`"
+        >
+          <img :src="src" class="w-full block pointer-events-none" draggable="false" :alt="`Sayfa ${i + 1}`" />
+          <span class="block text-[10px] font-mono text-center text-[var(--chrome-text)] bg-[var(--chrome-bg-soft)]">{{ i + 1 }}</span>
+        </button>
+      </div>
+
+      <div
         v-if="store.savedSession"
         class="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)] select-none"
         role="dialog"
@@ -1814,6 +1833,7 @@ const restoreSession = async () => {
   const ok = await store.loadPersisted()
   if (!ok) showPdfError('Oturum yüklenemedi')
   updateHud(true)
+  refreshThumbs()
 }
 
 const sizeCanvas = () => {
@@ -1825,6 +1845,30 @@ const sizeCanvas = () => {
 // Seçim değişince bbox'ı tazele (taşıma nokta-mutasyonu, id aynı — orası explicit redraw).
 let stopSelWatch: (() => void) | null = null
 let stopTextWatch: (() => void) | null = null
+
+// Sayfa şeridi: düşük çözünürlüklü önbellek, tick+sayfa-değişiminde debounce'lu tazelenir.
+const thumbs = ref<string[]>([])
+let thumbTimer: ReturnType<typeof setTimeout> | undefined
+let stopThumbWatch: (() => void) | null = null
+const refreshThumbs = () => {
+  if (thumbTimer) clearTimeout(thumbTimer)
+  thumbTimer = setTimeout(() => {
+    thumbTimer = undefined
+    try {
+      thumbs.value = store.pages.map((p) => {
+        const c = store.exportPageToCanvas(p, p.size.w > 0 ? 96 / p.size.w : 0.15)
+        return c ? c.toDataURL() : ''
+      })
+    } catch {
+      /* boş şerit */
+    }
+  }, 350)
+}
+
+const goStrip = (i: number) => {
+  store.goToPage(i)
+  updateHud(true)
+}
 
 // Canvas initialization
 onMounted(() => {
@@ -1841,7 +1885,10 @@ onMounted(() => {
       store.setupCanvas()
       return store.checkSavedSession()
     })
-    .then(() => updateHud(true))
+    .then(() => {
+      updateHud(true)
+      refreshThumbs()
+    })
   updateHud(true)
 
   window.addEventListener('resize', sizeCanvas)
@@ -1859,6 +1906,8 @@ onMounted(() => {
       if (id) nextTick(() => textArea.value?.focus())
     },
   )
+  stopThumbWatch = watch(() => [store.thumbTick, store.pages] as const, refreshThumbs)
+  refreshThumbs()
 })
 
 onUnmounted(() => {
@@ -1875,6 +1924,10 @@ onUnmounted(() => {
   stopSelWatch = null
   stopTextWatch?.()
   stopTextWatch = null
+  stopThumbWatch?.()
+  stopThumbWatch = null
+  if (thumbTimer) clearTimeout(thumbTimer)
+  thumbTimer = undefined
   window.removeEventListener('resize', sizeCanvas)
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
