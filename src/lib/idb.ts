@@ -17,7 +17,18 @@ export interface PersistedDocV2 {
   pdfName?: string
 }
 
-export type PersistedDoc = PersistedDocV1 | PersistedDocV2
+// v3: sayfalara metin kutuları eklendi (texts yoksa boş sayılır, v2 göçer).
+export interface PersistedDocV3 {
+  v: 3
+  savedAt: number
+  pages: Page[]
+  widths?: Record<Tool, number>
+  activePageIndex?: number
+  pdfId?: string
+  pdfName?: string
+}
+
+export type PersistedDoc = PersistedDocV1 | PersistedDocV2 | PersistedDocV3
 
 const DB_NAME = 'calem'
 const DOCS_STORE = 'docs'
