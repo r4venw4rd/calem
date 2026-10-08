@@ -568,6 +568,19 @@
             </label>
           </div>
         </div>
+
+        <div class="mt-3 pt-2 border-t border-[var(--chrome-border)]">
+          <div class="mb-1 text-[var(--chrome-muted)]">Kısayollar</div>
+          <div class="font-mono text-[10px] leading-relaxed text-[var(--chrome-faint)]">
+            <div>V/P/H/E seç/kalem/vurgu/silgi</div>
+            <div>L/R/O/A çizgi/kare/elips/ok</div>
+            <div>T/G metin/resim · F sunum</div>
+            <div>Space sürükle-kaydır</div>
+            <div>Ctrl+Z/Y geri/yinele</div>
+            <div>Ctrl+A/C/X/V (seçimde)</div>
+            <div>Del/Esc/oklar (seçimde)</div>
+          </div>
+        </div>
       </div>
 
       <div
