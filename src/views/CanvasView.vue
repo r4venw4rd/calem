@@ -64,12 +64,23 @@
 
       <div class="relative">
         <button
-          @click="showSettings = !showSettings"
+          @click="showSettings = !showSettings; showLayers = false"
           class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
           :class="{ 'bg-[var(--chrome-bg-soft)] text-white': showSettings }"
           title="Ayarlar"
         >
           Ayarlar
+        </button>
+      </div>
+
+      <div class="relative">
+        <button
+          @click="showLayers = !showLayers; showSettings = false"
+          class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
+          :class="{ 'bg-[var(--chrome-bg-soft)] text-white': showLayers }"
+          title="Katmanlar (üstte listelenir)"
+        >
+          Katman ({{ store.activePage.layers.length }})
         </button>
       </div>
 
@@ -485,6 +496,82 @@
         </div>
       </div>
 
+      <div
+        v-if="showLayers"
+        class="absolute left-2 top-full mt-1 z-20 w-64 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
+        role="dialog"
+        aria-label="Katmanlar"
+      >
+        <div class="flex items-center justify-between mb-2">
+          <span class="font-medium text-[var(--chrome-title)]">Katmanlar <span class="text-[var(--chrome-faint)]">(üstte ilk)</span></span>
+          <button @click="showLayers = false" class="text-[var(--chrome-faint)] hover:text-[var(--chrome-title)]" title="Kapat">
+            Kapat
+          </button>
+        </div>
+
+        <div
+          v-for="(l, ri) in layersTopFirst"
+          :key="l.id"
+          class="flex items-center gap-1 px-1 py-0.5 rounded"
+          :class="l.id === store.activePage.activeLayerId ? 'bg-indigo-600/20' : 'hover:bg-[var(--chrome-bg-soft)]'"
+        >
+          <input
+            type="checkbox"
+            :checked="l.visible"
+            @change="store.toggleLayerVisible(l.id)"
+            class="accent-indigo-600"
+            title="Görünürlük"
+          />
+          <button
+            @click="activateLayer(l.id)"
+            class="flex-1 min-w-0 text-left truncate px-1 py-0.5 rounded"
+            :class="l.id === store.activePage.activeLayerId ? 'text-white font-medium' : 'text-[var(--chrome-text)]'"
+            :title="`Aktif yap: ${l.name}`"
+          >
+            {{ l.name }}
+            <span class="font-mono text-[10px] text-[var(--chrome-faint)]">{{ l.strokes.length }}</span>
+          </button>
+          <button
+            @click="store.moveLayer(l.id, 1)"
+            :disabled="ri === 0"
+            class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+            title="Üste taşı"
+          >
+            ↑
+          </button>
+          <button
+            @click="store.moveLayer(l.id, -1)"
+            :disabled="ri === layersTopFirst.length - 1"
+            class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+            title="Alta taşı"
+          >
+            ↓
+          </button>
+          <button
+            @click="renameLayer(l.id)"
+            class="px-1 rounded hover:bg-[var(--chrome-bg-soft)]"
+            title="Adlandır"
+          >
+            Ad
+          </button>
+          <button
+            @click="askDeleteLayer(l.id)"
+            class="px-1 rounded hover:bg-red-600/40"
+            title="Katmanı sil"
+          >
+            Sil
+          </button>
+        </div>
+
+        <button
+          @click="addLayerBtn"
+          class="mt-2 w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition font-mono"
+          title="Yeni katman (üstte açılır, aktif olur)"
+        >
+          + Ekle
+        </button>
+      </div>
+
       <button
         @click="clearCanvas"
         class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition flex items-center gap-1"
@@ -711,7 +798,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
 import { drawingPerf, PAGE_FORMATS, PAPER_THEMES, useDrawingStore } from '@/stores/drawing'
 import { selectionBBox } from '@/lib/select'
 
@@ -721,7 +808,42 @@ const hud = ref<HTMLDivElement | null>(null)
 const pdfError = ref('')
 const showSettings = ref(false)
 const showFile = ref(false)
+const showLayers = ref(false)
 const store = useDrawingStore()
+
+// Katman listesi üstte-ilk (dizi 0 = en alt).
+const layersTopFirst = computed(() => [...store.activePage.layers].reverse())
+
+const activateLayer = (id: string) => {
+  store.setActiveLayer(id)
+  drawSelectionOverlay()
+  updateHud(true)
+}
+
+const addLayerBtn = () => {
+  store.addLayer()
+  drawSelectionOverlay()
+  updateHud(true)
+}
+
+const askDeleteLayer = (id: string) => {
+  const l = store.activePage.layers.find((x) => x.id === id)
+  if (!l) return
+  if (store.activePage.layers.length > 1 && l.strokes.length > 0) {
+    if (!confirm(`"${l.name}" silinsin mi? (${l.strokes.length} çizgi kaybolur)`)) return
+  }
+  store.deleteLayer(id)
+  drawSelectionOverlay()
+  updateHud(true)
+}
+
+const renameLayer = (id: string) => {
+  const l = store.activePage.layers.find((x) => x.id === id)
+  if (!l) return
+  const name = prompt('Katman adı', l.name)
+  if (name === null) return
+  store.renameLayer(id, name)
+}
 
 // Hızlı erişim paleti (yanındaki damlalık özel renk için)
 const PALETTE = ['#ffffff', '#000000', '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7']
