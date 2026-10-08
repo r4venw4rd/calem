@@ -1,6 +1,78 @@
 <template>
   <div class="h-screen flex flex-col bg-[var(--page-bg)] overflow-hidden">
     <header class="relative z-10 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-[var(--chrome-bg)] border-b border-[var(--chrome-border)]">
+      <div class="relative">
+        <button
+          @click="showFile = !showFile"
+          class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
+          :class="{ 'bg-[var(--chrome-bg-soft)] text-white': showFile }"
+          title="Dosya işlemleri"
+        >
+          Dosya
+        </button>
+        <div
+          v-if="showFile"
+          class="absolute left-0 top-full mt-1 z-20 w-56 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-1.5 text-xs shadow-xl"
+          role="menu"
+          aria-label="Dosya"
+        >
+          <label
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer"
+            :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
+            title="PDF aç — sayfalar PDF sayfalarıyla değişir"
+          >
+            PDF Aç…
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              class="hidden"
+              :disabled="store.pdfBusy"
+              @change="onPdfFile"
+            />
+          </label>
+          <button
+            @click="exportPdfDoc"
+            :disabled="store.pdfBusy"
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Konum + isim seçerek PDF olarak indir"
+          >
+            PDF Yaz…
+          </button>
+          <button
+            @click="exportPng"
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
+            title="Aktif sayfayı PNG indir"
+          >
+            PNG İndir
+          </button>
+          <div
+            v-if="store.pdfName || store.lastSavedAt"
+            class="mt-1 pt-1 border-t border-[var(--chrome-border)] px-3 py-1 text-[10px] text-[var(--chrome-faint)] font-mono truncate"
+          >
+            <span v-if="store.pdfName" :title="store.pdfName">
+              {{ store.pdfName }}
+              <button @click="askClosePdf" class="text-[var(--chrome-muted)] hover:text-[var(--chrome-title)] underline" title="PDF'i kapat">
+                Kapat
+              </button>
+            </span>
+            <span v-if="store.lastSavedAt" :title="`Otomatik kayıt (IndexedDB)`">
+              {{ store.pdfName ? ' · ' : '' }}kayıtlı {{ store.lastSavedAt }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="relative">
+        <button
+          @click="showSettings = !showSettings"
+          class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
+          :class="{ 'bg-[var(--chrome-bg-soft)] text-white': showSettings }"
+          title="Ayarlar"
+        >
+          Ayarlar
+        </button>
+      </div>
+
       <div class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]" role="toolbar" aria-label="Araçlar">
         <button
           @click="store.setTool('pen')"
@@ -89,82 +161,12 @@
         Yinele
       </button>
 
-      <div class="relative">
-        <button
-          @click="showFile = !showFile"
-          class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
-          :class="{ 'bg-[var(--chrome-bg-soft)] text-white': showFile }"
-          title="Dosya işlemleri"
-        >
-          Dosya
-        </button>
-        <div
-          v-if="showFile"
-          class="absolute left-0 top-full mt-1 z-20 w-56 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-1.5 text-xs shadow-xl"
-          role="menu"
-          aria-label="Dosya"
-        >
-          <label
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer"
-            :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
-            title="PDF aç — sayfalar PDF sayfalarıyla değişir"
-          >
-            PDF Aç…
-            <input
-              type="file"
-              accept="application/pdf,.pdf"
-              class="hidden"
-              :disabled="store.pdfBusy"
-              @change="onPdfFile"
-            />
-          </label>
-          <button
-            @click="exportPdfDoc"
-            :disabled="store.pdfBusy"
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Konum + isim seçerek PDF olarak indir"
-          >
-            PDF Yaz…
-          </button>
-          <button
-            @click="exportPng"
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
-            title="Aktif sayfayı PNG indir"
-          >
-            PNG İndir
-          </button>
-          <div
-            v-if="store.pdfName || store.lastSavedAt"
-            class="mt-1 pt-1 border-t border-[var(--chrome-border)] px-3 py-1 text-[10px] text-[var(--chrome-faint)] font-mono truncate"
-          >
-            <span v-if="store.pdfName" :title="store.pdfName">
-              {{ store.pdfName }}
-              <button @click="askClosePdf" class="text-[var(--chrome-muted)] hover:text-[var(--chrome-title)] underline" title="PDF'i kapat">
-                Kapat
-              </button>
-            </span>
-            <span v-if="store.lastSavedAt" :title="`Otomatik kayıt (IndexedDB)`">
-              {{ store.pdfName ? ' · ' : '' }}kayıtlı {{ store.lastSavedAt }}
-            </span>
-          </div>
-        </div>
-      </div>
-
       <span v-if="store.pdfBusy" class="text-[10px] text-yellow-400/80 font-mono">işleniyor…</span>
       <span v-if="pdfError" class="text-[10px] text-red-400 font-mono">{{ pdfError }}</span>
 
-      <button
-        @click="showSettings = !showSettings"
-        class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
-        :class="{ 'bg-[var(--chrome-bg-soft)] text-white': showSettings }"
-        title="Ayarlar"
-      >
-        Ayarlar
-      </button>
-
       <div
         v-if="showSettings"
-        class="absolute right-2 top-full mt-1 z-20 w-64 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
+        class="absolute left-2 top-full mt-1 z-20 w-64 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
         role="dialog"
         aria-label="Ayarlar"
       >
