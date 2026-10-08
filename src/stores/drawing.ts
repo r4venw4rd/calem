@@ -94,6 +94,26 @@ export interface AppSettings {
   uiTheme: UiTheme
 }
 
+// .calem aktarım dosyası: vektör belge + ayar + gömülü bytes (base64).
+// IDB'nin taşınabilir hali; sürüm dosya biçimini kilitler (v1).
+export interface CalemFile {
+  app: 'calem'
+  v: 1
+  savedAt: number
+  settings: AppSettings
+  doc: {
+    pages: Page[]
+    widths?: Record<string, unknown>
+    activePageIndex?: number
+    pdfId?: string
+    pdfName?: string
+  }
+  files: Record<
+    string,
+    { kind: 'image' | 'pdf'; name: string; w?: number; h?: number; pageCount?: number; b64: string }
+  >
+}
+
 // A4 punto — boş sayfaların varsayılan boyutu.
 export const A4 = { w: 595, h: 842 }
 
@@ -2297,6 +2317,248 @@ export const useDrawingStore = defineStore('drawing', () => {
       pdfBusy.value = false
     }
   }
+
+  // --- .calem aktarım dosyası: IDB'nin taşınabilir hali ---
+  const bufToB64 = (buf: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buf)
+    let s = ''
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      s += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+    }
+    return btoa(s)
+  }
+
+  const b64ToBuf = (b64: string): ArrayBuffer => {
+    const s = atob(b64)
+    const out = new Uint8Array(s.length)
+    for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i)
+    return out.buffer
+  }
+
+  const buildCalemJSON = async (): Promise<{ json: string } | { error: string }> => {
+    try {
+      const files: CalemFile['files'] = {}
+      const imgIds = new Set<string>()
+      for (const p of pages.value) {
+        for (const img of p.images ?? []) imgIds.add(img.fileId)
+      }
+      for (const fid of imgIds) {
+        const rec = await idbGetImage(fid)
+        if (rec) files[fid] = { kind: 'image', name: rec.name, w: rec.w, h: rec.h, b64: bufToB64(rec.bytes) }
+      }
+      if (pdfId.value) {
+        const prec = await idbGetFile(pdfId.value)
+        if (prec) {
+          files[prec.id] = { kind: 'pdf', name: prec.name, pageCount: prec.pageCount, b64: bufToB64(prec.bytes) }
+        }
+      }
+      const settings: AppSettings = {
+        v: 3,
+        paper: paper.value,
+        background: { ...paperBackground.value },
+        eraserMode: eraserMode.value,
+        format: pageFormat.value,
+        orientation: pageOrientation.value,
+        customW: customW.value,
+        customH: customH.value,
+        uiTheme: uiTheme.value,
+      }
+      const out: CalemFile = {
+        app: 'calem',
+        v: 1,
+        savedAt: Date.now(),
+        settings,
+        doc: {
+          pages: pages.value.map((p) => ({
+            id: p.id,
+            layers: p.layers.map(snapshotLayer),
+            activeLayerId: p.activeLayerId,
+            texts: p.texts.map(snapshotText),
+            images: p.images.map(snapshotImage),
+            size: { w: p.size.w, h: p.size.h },
+            ...(p.pdfPageIndex !== undefined ? { pdfPageIndex: p.pdfPageIndex } : {}),
+          })),
+          widths: { ...widths.value },
+          activePageIndex: activePageIndex.value,
+          ...(pdfId.value ? { pdfId: pdfId.value, pdfName: pdfName.value } : {}),
+        },
+        files,
+      }
+      return { json: JSON.stringify(out) }
+    } catch (e) {
+      console.error('[calem] calem build hatası:', e)
+      return { error: `dosya kurulamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+    }
+  }
+
+  const saveCalemBlob = async (blob: Blob, fileName: string): Promise<'saved' | 'fallback' | 'cancelled'> => {
+    const w = window as unknown as {
+      showSaveFilePicker?: (opts: {
+        suggestedName?: string
+        types?: { description?: string; accept: Record<string, string[]> }[]
+      }) => Promise<{
+        createWritable: () => Promise<{ write: (d: Blob) => Promise<void>; close: () => Promise<void> }>
+      }>
+    }
+    if (typeof w.showSaveFilePicker !== 'function') return 'fallback'
+    try {
+      const handle = await w.showSaveFilePicker({
+        suggestedName: fileName,
+        types: [{ description: 'Calem belgesi', accept: { 'application/json': ['.calem'] } }],
+      })
+      const writable = await handle.createWritable()
+      await writable.write(blob)
+      await writable.close()
+      return 'saved'
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return 'cancelled'
+      throw e
+    }
+  }
+
+  const exportCalem = async (
+    opts: { prompt?: boolean } = {},
+  ): Promise<{ pages: number } | { error: string } | { cancelled: true }> => {
+    if (pdfBusy.value || imgBusy.value) return { error: 'işlem sürüyor' }
+    pdfBusy.value = true
+    try {
+      const built = await buildCalemJSON()
+      if ('error' in built) return built
+      const fileName = `calem-${new Date().toISOString().slice(0, 10)}.calem`
+      if (opts.prompt !== false) {
+        const how = await saveCalemBlob(new Blob([built.json], { type: 'application/json' }), fileName)
+        if (how === 'saved') return { pages: pages.value.length }
+        if (how === 'cancelled') return { cancelled: true }
+      }
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(new Blob([built.json], { type: 'application/json' }))
+      a.download = fileName
+      a.click()
+      window.setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+      return { pages: pages.value.length }
+    } catch (e) {
+      console.error('[calem] calem export hatası:', e)
+      return { error: `yazılamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+    } finally {
+      pdfBusy.value = false
+    }
+  }
+
+  // .calem açar: sayfaları + ayarları + bytes'ları değiştirir (component önceden confirm sorar).
+  const importCalem = async (file: File): Promise<{ pages: number } | { error: string }> => {
+    if (pdfBusy.value || imgBusy.value) return { error: 'işlem sürüyor' }
+    let raw: unknown
+    try {
+      raw = JSON.parse(await file.text())
+    } catch {
+      return { error: 'calem dosyası değil' }
+    }
+    if (!raw || typeof raw !== 'object') return { error: 'calem dosyası değil' }
+    const r = raw as Record<string, unknown>
+    if (r.app !== 'calem' || r.v !== 1) return { error: 'desteklenmeyen calem sürümü' }
+    const d = r.doc as { pages?: unknown; widths?: unknown; activePageIndex?: unknown; pdfId?: unknown; pdfName?: unknown } | undefined
+    if (!d || !Array.isArray(d.pages)) return { error: 'sayfa yok' }
+    pdfBusy.value = true
+    try {
+      const fallback = {
+        w: canvasRef.value?.clientWidth || 800,
+        h: canvasRef.value?.clientHeight || 600,
+      }
+      const clean = (d.pages as unknown as RawPage[])
+        .map((p) => pageFromRaw(p, fallback))
+        .filter((p): p is Page => p !== null)
+      if (clean.length === 0) return { error: 'sayfa yok' }
+      // Ayarlar (varsa): mevcut doğrulama hattı + tek persist + boya.
+      if (r.settings && typeof r.settings === 'object') {
+        await importSettingsJSON(JSON.stringify(r.settings))
+      }
+      // Bytes'lar ÖNCE: başarısızsa mevcut sahne korunur.
+      const written = new Set<string>()
+      const files = (r.files ?? {}) as Record<string, { kind?: unknown; name?: unknown; w?: unknown; h?: unknown; pageCount?: unknown; b64?: unknown }>
+      for (const [fid, f] of Object.entries(files)) {
+        if (!f || typeof f !== 'object' || typeof f.b64 !== 'string') continue
+        let buf: ArrayBuffer
+        try {
+          buf = b64ToBuf(f.b64)
+        } catch {
+          continue
+        }
+        if (buf.byteLength === 0) continue
+        if (f.kind === 'pdf') {
+          await idbSetFile({
+            id: fid,
+            name: typeof f.name === 'string' ? f.name : 'belge.pdf',
+            size: buf.byteLength,
+            addedAt: Date.now(),
+            pageCount: typeof f.pageCount === 'number' ? f.pageCount : 0,
+            bytes: buf,
+          })
+          written.add(fid)
+        } else if (f.kind === 'image') {
+          await idbSetImage({
+            id: fid,
+            name: typeof f.name === 'string' ? f.name : 'resim',
+            size: buf.byteLength,
+            addedAt: Date.now(),
+            w: typeof f.w === 'number' ? f.w : 0,
+            h: typeof f.h === 'number' ? f.h : 0,
+            bytes: buf,
+          })
+          written.add(fid)
+        }
+      }
+      const w = d.widths as Record<string, unknown> | undefined
+      if (w) {
+        for (const t of ['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow', 'text', 'image', 'hand'] as const) {
+          const v = w[t]
+          if (typeof v === 'number' && Number.isFinite(v)) {
+            widths.value[t] = Math.min(WIDTH_MAX[t], Math.max(WIDTH_MIN[t], Math.round(v)))
+          }
+        }
+      }
+      // Eski sahnenin yetim bytes'larını temizle, sonra değiştir.
+      deleteImageFilesOf(pages.value)
+      if (pdfId.value) void idbDeleteFile(pdfId.value).catch(() => {})
+      bgCanvases.clear()
+      pdfRenderScales.clear()
+      imgBitmaps.clear()
+      pdfBytesCache = null
+      pages.value = clean
+      const idx = d.activePageIndex
+      activePageIndex.value =
+        typeof idx === 'number' && Number.isFinite(idx)
+          ? Math.min(clean.length - 1, Math.max(0, Math.floor(idx)))
+          : 0
+      redoStack.value = []
+      selectedIds.value = []
+      activeTextId.value = null
+      activeImageId.value = null
+      points.value = []
+      isDrawing.value = false
+      bb = null
+      const pid = typeof d.pdfId === 'string' ? d.pdfId : null
+      if (pid && written.has(pid)) {
+        pdfId.value = pid
+        pdfName.value = typeof d.pdfName === 'string' ? d.pdfName : ''
+        await restorePdfBackgrounds(pid)
+      } else {
+        pdfId.value = null
+        pdfName.value = ''
+      }
+      await restoreImageBitmaps()
+      layoutView()
+      recountActive()
+      repaintBase()
+      clearOverlay()
+      scheduleSave()
+      return { pages: clean.length }
+    } catch (e) {
+      console.error('[calem] calem import hatası:', e)
+      return { error: `açılamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+    } finally {
+      pdfBusy.value = false
+    }
+  }
   // PDF'i kapat: arkaplanlar gider, tek boş sayfaya dönülür, dosya kaydı silinir.
   const closePdf = () => {
     if (pdfId.value) void idbDeleteFile(pdfId.value).catch(() => {})
@@ -2979,6 +3241,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     closePdf,
     buildPdfDocument,
     exportPdf,
+    buildCalemJSON,
+    exportCalem,
+    importCalem,
     resizeCanvas,
   }
 })
