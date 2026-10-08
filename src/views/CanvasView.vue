@@ -45,6 +45,29 @@
           >
             PNG İndir
           </button>
+          <div class="my-1 border-t border-[var(--chrome-border)]"></div>
+          <label
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer"
+            :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
+            title="Calem belgesi aç — sayfalar + ayarlar değişir"
+          >
+            Calem Aç…
+            <input
+              type="file"
+              accept=".calem,application/json"
+              class="hidden"
+              :disabled="store.pdfBusy"
+              @change="onCalemFile"
+            />
+          </label>
+          <button
+            @click="exportCalemDoc"
+            :disabled="store.pdfBusy"
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Vektör belge olarak kaydet (sayfalar + ayarlar + resimler)"
+          >
+            Calem Kaydet…
+          </button>
           <div
             v-if="store.pdfName || store.lastSavedAt"
             class="mt-1 pt-1 border-t border-[var(--chrome-border)] px-3 py-1 text-[10px] text-[var(--chrome-faint)] font-mono truncate"
@@ -1753,6 +1776,25 @@ const exportPdfDoc = async () => {
   const res = await store.exportPdf()
   // cancelled = kullanıcı picker'da vazgeçti → hata değil, sessizlik
   if ('error' in res) showPdfError(res.error)
+}
+
+const exportCalemDoc = async () => {
+  showFile.value = false
+  const res = await store.exportCalem()
+  if ('error' in res) showPdfError(res.error)
+}
+
+const onCalemFile = async (e: Event) => {
+  showFile.value = false
+  const input = e.target as HTMLInputElement
+  const f = input.files?.[0]
+  input.value = ''
+  if (!f) return
+  if (store.hasInk && !confirm('Mevcut içerik .calem dosyasıyla değişecek. Devam?')) return
+  const res = await store.importCalem(f)
+  if ('error' in res) showPdfError(res.error)
+  updateHud(true)
+  refreshThumbs()
 }
 
 const askClosePdf = () => {
