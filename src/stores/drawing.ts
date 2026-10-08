@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
-import { idbDeleteFile, idbGet, idbGetFile, idbGetKey, idbSet, idbSetFile, idbSetKey, SETTINGS_KEY, type PersistedDoc } from '../lib/idb'
+import { idbDeleteFile, idbGet, idbGetFile, idbGetImage, idbGetKey, idbSet, idbSetFile, idbSetImage, idbSetKey, SETTINGS_KEY, type ImageFileRecord, type PersistedDoc } from '../lib/idb'
 import {
   cleanPaperBackground,
   DEFAULT_PAPER_BACKGROUND,
@@ -839,6 +839,122 @@ export const useDrawingStore = defineStore('drawing', () => {
     return true
   }
 
+  // --- Resim import pipeline: dosya → decode → cap → IDB → sayfaya yerleştir ---
+  // Büyük fotoğraflar belleği şişirmesin diye bitmap 1600px'e cap'lenir (oran korunur).
+  const IMAGE_MAX_DIM = 1600
+  const imgBusy = ref(false)
+
+  const bytesToCanvas = async (bytes: ArrayBuffer): Promise<HTMLCanvasElement | null> => {
+    try {
+      const bmp = await createImageBitmap(new Blob([bytes]))
+      try {
+        const scale = Math.min(1, IMAGE_MAX_DIM / Math.max(bmp.width, bmp.height))
+        const w = Math.max(1, Math.round(bmp.width * scale))
+        const h = Math.max(1, Math.round(bmp.height * scale))
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return null
+        ctx.drawImage(bmp, 0, 0, w, h)
+        return canvas
+      } finally {
+        bmp.close()
+      }
+    } catch {
+      return null
+    }
+  }
+
+  // Tıklanan noktaya ortalanmış yerleştirir (taşma payı moveImage sınırlarında).
+  const addImage = async (
+    file: File,
+    x: number,
+    y: number,
+  ): Promise<{ id: string } | { error: string }> => {
+    if (imgBusy.value) return { error: 'işlem sürüyor' }
+    const looksImg = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name)
+    if (!looksImg) return { error: 'resim dosyası seç' }
+    imgBusy.value = true
+    try {
+      const buf = await file.arrayBuffer()
+      const canvas = await bytesToCanvas(buf)
+      if (!canvas) return { error: 'resim okunamadı' }
+      const fileId = `img-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+      // px ≈ pt (1:1); sayfaya sığmazsa oranlı küçült.
+      const size = activePage.value.size
+      const maxW = Math.max(64, size.w - 16)
+      let w = canvas.width
+      let h = canvas.height
+      if (w > maxW) {
+        h = Math.max(16, Math.round((h * maxW) / w))
+        w = maxW
+      }
+      const rec: ImageFileRecord = {
+        id: fileId,
+        name: file.name,
+        size: file.size,
+        addedAt: Date.now(),
+        w,
+        h,
+        bytes: buf,
+      }
+      await idbSetImage(rec)
+      imgBitmaps.set(fileId, canvas)
+      const item: ImageItem = {
+        id: newStrokeId(),
+        x: Math.min(size.w - 8, Math.max(-w + 8, Math.round(x - w / 2))),
+        y: Math.min(size.h - 8, Math.max(-h + 8, Math.round(y - h / 2))),
+        w,
+        h,
+        fileId,
+      }
+      activePage.value.images.push(item)
+      activeImageId.value = item.id
+      selectedIds.value = []
+      redoStack.value = []
+      recountActive()
+      repaintBase()
+      clearOverlay()
+      scheduleSave()
+      return { id: item.id }
+    } catch (e) {
+      console.error('[calem] resim import hatası:', e)
+      return { error: `resim eklenemedi (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+    } finally {
+      imgBusy.value = false
+    }
+  }
+
+  // Açılışta resim bitmap'lerini bytes'tan yeniden üretir (sessiz: kayıp resim atlanır).
+  const restoreImageBitmaps = async (): Promise<void> => {
+    try {
+      const ids = new Set<string>()
+      for (const p of pages.value) {
+        for (const img of p.images ?? []) ids.add(img.fileId)
+      }
+      for (const fid of ids) {
+        if (imgBitmaps.has(fid)) continue
+        const rec = await idbGetImage(fid)
+        if (!rec) continue
+        const canvas = await bytesToCanvas(rec.bytes)
+        if (canvas) imgBitmaps.set(fid, canvas)
+      }
+    } catch {
+      /* resimsiz devam */
+    }
+  }
+
+  // Sayfa(lar) çöpe giderken yetim bytes bırakma (yükleme yolu hariç — orada referans yeni doc'ta).
+  const deleteImageFilesOf = (pages: Page[]) => {
+    for (const p of pages) {
+      for (const img of p.images ?? []) {
+        imgBitmaps.delete(img.fileId)
+        void idbDeleteFile(img.fileId).catch(() => {})
+      }
+    }
+  }
+
   // Tool change — highlighter artık rengi ezmez, seçili renk alpha ile kullanılır.
   // Araç değişimi seçimi ve metin editörünü temizler (gizli durumla mürekkep karışmasın).
   const setTool = (tool: Tool) => {
@@ -1503,6 +1619,7 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // ✅ Canvası temizle — sadece AKTİF sayfa (sayfalar varken global silme yok).
   const clearCanvas = () => {
+    deleteImageFilesOf([activePage.value])
     activePage.value.strokes = []
     activePage.value.texts = []
     activePage.value.images = []
@@ -1656,6 +1773,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       bgCanvases.clear()
       pdfRenderScales.clear()
       pdfBytesCache = new Uint8Array(stored)
+      deleteImageFilesOf(pages.value)
       // Sayfa boyutu = PDF puntosu (bitmap aspect ile aynı, inşa gereği).
       pages.value = rendered.map((r) => ({ id: newPageId(), strokes: [], texts: [], images: [], size: { w: r.cssW, h: r.cssH } }))
       rendered.forEach((r, i) => {
@@ -1775,6 +1893,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     pdfBytesCache = null
     pdfId.value = null
     pdfName.value = ''
+    deleteImageFilesOf(pages.value)
     pages.value = [blankPage()]
     activePageIndex.value = 0
     redoStack.value = []
@@ -2108,6 +2227,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       pdfId.value = null
       pdfName.value = ''
     }
+    await restoreImageBitmaps()
     recountActive()
     lastSavedAt.value = fmtTime(doc.savedAt)
     repaintBase()
@@ -2179,6 +2299,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (removed) {
       bgCanvases.delete(removed.id)
       pdfRenderScales.delete(removed.id)
+      deleteImageFilesOf([removed])
     }
     redoStack.value = []
     selectedIds.value = []
@@ -2300,6 +2421,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     moveImage,
     resizeImage,
     deleteImage,
+    imgBusy,
+    addImage,
     setCanvasRef,
     setOverlayRef,
     setupCanvas,

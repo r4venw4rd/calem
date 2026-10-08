@@ -57,6 +57,17 @@ export interface PdfFileRecord {
   bytes: ArrayBuffer
 }
 
+// Resim kutusu bytes'ları (files deposunda, pdf kayıtlarıyla yan yana).
+export interface ImageFileRecord {
+  id: string
+  name: string
+  size: number
+  addedAt: number
+  w: number
+  h: number
+  bytes: ArrayBuffer
+}
+
 let dbPromise: Promise<IDBDatabase> | null = null
 
 function openDb(): Promise<IDBDatabase> {
@@ -110,6 +121,14 @@ export function idbGetFile(id: string): Promise<PdfFileRecord | null> {
 }
 
 export function idbSetFile(rec: PdfFileRecord): Promise<void> {
+  return tx(FILES_STORE, 'readwrite', (s) => s.put(rec, rec.id)).then(() => undefined)
+}
+
+export function idbGetImage(id: string): Promise<ImageFileRecord | null> {
+  return tx(FILES_STORE, 'readonly', (s) => s.get(id)).then((v) => (v as ImageFileRecord | undefined) ?? null)
+}
+
+export function idbSetImage(rec: ImageFileRecord): Promise<void> {
   return tx(FILES_STORE, 'readwrite', (s) => s.put(rec, rec.id)).then(() => undefined)
 }
 
