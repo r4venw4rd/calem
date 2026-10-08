@@ -196,7 +196,7 @@
         </div>
 
         <div class="mb-1 text-[var(--chrome-muted)]">Kâğıt teması</div>
-        <div class="flex gap-2 mb-3">
+        <div class="flex gap-2 mb-2">
           <button
             v-for="(hex, name) in PAPER_THEMES"
             :key="name"
@@ -207,6 +207,53 @@
             :style="{ background: hex }"
           ></button>
         </div>
+
+        <div class="flex gap-1 mb-2">
+          <select
+            :value="store.paperBackground.type"
+            @change="store.setPaperBackground({ type: ($event.target as HTMLSelectElement).value as typeof store.paperBackground.type })"
+            class="flex-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
+            title="Kâğıt deseni"
+          >
+            <option value="blank">Boş</option>
+            <option value="ruled">Çizgili</option>
+            <option value="graph">Kareli</option>
+            <option value="dotted">Noktalı</option>
+            <option value="staff">Notalı</option>
+          </select>
+          <input
+            type="color"
+            :value="store.paperBackground.lineColor"
+            @input="store.setPaperBackground({ lineColor: ($event.target as HTMLInputElement).value })"
+            class="w-8 h-8 rounded bg-transparent border border-[var(--chrome-border-strong)] cursor-pointer p-0.5"
+            title="Desen rengi"
+          />
+        </div>
+
+        <div v-if="store.paperBackground.type !== 'blank'" class="flex items-center gap-2 mb-2">
+          <span class="text-[var(--chrome-faint)] whitespace-nowrap">Aralık</span>
+          <input
+            type="range"
+            min="12"
+            max="48"
+            step="1"
+            :value="store.paperBackground.spacing"
+            @input="store.setPaperBackground({ spacing: Number(($event.target as HTMLInputElement).value) })"
+            class="flex-1 accent-indigo-600"
+            title="Desen aralığı (pt)"
+          />
+          <span class="text-xs text-[var(--chrome-text)] w-6 text-right font-mono">{{ store.paperBackground.spacing }}</span>
+        </div>
+
+        <label class="flex items-center gap-2 mb-3 cursor-pointer" title="Kenar marjin çizgisi">
+          <input
+            type="checkbox"
+            :checked="store.paperBackground.margin"
+            @change="store.setPaperBackground({ margin: ($event.target as HTMLInputElement).checked })"
+            class="accent-indigo-600"
+          />
+          Marjin çizgisi
+        </label>
 
         <div class="mb-1 text-[var(--chrome-muted)]">Sayfa biçimi <span class="text-[var(--chrome-faint)]">(yeni sayfalar)</span></div>
         <select
