@@ -2140,6 +2140,65 @@ export const useDrawingStore = defineStore('drawing', () => {
     return false
   }
 
+  // Kâğıt deseni vektör karşılığı (canvas paintPaperPattern ile aynı geometri).
+  const paintPatternVector = (doc: PdfDoc, page: Page, bg: PaperBackground) => {
+    if (bg.type === 'blank' && !bg.margin) return
+    if (bgCanvases.has(page.id)) return
+    const { w, h } = page.size
+    const [r, g, b] = hexToRgb(bg.lineColor)
+    doc.saveGraphicsState()
+    try {
+      doc.setDrawColor(r, g, b)
+      doc.setFillColor(r, g, b)
+      if (bg.type === 'ruled') {
+        ruledLineYs(h, bg.spacing).forEach((y, i) => {
+          doc.setLineWidth(i % 5 === 4 ? 1.2 : 0.7)
+          doc.line(0, y, w, y)
+        })
+      } else if (bg.type === 'graph') {
+        ruledLineYs(h, bg.spacing).forEach((y, i) => {
+          doc.setLineWidth(i % 5 === 4 ? 1 : 0.5)
+          doc.line(0, y, w, y)
+        })
+        graphLineXs(w, bg.spacing).forEach((x, i) => {
+          doc.setLineWidth(i % 5 === 4 ? 1 : 0.5)
+          doc.line(x, 0, x, h)
+        })
+      } else if (bg.type === 'dotted') {
+        for (const p of dottedPoints(w, h, bg.spacing)) doc.circle(p.x, p.y, 1.3, 'F')
+      } else if (bg.type === 'staff') {
+        doc.setLineWidth(0.9)
+        for (const group of staffLineYs(h, bg.spacing)) {
+          for (const y of group) doc.line(0, y, w, y)
+        }
+      }
+      if (bg.margin) {
+        const mx = marginLineX(w)
+        if (mx !== null) {
+          const [mr, mg, mb] = hexToRgb(bg.marginColor)
+          doc.setDrawColor(mr, mg, mb)
+          doc.setLineWidth(1.2)
+          doc.line(mx, 0, mx, h)
+        }
+      }
+    } finally {
+      doc.restoreGraphicsState()
+    }
+  }
+
+  // Metinler vektör metin olarak (seçilebilir, keskin). Canvas ile aynı font metriği değil
+  // (helvetica vs sans-serif) — satır kayması ±1pt toleranslıdır.
+  const paintTextsVector = (doc: PdfDoc, page: Page) => {
+    if (!page.texts || page.texts.length === 0) return
+    for (const t of page.texts) {
+      if (!t.text) continue
+      const [r, g, b] = hexToRgb(t.color)
+      doc.setTextColor(r, g, b)
+      doc.setFontSize(t.size)
+      doc.text(t.text.split('\n'), t.x, t.y, { baseline: 'top', lineHeightFactor: 1.25 })
+    }
+  }
+
   // PDF export: vektör-öncelikli hibrit. Sayfa başına karar verilir.
   // Üretim ve kaydetme ayrı (test edilebilirlik + hata ayrımı).
   const buildPdfDocument = async (): Promise<
@@ -2172,6 +2231,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         const [r, g, b] = hexToRgb(paperHex)
         doc.setFillColor(r, g, b)
         doc.rect(0, 0, w, h, 'F')
+        paintPatternVector(doc, page, paperBackground.value)
       }
       const bg = bgCanvases.get(page.id)
       if (bg) doc.addImage(bg.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, w, h)
@@ -2180,6 +2240,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         if (bmp) doc.addImage(bmp.toDataURL('image/png'), 'PNG', img.x, img.y, img.w, img.h)
       }
       paintStrokesVector(doc, GState, page, paperHex)
+      paintTextsVector(doc, page)
     }
     return { doc: doc!, pages: pages.value.length }
   }
