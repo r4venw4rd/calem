@@ -12,8 +12,13 @@ import {
   type PaperBackground,
   type PaperBackgroundType,
 } from '../lib/paper'
+import {
+  selectByLasso as selByLasso,
+  selectByRect as selByRect,
+} from '../lib/select'
 
 export type Tool = 'pen' | 'eraser' | 'highlighter'
+export type SelectMode = 'rect' | 'lasso'
 export interface Point { x: number; y: number; pressure?: number }
 export interface Stroke {
   id: string
@@ -493,6 +498,49 @@ export const useDrawingStore = defineStore('drawing', () => {
     )
   }
 
+  // --- Seçim (Faz 2): id tabanlı, aktif sayfa kapsamlı ---
+  // Seçim yapısal değil: seçmek redo'yu öldürmez, sayfa değişimi/undo/yeni mürekkep temizler.
+  const selectMode = ref<SelectMode>('rect')
+  const setSelectMode = (m: string) => {
+    if (m !== 'rect' && m !== 'lasso') return
+    selectMode.value = m
+  }
+  const selectedIds = ref<string[]>([])
+  const selectionCount = computed(() => selectedIds.value.length)
+  const isSelected = (id: string): boolean => selectedIds.value.includes(id)
+  const clearSelection = () => {
+    if (selectedIds.value.length === 0) return
+    selectedIds.value = []
+  }
+  // Alan seçimi: sayfa-uzayı koordinatlarla çağrılır (getPos çıktısı).
+  const selectRectArea = (a: { x: number; y: number }, b: { x: number; y: number }): number => {
+    selectedIds.value = selByRect(activePage.value.strokes, a, b)
+    return selectedIds.value.length
+  }
+  const selectLassoArea = (poly: { x: number; y: number }[]): number => {
+    selectedIds.value = selByLasso(activePage.value.strokes, poly)
+    return selectedIds.value.length
+  }
+  const selectAll = (): number => {
+    selectedIds.value = activePage.value.strokes.map((s) => s.id)
+    return selectedIds.value.length
+  }
+  // Seçiliyi sil: yapısal op — redo ölür, base baştan boyanır, autosave kuyruğa girer.
+  const deleteSelected = (): number => {
+    if (selectedIds.value.length === 0) return 0
+    const set = new Set(selectedIds.value)
+    const before = activePage.value.strokes.length
+    activePage.value.strokes = activePage.value.strokes.filter((s) => !set.has(s.id))
+    const removed = before - activePage.value.strokes.length
+    selectedIds.value = []
+    redoStack.value = []
+    recountActive()
+    repaintBase()
+    clearOverlay()
+    scheduleSave()
+    return removed
+  }
+
   // Tool change — highlighter artık rengi ezmez, seçili renk alpha ile kullanılır.
   const setTool = (tool: Tool) => {
     currentTool.value = tool
@@ -713,8 +761,9 @@ export const useDrawingStore = defineStore('drawing', () => {
         points: [...points.value],
       }
       activePage.value.strokes.push(stroke)
-      // Yeni mürekkep redo'yu öldürür.
+      // Yeni mürekkep redo'yu ve eski seçimi öldürür.
       redoStack.value = []
+      selectedIds.value = []
       recountActive()
       if (stroke.tool !== 'eraser') {
         const ctx = getCtx(canvasRef.value)
@@ -1052,6 +1101,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const clearCanvas = () => {
     activePage.value.strokes = []
     redoStack.value = []
+    selectedIds.value = []
     points.value = []
     recountActive()
     isDrawing.value = false
@@ -1210,6 +1260,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       pdfName.value = file.name
       activePageIndex.value = 0
       redoStack.value = []
+      selectedIds.value = []
       points.value = []
       isDrawing.value = false
       bb = null
@@ -1317,6 +1368,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     pages.value = [blankPage()]
     activePageIndex.value = 0
     redoStack.value = []
+    selectedIds.value = []
     points.value = []
     isDrawing.value = false
     bb = null
@@ -1550,6 +1602,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     pages.value = loaded
     savedSession.value = null
     redoStack.value = []
+    selectedIds.value = []
     const idx = (doc as { activePageIndex?: unknown }).activePageIndex
     activePageIndex.value =
       typeof idx === 'number' && Number.isFinite(idx)
@@ -1575,6 +1628,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const undoLastStroke = () => {
     const popped = activePage.value.strokes.pop()
     if (popped) redoStack.value.push(popped)
+    selectedIds.value = []
     points.value = []
     isDrawing.value = false
     repaintBase()
@@ -1589,6 +1643,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     const s = redoStack.value.pop()
     if (!s) return false
     activePage.value.strokes.push(s)
+    selectedIds.value = []
     recountActive()
     repaintBase()
     scheduleSave()
@@ -1600,8 +1655,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     const clamped = Math.min(pages.value.length - 1, Math.max(0, Math.floor(i)))
     if (clamped === activePageIndex.value) return
     activePageIndex.value = clamped
-    // Sayfa değişimi redo'yu öldürür (global stack sayfalar arası taşınmaz).
+    // Sayfa değişimi redo'yu ve seçimi öldürür (global stack sayfalar arası taşınmaz).
     redoStack.value = []
+    selectedIds.value = []
     points.value = []
     isDrawing.value = false
     bb = null
@@ -1629,6 +1685,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       pdfRenderScales.delete(removed.id)
     }
     redoStack.value = []
+    selectedIds.value = []
     if (clamped < activePageIndex.value) {
       activePageIndex.value -= 1
     } else if (activePageIndex.value >= pages.value.length) {
@@ -1712,6 +1769,16 @@ export const useDrawingStore = defineStore('drawing', () => {
     setColor,
     setStrokeWidth,
     setRejectTouch,
+    selectMode,
+    setSelectMode,
+    selectedIds,
+    selectionCount,
+    isSelected,
+    clearSelection,
+    selectRectArea,
+    selectLassoArea,
+    selectAll,
+    deleteSelected,
     setCanvasRef,
     setOverlayRef,
     setupCanvas,
