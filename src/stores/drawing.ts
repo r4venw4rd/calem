@@ -4,6 +4,11 @@ import { idbDeleteFile, idbGet, idbGetFile, idbGetKey, idbSet, idbSetFile, idbSe
 import {
   cleanPaperBackground,
   DEFAULT_PAPER_BACKGROUND,
+  dottedPoints,
+  graphLineXs,
+  marginLineX,
+  ruledLineYs,
+  staffLineYs,
   type PaperBackground,
   type PaperBackgroundType,
 } from '../lib/paper'
@@ -878,13 +883,77 @@ export const useDrawingStore = defineStore('drawing', () => {
     })
   }
 
-  // Bir sayfayı verilen ctx'e çiz: kâğıt dolgusu + arkaplan tam kanama + stroke'lar.
+  // Bir sayfayı verilen ctx'e çiz: kâğıt dolgusu + desen + arkaplan tam kanama + stroke'lar.
   // Transform dışarıda kurulur (ekran: view-fit, export: sayfa boyutu).
+  // Desen SADECE boş sayfada: PDF bitmap'i varsa (veya kâğıt şeffafsa) çizilmez.
+  const paintPaperPattern = (
+    ctx: CanvasRenderingContext2D,
+    page: Page,
+    bg: PaperBackground,
+  ) => {
+    if (bg.type === 'blank' && !bg.margin) return
+    if (bgCanvases.has(page.id)) return
+    const { w, h } = page.size
+    if (!(w > 0 && h > 0)) return
+    ctx.save()
+    ctx.strokeStyle = bg.lineColor
+    ctx.fillStyle = bg.lineColor
+    ctx.lineWidth = 1
+    ctx.globalAlpha = 1
+    const hline = (y: number, width = 1) => {
+      ctx.lineWidth = width
+      ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(w, y)
+      ctx.stroke()
+    }
+    if (bg.type === 'ruled') {
+      const ys = ruledLineYs(h, bg.spacing)
+      ys.forEach((y, i) => hline(y, i % 5 === 4 ? 1.2 : 0.7))
+    } else if (bg.type === 'graph') {
+      const ys = ruledLineYs(h, bg.spacing)
+      const xs = graphLineXs(w, bg.spacing)
+      ys.forEach((y, i) => hline(y, i % 5 === 4 ? 1 : 0.5))
+      ctx.lineWidth = 0.5
+      xs.forEach((x, i) => {
+        ctx.lineWidth = i % 5 === 4 ? 1 : 0.5
+        ctx.beginPath()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, h)
+        ctx.stroke()
+      })
+    } else if (bg.type === 'dotted') {
+      ctx.lineWidth = 1
+      for (const p of dottedPoints(w, h, bg.spacing)) {
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, 1.3, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    } else if (bg.type === 'staff') {
+      for (const group of staffLineYs(h, bg.spacing)) {
+        for (const y of group) hline(y, 0.9)
+      }
+    }
+    if (bg.margin) {
+      const mx = marginLineX(w)
+      if (mx !== null) {
+        ctx.strokeStyle = bg.marginColor
+        ctx.lineWidth = 1.2
+        ctx.beginPath()
+        ctx.moveTo(mx, 0)
+        ctx.lineTo(mx, h)
+        ctx.stroke()
+      }
+    }
+    ctx.restore()
+  }
+
   const paintPage = (ctx: CanvasRenderingContext2D, page: Page) => {
     const paperHex = paperFor(page)
     if (paperHex) {
       ctx.fillStyle = paperHex
       ctx.fillRect(0, 0, page.size.w, page.size.h)
+      paintPaperPattern(ctx, page, paperBackground.value)
     }
     const bg = bgCanvases.get(page.id)
     if (bg) ctx.drawImage(bg, 0, 0, page.size.w, page.size.h)
