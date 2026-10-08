@@ -986,7 +986,90 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
-  // Tool change — highlighter artık rengi ezmez, seçili renk alpha ile kullanılır.
+  // --- Katman op'ları (aktif sayfa kapsamlı) ---
+  // Ekle/sil/sırala yapısal: redo ölür. Görünürlük undo dışı ama kayda girer.
+  const addLayer = (name?: string): string => {
+    const p = activePage.value
+    const clean = typeof name === 'string' ? name.trim().slice(0, 40) : ''
+    const layer: Layer = {
+      id: newStrokeId(),
+      name: clean || `Katman ${p.layers.length + 1}`,
+      visible: true,
+      strokes: [],
+    }
+    p.layers.push(layer)
+    p.activeLayerId = layer.id
+    selectedIds.value = []
+    activeTextId.value = null
+    activeImageId.value = null
+    redoStack.value = []
+    recountActive()
+    repaintBase()
+    clearOverlay()
+    scheduleSave()
+    return layer.id
+  }
+  const deleteLayer = (id: string): boolean => {
+    const p = activePage.value
+    const i = p.layers.findIndex((l) => l.id === id)
+    if (i === -1) return false
+    if (p.layers.length <= 1) {
+      // Son katman silinmez — içi boşaltılır (metin/resim durur).
+      p.layers[0]!.strokes = []
+    } else {
+      p.layers.splice(i, 1)
+      if (p.activeLayerId === id) {
+        p.activeLayerId = p.layers[Math.min(i, p.layers.length - 1)]!.id
+      }
+    }
+    selectedIds.value = []
+    activeTextId.value = null
+    activeImageId.value = null
+    redoStack.value = []
+    recountActive()
+    repaintBase()
+    clearOverlay()
+    scheduleSave()
+    return true
+  }
+  const renameLayer = (id: string, name: string): boolean => {
+    const l = activePage.value.layers.find((x) => x.id === id)
+    if (!l) return false
+    const clean = typeof name === 'string' ? name.trim().slice(0, 40) : ''
+    if (!clean || clean === l.name) return false
+    l.name = clean
+    scheduleSave()
+    return true
+  }
+  const setActiveLayer = (id: string): boolean => {
+    const p = activePage.value
+    if (p.activeLayerId === id) return false
+    if (!p.layers.some((l) => l.id === id)) return false
+    p.activeLayerId = id
+    selectedIds.value = []
+    return true
+  }
+  const toggleLayerVisible = (id: string): boolean => {
+    const l = activePage.value.layers.find((x) => x.id === id)
+    if (!l) return false
+    l.visible = !l.visible
+    repaintBase()
+    scheduleSave()
+    return true
+  }
+  // dir +1: üste (sona), -1: alta (başa). Sınırda false.
+  const moveLayer = (id: string, dir: 1 | -1): boolean => {
+    const p = activePage.value
+    const i = p.layers.findIndex((l) => l.id === id)
+    const j = i + dir
+    if (i === -1 || j < 0 || j >= p.layers.length) return false
+    const tmp = p.layers[i]!
+    p.layers[i] = p.layers[j]!
+    p.layers[j] = tmp
+    repaintBase()
+    scheduleSave()
+    return true
+  }
   // Araç değişimi seçimi ve metin editörünü temizler (gizli durumla mürekkep karışmasın).
   const setTool = (tool: Tool) => {
     if (currentTool.value === tool) return
@@ -2501,6 +2584,13 @@ export const useDrawingStore = defineStore('drawing', () => {
     selectAll,
     deleteSelected,
     moveSelected,
+    activeLayer,
+    addLayer,
+    deleteLayer,
+    renameLayer,
+    setActiveLayer,
+    toggleLayerVisible,
+    moveLayer,
     clipboardCount,
     copySelected,
     cutSelected,
@@ -2524,7 +2614,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     deleteImage,
     imgBusy,
     addImage,
-    activeLayer,
     setCanvasRef,
     setOverlayRef,
     setupCanvas,
