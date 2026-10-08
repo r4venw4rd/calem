@@ -164,6 +164,14 @@
         >
           Metin
         </button>
+        <button
+          @click="store.setTool('image')"
+          :class="store.currentTool === 'image' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="px-2 py-1 rounded text-xs font-medium transition"
+          title="Resim (G)"
+        >
+          Resim
+        </button>
       </div>
 
       <div
@@ -241,7 +249,7 @@
         />
       </div>
 
-      <div v-if="store.currentTool !== 'select' && store.currentTool !== 'text'" class="flex items-center gap-2">
+      <div v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image'" class="flex items-center gap-2">
         <span class="text-sm text-[var(--chrome-muted)]">Kalınlık:</span>
         <input
           type="range"
@@ -498,13 +506,20 @@
       <canvas
         ref="overlayCanvas"
         class="absolute inset-0 w-full h-full touch-none select-none block"
-        :style="{ cursor: store.currentTool === 'text' ? 'text' : store.currentTool === 'select' ? 'default' : 'crosshair' }"
+        :style="{ cursor: store.currentTool === 'text' ? 'text' : store.currentTool === 'image' ? 'copy' : store.currentTool === 'select' ? 'default' : 'crosshair' }"
         @pointerdown="startDraw"
         @pointermove="draw"
         @pointerup="endDraw"
         @pointerleave="endDraw"
         @pointercancel="endDraw"
       ></canvas>
+      <input
+        ref="imgInput"
+        type="file"
+        accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg"
+        class="hidden"
+        @change="onImageFile"
+      />
 
       <div
         v-if="store.currentTool === 'text' && store.activeTextId"
@@ -548,6 +563,49 @@
           </button>
           <button
             @click="closeTextEditor"
+            class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
+            title="Kapat (Esc)"
+          >
+            Tamam
+          </button>
+        </div>
+      </div>
+
+      <div
+        v-if="store.currentTool === 'image' && store.activeImageId"
+        class="absolute top-3 left-1/2 -translate-x-1/2 z-10 w-72 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
+        role="dialog"
+        aria-label="Resim"
+      >
+        <div class="flex items-center justify-between mb-2">
+          <span class="font-medium text-[var(--chrome-title)] font-mono">
+            Resim {{ store.activeImage()?.w }}×{{ store.activeImage()?.h }}
+          </span>
+          <span v-if="store.imgBusy" class="text-[10px] text-yellow-400/80 font-mono">işleniyor…</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-[var(--chrome-faint)] whitespace-nowrap">Boyut</span>
+          <input
+            type="range"
+            min="32"
+            max="1200"
+            step="4"
+            :value="store.activeImage()?.w ?? 200"
+            @input="onImgWidth(Number(($event.target as HTMLInputElement).value))"
+            class="flex-1 accent-indigo-600"
+            title="Genişlik (oran korunur)"
+          />
+        </div>
+        <div class="flex items-center gap-2 mt-2">
+          <button
+            @click="delActiveImage"
+            class="px-2 py-1 rounded hover:bg-red-600/40 text-[var(--chrome-text)] hover:text-white transition"
+            title="Resmi sil"
+          >
+            Sil
+          </button>
+          <button
+            @click="store.activeImageId = null"
             class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
             title="Kapat (Esc)"
           >
@@ -1009,6 +1067,104 @@ const delActiveText = () => {
   updateHud(true)
 }
 
+// --- Resim jesti (image aracı): boşa tıkla-ekle, resme tıkla-seç, sürükle-taşı ---
+const imgInput = ref<HTMLInputElement | null>(null)
+let imgPending: { x: number; y: number } | null = null
+let imgDownPos: { x: number; y: number } | null = null
+let imgDownHit: string | null = null
+let imgMoving = false
+let imgMoveId: string | null = null
+let imgMoveLast: { x: number; y: number } | null = null
+
+const cancelImageGesture = () => {
+  imgDownPos = null
+  imgDownHit = null
+  imgMoving = false
+  imgMoveId = null
+  imgMoveLast = null
+}
+
+const imageDown = (e: PointerEvent) => {
+  if (store.rejectTouch && e.pointerType === 'touch') return
+  try {
+    overlayCanvas.value!.setPointerCapture(e.pointerId)
+  } catch {
+    /* ignore */
+  }
+  activePointerId = e.pointerId
+  const p = store.eventToPage(e)
+  const hit = store.imageAt(p.x, p.y)
+  imgDownPos = p
+  imgDownHit = hit ? hit.id : null
+  imgMoving = false
+  imgMoveId = null
+  imgMoveLast = null
+  if (hit) store.activeImageId = hit.id
+}
+
+const imageMove = (e: PointerEvent) => {
+  if (e.pointerId !== activePointerId || !imgDownPos) return
+  if (e.buttons === 0 && e.pointerType === 'mouse') return
+  const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
+  for (const ev of events) {
+    const p = store.eventToPage(ev as PointerEvent)
+    if (!imgMoving && imgDownHit) {
+      const dx = p.x - imgDownPos.x
+      const dy = p.y - imgDownPos.y
+      if (dx * dx + dy * dy >= 9) {
+        imgMoving = true
+        imgMoveId = imgDownHit
+        imgMoveLast = p
+      }
+    } else if (imgMoving && imgMoveId && imgMoveLast) {
+      store.moveImage(imgMoveId, p.x - imgMoveLast.x, p.y - imgMoveLast.y)
+      imgMoveLast = p
+    }
+  }
+}
+
+const imageUp = (e?: PointerEvent) => {
+  if (e && activePointerId !== null && e.pointerId !== activePointerId) return
+  const wasMoving = imgMoving
+  const hit = imgDownHit
+  const at = imgDownPos
+  cancelImageGesture()
+  activePointerId = null
+  if (wasMoving) {
+    updateHud(true)
+    return
+  }
+  if (!hit && at) {
+    // Boşa tık: dosya seç → tıklanan noktaya yerleştir.
+    imgPending = at
+    imgInput.value?.click()
+  }
+  updateHud(true)
+}
+
+const onImageFile = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const f = input.files?.[0]
+  input.value = ''
+  const at = imgPending
+  imgPending = null
+  if (!f || !at) return
+  const res = await store.addImage(f, at.x, at.y)
+  if ('error' in res) showPdfError(res.error)
+  updateHud(true)
+}
+
+const onImgWidth = (n: number) => {
+  const it = store.activeImage()
+  if (!it || it.w === 0) return
+  store.resizeImage(it.id, n, Math.round((n * it.h) / it.w))
+}
+
+const delActiveImage = () => {
+  if (store.activeImageId) store.deleteImage(store.activeImageId)
+  updateHud(true)
+}
+
 const startDraw = (e: PointerEvent) => {
   if (!overlayCanvas.value) return
   pointers.set(e.pointerId, ptrPos(e))
@@ -1016,6 +1172,7 @@ const startDraw = (e: PointerEvent) => {
     store.cancelActiveStroke()
     cancelSelGesture()
     cancelTextGesture()
+    cancelImageGesture()
     if (rafId !== 0) {
       cancelAnimationFrame(rafId)
       rafId = 0
@@ -1033,6 +1190,10 @@ const startDraw = (e: PointerEvent) => {
   }
   if (store.currentTool === 'text') {
     textDown(e)
+    return
+  }
+  if (store.currentTool === 'image') {
+    imageDown(e)
     return
   }
   if (store.rejectTouch && e.pointerType === 'touch') return
@@ -1074,6 +1235,10 @@ const draw = (e: PointerEvent) => {
     textMove(e)
     return
   }
+  if (store.currentTool === 'image') {
+    imageMove(e)
+    return
+  }
   if (!store.isDrawing || activePointerId === null || e.pointerId !== activePointerId) return
   // Sadece basılıyken çiz (pointermove hover'da ateşlenir)
   if (e.buttons === 0 && e.pointerType === 'mouse') return
@@ -1100,6 +1265,10 @@ const endDraw = (e?: PointerEvent) => {
   }
   if (textDownPos || store.currentTool === 'text') {
     textUp(e)
+    return
+  }
+  if (imgDownPos || store.currentTool === 'image') {
+    imageUp(e)
     return
   }
   if (!store.isDrawing) {
@@ -1175,7 +1344,21 @@ const onKeyDown = (e: KeyboardEvent) => {
       return
     }
   }
-  // Araç kısayolları (modsuz): V seç, P kalem, H vurgu, E silgi, L/R/O/A şekiller, T metin.
+  // Resim aracı kısayolları (modsuz): sil / kapat.
+  if (!mod && !e.altKey && store.currentTool === 'image') {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && store.activeImageId) {
+      e.preventDefault()
+      store.deleteImage(store.activeImageId)
+      updateHud(true)
+      return
+    }
+    if (e.key === 'Escape') {
+      cancelImageGesture()
+      store.activeImageId = null
+      return
+    }
+  }
+  // Araç kısayolları (modsuz): V seç, P kalem, H vurgu, E silgi, L/R/O/A şekiller, T metin, G resim.
   if (!mod && !e.altKey) {
     const k = e.key.toLowerCase()
     if (k === 'v') {
@@ -1212,6 +1395,10 @@ const onKeyDown = (e: KeyboardEvent) => {
     }
     if (k === 't') {
       store.setTool('text')
+      return
+    }
+    if (k === 'g') {
+      store.setTool('image')
       return
     }
   }
@@ -1436,6 +1623,7 @@ onUnmounted(() => {
   activePointerId = null
   cancelSelGesture()
   cancelTextGesture()
+  cancelImageGesture()
   pointers.clear()
   gesture = null
   stopSelWatch?.()
