@@ -995,6 +995,47 @@ export const useDrawingStore = defineStore('drawing', () => {
     return Math.max(w, 0.5)
   }
 
+  // Şekil uç noktaları: ilk + son nokta (ara noktalar serbest çizim artığıdır).
+  const shapeEndpoints = (pts: Point[]): [Point, Point] | null => {
+    if (pts.length === 0) return null
+    return [pts[0]!, pts[pts.length - 1]!]
+  }
+
+  // Primitif path kurar (stroke çağrılmaz — stiller üstte hazırdır).
+  const paintShape = (ctx: CanvasRenderingContext2D, tool: ShapeTool, a: Point, b: Point) => {
+    if (tool === 'line' || tool === 'arrow') {
+      ctx.beginPath()
+      ctx.moveTo(a.x, a.y)
+      ctx.lineTo(b.x, b.y)
+      if (tool === 'arrow') {
+        const ang = Math.atan2(b.y - a.y, b.x - a.x)
+        const len = Math.max(8, ctx.lineWidth * 4)
+        const spread = Math.PI / 7
+        for (const d of [-1, 1] as const) {
+          ctx.moveTo(b.x, b.y)
+          ctx.lineTo(b.x - len * Math.cos(ang + d * spread), b.y - len * Math.sin(ang + d * spread))
+        }
+      }
+      return
+    }
+    if (tool === 'rect') {
+      ctx.beginPath()
+      ctx.rect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y))
+      return
+    }
+    // ellipse: köşegenin tanımladığı kutuya iç teğet elips.
+    ctx.beginPath()
+    ctx.ellipse(
+      (a.x + b.x) / 2,
+      (a.y + b.y) / 2,
+      Math.abs(b.x - a.x) / 2,
+      Math.abs(b.y - a.y) / 2,
+      0,
+      0,
+      Math.PI * 2,
+    )
+  }
+
   const paintStroke = (
     ctx: CanvasRenderingContext2D,
     s: Pick<Stroke, 'tool' | 'color' | 'width' | 'points'>,
@@ -1004,10 +1045,23 @@ export const useDrawingStore = defineStore('drawing', () => {
     ctx.save()
     const w = s.tool === 'eraser' ? s.width : effectiveWidth(s.points, s.width)
     applyStyleForStroke(ctx, s.tool, s.color, w, paperHex)
-    strokePath(ctx, s.points)
-    ctx.stroke()
-    // Tek nokta ise dolgu da yap ki görünsün
-    if (s.points.length === 1) {
+    // Dejenere şekil (tek nokta / sıfır boy) nokta olarak düşer.
+    let dotted = false
+    if (isShapeTool(s.tool)) {
+      const ends = shapeEndpoints(s.points)
+      if (ends && (ends[0].x !== ends[1].x || ends[0].y !== ends[1].y)) {
+        paintShape(ctx, s.tool, ends[0], ends[1])
+        ctx.stroke()
+      } else {
+        dotted = true
+      }
+    } else {
+      strokePath(ctx, s.points)
+      ctx.stroke()
+      // Tek nokta ise dolgu da yap ki görünsün
+      dotted = s.points.length === 1
+    }
+    if (dotted) {
       const p = s.points[0]!
       ctx.beginPath()
       ctx.arc(p.x, p.y, Math.max(w / 2, 1), 0, Math.PI * 2)
