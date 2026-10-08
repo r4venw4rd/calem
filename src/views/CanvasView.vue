@@ -271,6 +271,49 @@
           class="w-24 accent-indigo-600"
         />
         <span class="text-xs text-[var(--chrome-text)] w-6 text-right">{{ store.strokeWidth }}</span>
+        <template v-if="['pen', 'line', 'rect', 'ellipse', 'arrow'].includes(store.currentTool)">
+          <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
+          <select
+            :value="store.strokeDash"
+            @change="store.setStrokeDash(($event.target as HTMLSelectElement).value)"
+            class="px-1.5 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)]"
+            title="Çizgi stili"
+          >
+            <option value="solid">Düz</option>
+            <option value="dash">Kesikli</option>
+            <option value="dot">Noktalı</option>
+          </select>
+          <input
+            type="range"
+            min="0.1"
+            max="1"
+            step="0.05"
+            :value="store.strokeOpacity"
+            @input="store.setStrokeOpacity(Number(($event.target as HTMLInputElement).value))"
+            class="w-16 accent-indigo-600"
+            title="Opaklık"
+          />
+          <span class="text-xs text-[var(--chrome-text)] w-8 text-right font-mono">{{ Math.round(store.strokeOpacity * 100) }}%</span>
+        </template>
+        <template v-if="store.currentTool === 'eraser'">
+          <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
+          <button
+            @click="store.setEraserMode('standard')"
+            :class="store.eraserMode === 'standard' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+            class="px-2 py-1 rounded text-xs font-medium transition"
+            title="Standart silgi (boya-kapat)"
+          >
+            Standart
+          </button>
+          <button
+            @click="store.setEraserMode('stroke')"
+            :class="store.eraserMode === 'stroke' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+            class="px-2 py-1 rounded text-xs font-medium transition"
+            title="Vuruş-silgi (çizgiyi tümden söker, undo'lu)"
+          >
+            Vuruş
+          </button>
+        </template>
       </div>
 
       <div v-if="store.currentTool === 'text'" class="flex items-center gap-2">
