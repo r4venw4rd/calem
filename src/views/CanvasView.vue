@@ -183,6 +183,14 @@
         >
           Resim
         </button>
+        <button
+          @click="store.setTool('hand')"
+          :class="store.currentTool === 'hand' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="px-2 py-1 rounded text-xs font-medium transition"
+          title="El (sürükle-kaydır, veya Space basılı tut)"
+        >
+          El
+        </button>
       </div>
 
       <div
@@ -260,7 +268,7 @@
         />
       </div>
 
-      <div v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image'" class="flex items-center gap-2">
+      <div v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'" class="flex items-center gap-2">
         <span class="text-sm text-[var(--chrome-muted)]">Kalınlık:</span>
         <input
           type="range"
@@ -636,7 +644,7 @@
       <canvas
         ref="overlayCanvas"
         class="absolute inset-0 w-full h-full touch-none select-none block"
-        :style="{ cursor: store.currentTool === 'text' ? 'text' : store.currentTool === 'image' ? 'copy' : store.currentTool === 'select' ? 'default' : 'crosshair' }"
+        :style="{ cursor: store.currentTool === 'text' ? 'text' : store.currentTool === 'image' ? 'copy' : store.currentTool === 'hand' ? 'grab' : store.currentTool === 'select' ? 'default' : 'crosshair' }"
         @pointerdown="startDraw"
         @pointermove="draw"
         @pointerup="endDraw"
@@ -1330,6 +1338,50 @@ const delActiveImage = () => {
   updateHud(true)
 }
 
+// --- El/Space kaydırma: ekran-px delta ile pan (her araçta Space ile) ---
+let spacePan = false
+let panActive = false
+let panLast: { x: number; y: number } | null = null
+
+const panDown = (e: PointerEvent) => {
+  try {
+    overlayCanvas.value!.setPointerCapture(e.pointerId)
+  } catch {
+    /* ignore */
+  }
+  activePointerId = e.pointerId
+  panLast = ptrPos(e)
+  panActive = true
+}
+
+const panMove = (e: PointerEvent) => {
+  // Space sonradan basılırsa devralınmaz (mürekkep gasp edilmesin) — önce Space, sonra bas.
+  if (!panActive || e.pointerId !== activePointerId) return
+  if (e.buttons === 0 && e.pointerType === 'mouse') return
+  const cur = ptrPos(e)
+  if (!panLast) {
+    panLast = cur
+    return
+  }
+  store.panBy(cur.x - panLast.x, cur.y - panLast.y)
+  panLast = cur
+  drawSelectionOverlay()
+  updateHud()
+}
+
+const panUp = (e?: PointerEvent) => {
+  if (e && activePointerId !== null && e.pointerId !== activePointerId) return
+  panActive = false
+  panLast = null
+  activePointerId = null
+  updateHud(true)
+}
+
+const cancelPan = () => {
+  panActive = false
+  panLast = null
+}
+
 const startDraw = (e: PointerEvent) => {
   if (!overlayCanvas.value) return
   pointers.set(e.pointerId, ptrPos(e))
@@ -1338,6 +1390,7 @@ const startDraw = (e: PointerEvent) => {
     cancelSelGesture()
     cancelTextGesture()
     cancelImageGesture()
+    cancelPan()
     if (rafId !== 0) {
       cancelAnimationFrame(rafId)
       rafId = 0
@@ -1349,6 +1402,11 @@ const startDraw = (e: PointerEvent) => {
     return
   }
   if (pointers.size !== 1 || gesture || gestureConsumed) return
+  // Space-kaydırma her aracı ezer (pinch sonrası değil); el aracı dokunmayla da kaydırır.
+  if (spacePan || store.currentTool === 'hand') {
+    panDown(e)
+    return
+  }
   if (store.currentTool === 'select') {
     selectDown(e)
     return
@@ -1396,6 +1454,10 @@ const draw = (e: PointerEvent) => {
     selectMove(e)
     return
   }
+  if (panActive) {
+    panMove(e)
+    return
+  }
   if (store.currentTool === 'text') {
     textMove(e)
     return
@@ -1426,6 +1488,10 @@ const endDraw = (e?: PointerEvent) => {
   }
   if (selActive || store.currentTool === 'select') {
     selectUp(e)
+    return
+  }
+  if (panActive) {
+    panUp(e)
     return
   }
   if (textDownPos || store.currentTool === 'text') {
@@ -1468,6 +1534,13 @@ const onKeyDown = (e: KeyboardEvent) => {
   const t = e.target as HTMLElement | null
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
   const mod = e.ctrlKey || e.metaKey
+  // Space basılı kaydırma (önce Space, sonra sürükle). Tekrarlanan keydown yoksayılır.
+  if (!mod && !e.altKey && e.key === ' ' && !e.repeat) {
+    if (t && t.tagName === 'BUTTON') return
+    e.preventDefault()
+    spacePan = true
+    return
+  }
   // Seçim aracı kısayolları (modsuz): sil / kaç / oklarla dürt.
   if (!mod && !e.altKey && store.currentTool === 'select') {
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1602,6 +1675,10 @@ const onKeyDown = (e: KeyboardEvent) => {
     drawSelectionOverlay()
     updateHud(true)
   }
+}
+
+const onKeyUp = (e: KeyboardEvent) => {
+  if (e.key === ' ') spacePan = false
 }
 
 const exportPng = () => {
@@ -1769,6 +1846,7 @@ onMounted(() => {
 
   window.addEventListener('resize', sizeCanvas)
   window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('keyup', onKeyUp)
   overlayCanvas.value.addEventListener('wheel', onWheel, { passive: false })
   stopSelWatch = watch(
     () => store.selectedIds,
@@ -1789,6 +1867,8 @@ onUnmounted(() => {
   cancelSelGesture()
   cancelTextGesture()
   cancelImageGesture()
+  cancelPan()
+  spacePan = false
   pointers.clear()
   gesture = null
   stopSelWatch?.()
@@ -1797,6 +1877,7 @@ onUnmounted(() => {
   stopTextWatch = null
   window.removeEventListener('resize', sizeCanvas)
   window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('keyup', onKeyUp)
   overlayCanvas.value?.removeEventListener('wheel', onWheel)
   store.setCanvasRef(null)
   store.setOverlayRef(null)

@@ -18,7 +18,7 @@ import {
   strokeBBox,
 } from '../lib/select'
 
-export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text' | 'image'
+export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text' | 'image' | 'hand'
 export type ShapeTool = 'line' | 'rect' | 'ellipse' | 'arrow'
 // Şekil araçları: serbest path değil, ilk+son noktadan primitif çizilir.
 export const isShapeTool = (t: Tool): t is ShapeTool =>
@@ -377,9 +377,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   const color = ref('#ffffff')
   // Araç başına kalınlık hafızası: kalem ince, silgi kocaman olabilir; araç değişince geri gelir.
   // select/şekil mürekkep değil ya da kalem-aralığı kullanır (kayıtlı dursun yeter).
-  const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5, select: 1, line: 1, rect: 1, ellipse: 1, arrow: 1, text: 1, image: 1 }
-  const WIDTH_MAX: Record<Tool, number> = { pen: 20, highlighter: 50, eraser: 120, select: 20, line: 20, rect: 20, ellipse: 20, arrow: 20, text: 20, image: 20 }
-  const widths = ref<Record<Tool, number>>({ pen: 3, highlighter: 10, eraser: 24, select: 3, line: 3, rect: 3, ellipse: 3, arrow: 3, text: 3, image: 3 })
+  const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5, select: 1, line: 1, rect: 1, ellipse: 1, arrow: 1, text: 1, image: 1, hand: 1 }
+  const WIDTH_MAX: Record<Tool, number> = { pen: 20, highlighter: 50, eraser: 120, select: 20, line: 20, rect: 20, ellipse: 20, arrow: 20, text: 20, image: 20, hand: 20 }
+  const widths = ref<Record<Tool, number>>({ pen: 3, highlighter: 10, eraser: 24, select: 3, line: 3, rect: 3, ellipse: 3, arrow: 3, text: 3, image: 3, hand: 3 })
   // Mevcut aracın kalınlığı — template ve çizim buradan okur (eski strokeWidth ile aynı isim).
   const strokeWidth = computed(() => widths.value[currentTool.value])
   const widthMin = computed(() => WIDTH_MIN[currentTool.value])
@@ -1255,7 +1255,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Sayfa DIŞINA basım yok sayılır (kenar dışı nokta tıklamasından mürekkep doğmaz).
   const startDrawing = (e: PointerEvent): boolean => {
     if (!canvasRef.value || isDrawing.value) return false
-    if (currentTool.value === 'select' || currentTool.value === 'text' || currentTool.value === 'image') return false
+    if (currentTool.value === 'select' || currentTool.value === 'text' || currentTool.value === 'image' || currentTool.value === 'hand') return false
     if (shouldIgnoreEvent(e)) return false
     // Vuruş-silgi nokta toplamaz: dokunduğu anda söker.
     if (currentTool.value === 'eraser' && eraserMode.value === 'stroke') {
@@ -1479,7 +1479,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Kesikli desen (kalem + şekiller; vurgu/silgi düz). Genişliğe oranlı tireler.
   const dashFor = (tool: Tool, dash: DashStyle, w: number): number[] => {
     if (dash === 'solid') return []
-    if (tool === 'highlighter' || tool === 'eraser' || tool === 'select' || tool === 'text' || tool === 'image') return []
+    if (tool === 'highlighter' || tool === 'eraser' || tool === 'select' || tool === 'text' || tool === 'image' || tool === 'hand') return []
     if (dash === 'dash') return [Math.max(5, w * 3), Math.max(3, w * 1.8)]
     return [0.5, Math.max(2.5, w * 1.5)]
   }
@@ -1799,7 +1799,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Aktif çizgiyi overlay'e çiz — per-frame tek maliyet bu (O(aktif çizgi), sahneden bağımsız).
   // Silgi overlay kullanmaz (doğrudan base'e işlenir) → burada iş yok.
   const renderActiveStroke = () => {
-    if (currentTool.value === 'eraser' || currentTool.value === 'select' || currentTool.value === 'text' || currentTool.value === 'image') return
+    if (currentTool.value === 'eraser' || currentTool.value === 'select' || currentTool.value === 'text' || currentTool.value === 'image' || currentTool.value === 'hand') return
     const t0 = performance.now()
     const ctx = getCtx(overlayRef.value)
     if (!ctx) return
@@ -2482,7 +2482,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     // widths her sürümde ortak
     const w = (doc as { widths?: unknown }).widths as Record<string, unknown> | undefined
     if (w) {
-      for (const t of ['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow', 'text', 'image'] as const) {
+      for (const t of ['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow', 'text', 'image', 'hand'] as const) {
         const v = w[t]
         if (typeof v === 'number' && Number.isFinite(v)) {
           widths.value[t] = Math.min(WIDTH_MAX[t], Math.max(WIDTH_MIN[t], Math.round(v)))
