@@ -699,6 +699,8 @@ export const useDrawingStore = defineStore('drawing', () => {
         tool: s.tool,
         color: s.color,
         width: s.width,
+        dash: s.dash,
+        opacity: s.opacity,
         points: s.points.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
       }))
     clipboardCount.value = clipboard.length
@@ -736,6 +738,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       tool: s.tool,
       color: s.color,
       width: s.width,
+      dash: s.dash,
+      opacity: s.opacity,
       points: s.points.map((p) => ({ x: p.x + dx, y: p.y + dy, pressure: p.pressure })),
     }))
     if (pasted.length === 0) return 0
