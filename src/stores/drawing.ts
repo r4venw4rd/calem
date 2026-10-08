@@ -16,6 +16,7 @@ import {
 export type Tool = 'pen' | 'eraser' | 'highlighter'
 export interface Point { x: number; y: number; pressure?: number }
 export interface Stroke {
+  id: string
   tool: Tool
   color: string
   width: number
@@ -334,6 +335,10 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Stroke'lar sayfalarda durur; tüm çizim op'ları AKTİF sayfaya işler.
   const newPageId = () =>
     `p-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+  // Stroke kimliği: seçim/taşıma/kopyala'nın zemini. Sayfa id'sinden bağımsız sayaçlı.
+  let strokeSeq = 0
+  const newStrokeId = () =>
+    `s-${Date.now().toString(36)}-${(strokeSeq++).toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
   const blankPage = (): Page => ({ id: newPageId(), strokes: [], size: defaultPageSize() })
 
   // View transform (non-reactive): aktif sayfa → ekran contain-fit.
@@ -701,6 +706,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const stopDrawing = () => {
     if (isDrawing.value && points.value.length > 0) {
       const stroke: Stroke = {
+        id: newStrokeId(),
         tool: currentTool.value,
         color: color.value,
         width: strokeWidth.value,
@@ -1382,6 +1388,7 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // Reactive proxy'leri düz veriye çevir — IDB structured-clone'a temiz girer.
   const snapshotStroke = (s: Stroke): Stroke => ({
+    id: typeof s.id === 'string' && s.id ? s.id : newStrokeId(),
     tool: s.tool,
     color: s.color,
     width: s.width,
@@ -1420,6 +1427,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // Bozuk kayda karşı stroke doğrulama (v1/v2 yükleme ortak).
+  // idsiz eski kayıtlar backfill alır (seçim çalışsın diye).
   const cleanStrokes = (input: Stroke[]): Stroke[] => {
     const clean: Stroke[] = []
     for (const s of input) {
@@ -1427,6 +1435,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       const pts = s.points.filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y))
       if (pts.length === 0) continue
       clean.push({
+        id: typeof (s as Stroke).id === 'string' && (s as Stroke).id ? (s as Stroke).id : newStrokeId(),
         tool: s.tool === 'eraser' || s.tool === 'highlighter' ? s.tool : 'pen',
         color: typeof s.color === 'string' ? s.color : '#ffffff',
         width: typeof s.width === 'number' ? Math.min(120, Math.max(1, s.width)) : 3,
