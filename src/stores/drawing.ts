@@ -3559,9 +3559,13 @@ export const useDrawingStore = defineStore('drawing', () => {
   const undoLastStroke = () => {
     const prev = undoStack.value.pop()
     if (!prev) return
+    // Kullanıcının şu anki sayfasını koru: undo görünümü başka sayfaya atlatmasın.
+    const keepPageId = activePage.value.id
     redoStack.value.push(snapshotDoc())
     if (redoStack.value.length > HISTORY_CAP) redoStack.value.shift()
     restoreDoc(prev)
+    const kept = pages.value.findIndex((p) => p.id === keepPageId)
+    activePageIndex.value = kept !== -1 ? kept : activePageIndex.value
     flushFileDeletes()
     selectedIds.value = []
     activeTextId.value = null
@@ -3579,9 +3583,12 @@ export const useDrawingStore = defineStore('drawing', () => {
   const redo = (): boolean => {
     const next = redoStack.value.pop()
     if (!next) return false
+    const keepPageId = activePage.value.id
     undoStack.value.push(snapshotDoc())
     if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
     restoreDoc(next)
+    const kept = pages.value.findIndex((p) => p.id === keepPageId)
+    activePageIndex.value = kept !== -1 ? kept : activePageIndex.value
     flushFileDeletes()
     selectedIds.value = []
     activeTextId.value = null
