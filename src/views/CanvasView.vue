@@ -2563,6 +2563,7 @@ let stopSelWatch: (() => void) | null = null
 let stopTextWatch: (() => void) | null = null
 let stopPageWatch: (() => void) | null = null
 let stopSettingsWatch: (() => void) | null = null
+let stopChromeWatch: (() => void) | null = null
 
 // Sayfa şeridi: düşük çözünürlüklü önbellek, tick+sayfa-değişiminde debounce'lu tazelenir.
 const thumbs = ref<string[]>([])
@@ -2624,6 +2625,15 @@ onMounted(() => {
     () => store.selectedIds,
     () => drawSelectionOverlay(),
   )
+  // HUD + seçim overlay'i: bir handler updateHud/drawSelectionOverlay çağırmayı
+  // unutsa bile ilgili state değişince tazelenir (bayat sayaç/çerçeve riski biter).
+  stopChromeWatch = watch(
+    () => [store.drawingCount, store.currentTool, store.selectMode, store.activePageIndex] as const,
+    () => {
+      drawSelectionOverlay()
+      updateHud(true)
+    },
+  )
   // Diyalog açılınca ilk kontrole odaklan, kapanınca tetikleyiciye dön.
   stopSettingsWatch = watch(showSettings, (open) => {
     if (open) {
@@ -2683,6 +2693,8 @@ onUnmounted(() => {
   stopPageWatch = null
   stopSettingsWatch?.()
   stopSettingsWatch = null
+  stopChromeWatch?.()
+  stopChromeWatch = null
   if (blockTimer) clearTimeout(blockTimer)
   blockTimer = undefined
   blockEls.clear()
