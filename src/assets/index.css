@@ -32,3 +32,10 @@
   --chrome-title: #111827;
   --page-bg: #e5e7eb;
 }
+
+/* Native açılır listeler (select option): UA varsayılanı temayı takmaz,
+   color-scheme tek başına yetmezse diye açıkça boyanır. */
+select option {
+  background-color: var(--chrome-bg-solid);
+  color: var(--chrome-title);
+}
