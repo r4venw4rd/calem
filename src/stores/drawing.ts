@@ -826,6 +826,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
     redoStack.value = []
     lastPushKey = ''
+    // İlk gerçek düzenleme "önceki oturum" banner'ını bayatlatır: autosave onu
+    // birazdan ezecek, geri yükleme artık eski özeti getirmez.
+    savedSession.value = null
     flushFileDeletes()
   }
 
@@ -837,6 +840,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     undoStack.value.push(snapshotDoc())
     if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
     redoStack.value = []
+    savedSession.value = null
     flushFileDeletes()
   }
 
