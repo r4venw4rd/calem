@@ -1121,8 +1121,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
-import { drawingPerf, PAGE_FORMATS, PAPER_THEMES, CUSTOM_SLOT_COUNT, useDrawingStore } from '@/stores/drawing'
-import type { Tool } from '@/stores/drawing'
+import { drawingPerf, useDrawingStore } from '@/stores/drawing'
+import { PAGE_FORMATS, PAPER_THEMES } from '@/config/paper'
+import { CUSTOM_SLOT_COUNT } from '@/config/palettes'
+import { TOOL_META } from '@/config/tools'
 import { selectionBBox, coalescedOf } from '@/lib/select'
 
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
@@ -1207,20 +1209,7 @@ const renamePaletteBtn = (id: string) => {
   store.renamePalette(id, name)
 }
 
-// Araç düğme metadatası (sıra/görünürlük store.toolbarOrder/hiddenTools'tan gelir).
-const TOOL_META: Record<Tool, { label: string; title: string; active: string; icon?: 'pen' | 'hl' | 'eraser' | 'select' }> = {
-  pen: { label: 'Kalem', title: 'Kalem (P)', active: 'bg-indigo-600 text-white', icon: 'pen' },
-  highlighter: { label: 'Vurgu', title: 'Vurgulayıcı (H)', active: 'bg-yellow-500 text-black', icon: 'hl' },
-  eraser: { label: 'Silgi', title: 'Silgi (E)', active: 'bg-red-600 text-white', icon: 'eraser' },
-  select: { label: 'Seç', title: 'Seç/Taşı (V)', active: 'bg-indigo-600 text-white', icon: 'select' },
-  line: { label: 'Çizgi', title: 'Çizgi (L)', active: 'bg-indigo-600 text-white' },
-  rect: { label: 'Kare', title: 'Kare (R)', active: 'bg-indigo-600 text-white' },
-  ellipse: { label: 'Elips', title: 'Elips (O)', active: 'bg-indigo-600 text-white' },
-  arrow: { label: 'Ok', title: 'Ok (A)', active: 'bg-indigo-600 text-white' },
-  text: { label: 'Metin', title: 'Metin (T)', active: 'bg-indigo-600 text-white' },
-  image: { label: 'Resim', title: 'Resim (G)', active: 'bg-indigo-600 text-white' },
-  hand: { label: 'El', title: 'El (sürükle-kaydır, veya Space basılı tut)', active: 'bg-indigo-600 text-white' },
-}
+// Araç düğme metadatası: config/tools (TOOL_META).
 // Hepsi gizlenirse kilitlenmemek için tam listeye düşer.
 const visibleTools = computed(() => {
   const list = store.toolbarOrder.filter((t) => !store.hiddenTools.includes(t))

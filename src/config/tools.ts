@@ -1,0 +1,95 @@
+import type { Tool } from '../stores/drawing'
+
+// Araç kataloğu: sıra + geçerlilik beyaz listesi (toolbar config buradan beslenir).
+export const ALL_TOOLS: Tool[] = [
+  'pen',
+  'highlighter',
+  'eraser',
+  'select',
+  'line',
+  'rect',
+  'ellipse',
+  'arrow',
+  'text',
+  'image',
+  'hand',
+]
+
+/** Araç başına kalınlık aralığı (pt). */
+export const WIDTH_MIN: Record<Tool, number> = {
+  pen: 1,
+  highlighter: 1,
+  eraser: 5,
+  select: 1,
+  line: 1,
+  rect: 1,
+  ellipse: 1,
+  arrow: 1,
+  text: 1,
+  image: 1,
+  hand: 1,
+}
+export const WIDTH_MAX: Record<Tool, number> = {
+  pen: 20,
+  highlighter: 50,
+  eraser: 120,
+  select: 20,
+  line: 20,
+  rect: 20,
+  ellipse: 20,
+  arrow: 20,
+  text: 20,
+  image: 20,
+  hand: 20,
+}
+
+/** Araç başına kalınlık hafızası tohumu. */
+export const DEFAULT_WIDTHS: Record<Tool, number> = {
+  pen: 3,
+  highlighter: 10,
+  eraser: 24,
+  select: 3,
+  line: 3,
+  rect: 3,
+  ellipse: 3,
+  arrow: 3,
+  text: 3,
+  image: 3,
+  hand: 3,
+}
+
+export interface ToolMeta {
+  label: string
+  title: string
+  active: string
+  icon?: 'pen' | 'hl' | 'eraser' | 'select'
+}
+
+/** Toolbar düğme metadatası (Türkçe etiketler burada tekillenir). */
+export const TOOL_META: Record<Tool, ToolMeta> = {
+  pen: { label: 'Kalem', title: 'Kalem (P)', active: 'bg-indigo-600 text-white', icon: 'pen' },
+  highlighter: {
+    label: 'Vurgu',
+    title: 'Vurgulayıcı (H)',
+    active: 'bg-yellow-500 text-black',
+    icon: 'hl',
+  },
+  eraser: { label: 'Silgi', title: 'Silgi (E)', active: 'bg-red-600 text-white', icon: 'eraser' },
+  select: {
+    label: 'Seç',
+    title: 'Seç/Taşı (V)',
+    active: 'bg-indigo-600 text-white',
+    icon: 'select',
+  },
+  line: { label: 'Çizgi', title: 'Çizgi (L)', active: 'bg-indigo-600 text-white' },
+  rect: { label: 'Kare', title: 'Kare (R)', active: 'bg-indigo-600 text-white' },
+  ellipse: { label: 'Elips', title: 'Elips (O)', active: 'bg-indigo-600 text-white' },
+  arrow: { label: 'Ok', title: 'Ok (A)', active: 'bg-indigo-600 text-white' },
+  text: { label: 'Metin', title: 'Metin (T)', active: 'bg-indigo-600 text-white' },
+  image: { label: 'Resim', title: 'Resim (G)', active: 'bg-indigo-600 text-white' },
+  hand: {
+    label: 'El',
+    title: 'El (sürükle-kaydır, veya Space basılı tut)',
+    active: 'bg-indigo-600 text-white',
+  },
+}

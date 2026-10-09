@@ -3,7 +3,6 @@ import { computed, ref, shallowRef } from 'vue'
 import { idbDeleteFile, idbGet, idbGetFile, idbGetImage, idbGetKey, idbSet, idbSetFile, idbSetImage, idbSetKey, SETTINGS_KEY, type ImageFileRecord, type PersistedDoc } from '../lib/idb'
 import {
   cleanPaperBackground,
-  DEFAULT_PAPER_BACKGROUND,
   dottedPoints,
   graphLineXs,
   marginLineX,
@@ -19,26 +18,42 @@ import {
   strokeBBox,
 } from '../lib/select'
 import { splitRunsOutside } from '../lib/erase'
+import { ALL_TOOLS, DEFAULT_WIDTHS, WIDTH_MAX, WIDTH_MIN } from '../config/tools'
+import { A4, DEFAULT_PAPER_BACKGROUND, PAGE_FORMATS, PAPER_THEMES } from '../config/paper'
+import type { PageFormat, PageOrientation, PaperTheme } from '../config/paper'
+import {
+  B64_CHUNK,
+  DIRTY_PAD_SCREEN,
+  DPR_CAP,
+  EXPORT_SCALE,
+  FALLBACK_VIEWPORT,
+  HISTORY_CAP,
+  IMAGE_MAX_DIM,
+  JPEG_QUALITY,
+  MIN_DIST_SCREEN,
+  PAGE_MAX,
+  PAGE_MIN,
+  PDF_MANY_THRESHOLD,
+  PDF_RENDER_BASE,
+  PDF_RENDER_MANY,
+  PDF_RENDER_MAX,
+  RERENDER_DELAY,
+  SAVE_DELAY,
+  ZOOM_MAX,
+  ZOOM_MIN,
+} from '../config/engine'
+import {
+  CUSTOM_SLOT_COUNT,
+  DEFAULT_PALETTES,
+  PALETTE_MAX_COLORS,
+  PALETTE_MAX_COUNT,
+} from '../config/palettes'
 
 export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text' | 'image' | 'hand'
 export type ShapeTool = 'line' | 'rect' | 'ellipse' | 'arrow'
 // Şekil araçları: serbest path değil, ilk+son noktadan primitif çizilir.
 export const isShapeTool = (t: Tool): t is ShapeTool =>
   t === 'line' || t === 'rect' || t === 'ellipse' || t === 'arrow'
-// Toolbar'da listelenen tüm araçlar (sıralama/gizleme buradan beslenir).
-export const ALL_TOOLS: Tool[] = [
-  'pen',
-  'highlighter',
-  'eraser',
-  'select',
-  'line',
-  'rect',
-  'ellipse',
-  'arrow',
-  'text',
-  'image',
-  'hand',
-]
 export interface ToolbarConfig {
   order: Tool[]
   hidden: Tool[]
@@ -52,29 +67,6 @@ export interface ColorPalette {
   colors: string[]
   customs: string[]
 }
-export const PALETTE_MAX_COLORS = 12
-export const PALETTE_MAX_COUNT = 8
-export const CUSTOM_SLOT_COUNT = 8
-export const DEFAULT_PALETTES: ColorPalette[] = [
-  {
-    id: 'varsayilan',
-    name: 'Varsayılan',
-    colors: ['#ffffff', '#000000', '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7'],
-    customs: [],
-  },
-  {
-    id: 'pastel',
-    name: 'Pastel',
-    colors: ['#fecaca', '#fed7aa', '#fef08a', '#bbf7d0', '#bfdbfe', '#ddd6fe', '#fbcfe8', '#ffffff'],
-    customs: [],
-  },
-  {
-    id: 'neon',
-    name: 'Neon',
-    colors: ['#ff0000', '#ff8000', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#ff00ff', '#ffffff'],
-    customs: [],
-  },
-]
 export interface Point { x: number; y: number; pressure?: number }
 // Çizgi stili: kalem + şekillerde kesikli/noktalı ve opaklık. Vurgu/silgi sabit stillidir.
 export type DashStyle = 'solid' | 'dash' | 'dot'
@@ -172,26 +164,6 @@ export interface CalemFile {
 }
 
 // A4 punto — boş sayfaların varsayılan boyutu.
-export const A4 = { w: 595, h: 842 }
-
-// Kâğıt temaları (ayarlar UI'ı buradan beslenir; esnek config'in ilk üyesi).
-export const PAPER_THEMES = {
-  gece: '#111827',
-  siyah: '#000000',
-  kagit: '#f5f1e8',
-} as const
-export type PaperTheme = keyof typeof PAPER_THEMES
-
-// Sayfa biçimleri (punto, dikey). Yatayda en-boy yer değiştirir.
-export const PAGE_FORMATS = {
-  A4: { w: 595, h: 842 },
-  A3: { w: 842, h: 1191 },
-  A5: { w: 420, h: 595 },
-  Letter: { w: 612, h: 792 },
-} as const
-export type PageFormat = keyof typeof PAGE_FORMATS | 'custom'
-export type PageOrientation = 'portrait' | 'landscape'
-
 // Sayfa arkaplan bitmap'leri: sayfa id → render edilmiş canvas. Persist edilmez,
 // PDF bytes'larından yeniden üretilir. Aspect her zaman page.size ile aynıdır (inşa gereği).
 const bgCanvases = new Map<string, HTMLCanvasElement>()
@@ -297,8 +269,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       const f = PAGE_FORMATS[pageFormat.value] ?? PAGE_FORMATS.A4
       base = { w: f.w, h: f.h }
     }
-    const w = Math.min(3000, Math.max(100, Math.round(base.w) || 595))
-    const h = Math.min(3000, Math.max(100, Math.round(base.h) || 842))
+    const w = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(base.w) || A4.w))
+    const h = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(base.h) || A4.h))
     return pageOrientation.value === 'landscape' ? { w: h, h: w } : { w, h }
   }
 
@@ -316,8 +288,8 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   const setCustomSize = (w: number, h: number) => {
     if (!Number.isFinite(w) || !Number.isFinite(h)) return
-    customW.value = Math.min(3000, Math.max(100, Math.round(w)))
-    customH.value = Math.min(3000, Math.max(100, Math.round(h)))
+    customW.value = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(w)))
+    customH.value = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(h)))
     void persistSettings()
   }
 
@@ -453,8 +425,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       applied = true
     }
     if (Number.isFinite(r.customW) && Number.isFinite(r.customH)) {
-      customW.value = Math.min(3000, Math.max(100, Math.round(r.customW as number)))
-      customH.value = Math.min(3000, Math.max(100, Math.round(r.customH as number)))
+      customW.value = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(r.customW as number)))
+      customH.value = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(r.customH as number)))
       applied = true
     }
     if (r.uiTheme === 'koyu' || r.uiTheme === 'acik') {
@@ -525,8 +497,8 @@ export const useDrawingStore = defineStore('drawing', () => {
         pageOrientation.value = raw.orientation
       }
       if (Number.isFinite(raw.customW) && Number.isFinite(raw.customH)) {
-        customW.value = Math.min(3000, Math.max(100, Math.round(raw.customW)))
-        customH.value = Math.min(3000, Math.max(100, Math.round(raw.customH)))
+        customW.value = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(raw.customW)))
+        customH.value = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(raw.customH)))
       }
       if (raw.uiTheme === 'koyu' || raw.uiTheme === 'acik') {
         uiTheme.value = raw.uiTheme
@@ -571,9 +543,8 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   // Araç başına kalınlık hafızası: kalem ince, silgi kocaman olabilir; araç değişince geri gelir.
   // select/şekil mürekkep değil ya da kalem-aralığı kullanır (kayıtlı dursun yeter).
-  const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5, select: 1, line: 1, rect: 1, ellipse: 1, arrow: 1, text: 1, image: 1, hand: 1 }
-  const WIDTH_MAX: Record<Tool, number> = { pen: 20, highlighter: 50, eraser: 120, select: 20, line: 20, rect: 20, ellipse: 20, arrow: 20, text: 20, image: 20, hand: 20 }
-  const widths = ref<Record<Tool, number>>({ pen: 3, highlighter: 10, eraser: 24, select: 3, line: 3, rect: 3, ellipse: 3, arrow: 3, text: 3, image: 3, hand: 3 })
+  // Tablo + tohum: config/tools (WIDTH_MIN/WIDTH_MAX/DEFAULT_WIDTHS).
+  const widths = ref<Record<Tool, number>>({ ...DEFAULT_WIDTHS })
   // Mevcut aracın kalınlığı — template ve çizim buradan okur (eski strokeWidth ile aynı isim).
   const strokeWidth = computed(() => widths.value[currentTool.value])
   const widthMin = computed(() => WIDTH_MIN[currentTool.value])
@@ -643,8 +614,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   let viewPanX = 0
   let viewPanY = 0
   const zoomLabel = ref('100%')
-  const ZOOM_MIN = 0.5
-  const ZOOM_MAX = 8
+  // Zoom kelepçesi: config/engine (ZOOM_MIN/ZOOM_MAX).
   const effScale = () => (viewScale || 1) * viewZoom
   const effOx = () => viewOx * viewZoom + viewPanX
   const effOy = () => viewOy * viewZoom + viewPanY
@@ -773,7 +743,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   const undoStack = ref<DocSnap[]>([])
   const redoStack = ref<DocSnap[]>([])
-  const HISTORY_CAP = 25
+  // Derinlik: config/engine (HISTORY_CAP).
 
   const snapshotDoc = (): DocSnap => ({
     pages: pages.value.map((p) => ({
@@ -1177,8 +1147,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // --- Resim import pipeline: dosya → decode → cap → IDB → sayfaya yerleştir ---
-  // Büyük fotoğraflar belleği şişirmesin diye bitmap 1600px'e cap'lenir (oran korunur).
-  const IMAGE_MAX_DIM = 1600
+  // Bitmap cap'i: config/engine (IMAGE_MAX_DIM, oran korunur).
   const imgBusy = ref(false)
 
   const bytesToCanvas = async (bytes: ArrayBuffer): Promise<HTMLCanvasElement | null> => {
@@ -1624,7 +1593,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
   }
 
-  const getDPR = () => Math.min(window.devicePixelRatio || 1, 2)
+  const getDPR = () => Math.min(window.devicePixelRatio || 1, DPR_CAP)
 
   // Backing store'u CSS boyut x DPR yap. Boyut değiştiyse true döner.
   const setupBackingStoreFor = (canvas: HTMLCanvasElement | null): boolean => {
@@ -1841,9 +1810,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // ✅ Çek - hareket ederken smooth çizim.
-  // Desimasyon: saf mesafe filtresi (eşik ekran-px'ten sayfa uzayına çevrilir).
-  // 1.5px'ten yakın noktalar path'i şişirir, görsel fark yaratmaz — atla.
-  const MIN_DIST_SCREEN = 1.5
+  // Desimasyon eşiği: config/engine (MIN_DIST_SCREEN).
   const draw = (e: PointerEvent) => {
     if (!isDrawing.value || !canvasRef.value) return
     if (shouldIgnoreEvent(e)) return
@@ -2150,8 +2117,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // Overlay'i temizle — fullscreen DEĞİL, aktif çizginin kirli kutusu + pay (sayfa uzayında).
-  // Pay ekran-px'ten çevrilir ki zoom'da da yeterli kalsın.
-  const DIRTY_PAD_SCREEN = 36
+  // Pay: config/engine (DIRTY_PAD_SCREEN).
   const clearOverlay = () => {
     const ctx = getCtx(overlayRef.value)
     if (!ctx) return
@@ -2299,10 +2265,8 @@ export const useDrawingStore = defineStore('drawing', () => {
   // (belirtilmezse landscape içeriğe portrait MediaBox açıyor).
   const exportPageSize = (page: Page) => ({ w: page.size.w, h: page.size.h })
 
-  // Export raster: sayfayı GERÇEK boyutunda çizer (~144dpi). Remap YOK —
-  // mürekkep zaten sayfa uzayında, arkaplan tam kanama. Kâğıt varsa dolar, PDF modu şeffaf kalır.
-  // scale parametreli: thumbnail seridi düşük çözünürlük ister.
-  const EXPORT_SCALE = 2
+  // Export raster (varsayılan ölçek: config/engine EXPORT_SCALE).
+  // Remap YOK — mürekkep zaten sayfa uzayında, arkaplan tam kanama.
   const exportPageToCanvas = (page: Page, scale = EXPORT_SCALE): HTMLCanvasElement | null => {
     const { w, h } = page.size
     if (!(w > 0 && h > 0)) return null
@@ -2432,11 +2396,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     cssH: number
   }
 
-  // PDF kalite politikası: import'ta yüksek çözünürlük, zoom sonunda ihtiyaca göre yenile.
-  const PDF_RENDER_BASE = 3
-  const PDF_RENDER_MANY = 1.5
-  const PDF_RENDER_MAX = 4
-  const RERENDER_DELAY = 600
+  // PDF kalite politikası: config/engine (PDF_RENDER_*, RERENDER_DELAY).
   // Açık PDF'in bytes'ları (yeniden render için bellekte; kapatınca silinir).
   let pdfBytesCache: Uint8Array | null = null
   // Sayfa id → bitmap'in render ölçeği (pt→bitmap px). İhtiyaç hesabının girdisi.
@@ -2455,7 +2415,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     const pdf = await pdfjs.getDocument({ data: bytes }).promise
     try {
       // Tam boyut hamlesi: bitmap sayfa puntosunun katları (zoom'da erime payı).
-      const scale = pdf.numPages > 30 ? PDF_RENDER_MANY : PDF_RENDER_BASE
+      const scale = pdf.numPages > PDF_MANY_THRESHOLD ? PDF_RENDER_MANY : PDF_RENDER_BASE
       const out: RenderedPdfPage[] = []
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i)
@@ -2766,7 +2726,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         paintPatternVector(doc, page, paperBackground.value)
       }
       const bg = bgCanvases.get(page.id)
-      if (bg) doc.addImage(bg.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, w, h)
+      if (bg) doc.addImage(bg.toDataURL('image/jpeg', JPEG_QUALITY), 'JPEG', 0, 0, w, h)
       for (const img of page.images) {
         const bmp = imgBitmaps.get(img.fileId)
         if (bmp) doc.addImage(bmp.toDataURL('image/png'), 'PNG', img.x, img.y, img.w, img.h)
@@ -2834,8 +2794,8 @@ export const useDrawingStore = defineStore('drawing', () => {
   const bufToB64 = (buf: ArrayBuffer): string => {
     const bytes = new Uint8Array(buf)
     let s = ''
-    for (let i = 0; i < bytes.length; i += 0x8000) {
-      s += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+    for (let i = 0; i < bytes.length; i += B64_CHUNK) {
+      s += String.fromCharCode(...bytes.subarray(i, i + B64_CHUNK))
     }
     return btoa(s)
   }
@@ -2978,8 +2938,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     pdfBusy.value = true
     try {
       const fallback = {
-        w: canvasRef.value?.clientWidth || 800,
-        h: canvasRef.value?.clientHeight || 600,
+        w: canvasRef.value?.clientWidth || FALLBACK_VIEWPORT.w,
+        h: canvasRef.value?.clientHeight || FALLBACK_VIEWPORT.h,
       }
       const clean = (d.pages as unknown as RawPage[])
         .map((p) => pageFromRaw(p, fallback))
@@ -3227,7 +3187,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     saveTimer = setTimeout(() => {
       saveTimer = undefined
       void persistNow()
-    }, 800)
+    }, SAVE_DELAY)
     // Tüm içerik mutasyonları buradan geçer → thumbnail seridi kirlenir.
     // Görünüm-only op'lar (zoom/pan) buraya uğramaz, serit boşuna yanmaz.
     thumbTick.value += 1
@@ -3461,8 +3421,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     let loaded: Page[] | null = null
     const viewFallback = {
-      w: canvasRef.value?.clientWidth || 800,
-      h: canvasRef.value?.clientHeight || 600,
+      w: canvasRef.value?.clientWidth || FALLBACK_VIEWPORT.w,
+      h: canvasRef.value?.clientHeight || FALLBACK_VIEWPORT.h,
     }
     if ((doc.v === 2 || doc.v === 3 || doc.v === 4 || doc.v === 5) && Array.isArray(doc.pages)) {
       const clean = (doc.pages as unknown as RawPage[])
