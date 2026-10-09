@@ -590,7 +590,70 @@ export const useDrawingStore = defineStore('drawing', () => {
   const strokes = computed(() => activeLayer.value.strokes)
 
   // Undo ile çıkanlar buraya; yeni çizgi VEYA sayfa değişimi öldürür.
-  const redoStack = ref<Stroke[]>([])
+  // ESKİ Stroke[] redo — snapshot modeline geçildi (aşağıda DocSnap).
+  interface DocSnap {
+    pages: Page[]
+    activePageIndex: number
+  }
+  const undoStack = ref<DocSnap[]>([])
+  const redoStack = ref<DocSnap[]>([])
+  const HISTORY_CAP = 25
+
+  const snapshotDoc = (): DocSnap => ({
+    pages: pages.value.map((p) => ({
+      id: p.id,
+      layers: p.layers.map(snapshotLayer),
+      activeLayerId: p.activeLayerId,
+      texts: p.texts.map(snapshotText),
+      images: p.images.map(snapshotImage),
+      size: { w: p.size.w, h: p.size.h },
+      ...(p.pdfPageIndex !== undefined ? { pdfPageIndex: p.pdfPageIndex } : {}),
+    })),
+    activePageIndex: activePageIndex.value,
+  })
+
+  const restoreDoc = (s: DocSnap) => {
+    // Snapshot'lar değişmez: geri yükleme de klonlar (canlı yazım geçmişi kirletmesin).
+    pages.value = s.pages.map((p) => ({
+      id: p.id,
+      layers: p.layers.map((l) => ({
+        id: l.id,
+        name: l.name,
+        visible: l.visible,
+        strokes: l.strokes.map(snapshotStroke),
+      })),
+      activeLayerId: p.activeLayerId,
+      texts: p.texts.map(snapshotText),
+      images: p.images.map(snapshotImage),
+      size: { w: p.size.w, h: p.size.h },
+      ...(p.pdfPageIndex !== undefined ? { pdfPageIndex: p.pdfPageIndex } : {}),
+    }))
+    activePageIndex.value = Math.min(s.activePageIndex, Math.max(0, pages.value.length - 1))
+  }
+
+  // Yapısal op öncesi çağrılır: redo ölür, derinlik cap'lenir.
+  const pushHistory = () => {
+    undoStack.value.push(snapshotDoc())
+    if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
+    redoStack.value = []
+    lastPushKey = ''
+  }
+
+  // Sürekli op'lar (yazı, boyut sürgüsü) için: aynı anahtar art arda tek kayıt olur.
+  let lastPushKey = ''
+  const pushHistoryKeyed = (key: string) => {
+    if (lastPushKey === key) return
+    lastPushKey = key
+    undoStack.value.push(snapshotDoc())
+    if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
+    redoStack.value = []
+  }
+
+  const clearHistory = () => {
+    undoStack.value = []
+    redoStack.value = []
+    lastPushKey = ''
+  }
   // Son başarılı autosave saati (HH:MM) — header göstergesi, nadiren yazılır.
   const lastSavedAt = ref('')
   // Bulunan kayıtlı oturum özeti — OTOMATİK YÜKLENMEZ, kullanıcı banner'dan seçer.
@@ -656,13 +719,12 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (selectedIds.value.length === 0) return 0
     const set = new Set(selectedIds.value)
     const before = activeLayer.value.strokes.length
+    pushHistory()
     activeLayer.value.strokes = activeLayer.value.strokes.filter((s) => !set.has(s.id))
     const removed = before - activeLayer.value.strokes.length
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
-    redoStack.value = []
-    erasedGrave.length = 0
     recountActive()
     repaintBase()
     clearOverlay()
@@ -706,7 +768,8 @@ export const useDrawingStore = defineStore('drawing', () => {
         p.y += dy
       }
     }
-    redoStack.value = []
+    // Seçim korunur (zincir taşıma için). History: sürüklemede component başta açar,
+    // nudge'ta component önce iter — burada kayıt YOK (tur başına tek kayıt).
     recountActive()
     repaintBase()
     scheduleSave()
@@ -769,9 +832,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       points: s.points.map((p) => ({ x: p.x + dx, y: p.y + dy, pressure: p.pressure })),
     }))
     if (pasted.length === 0) return 0
+    pushHistory()
     for (const s of pasted) activeLayer.value.strokes.push(s)
     selectedIds.value = pasted.map((s) => s.id)
-    redoStack.value = []
     recountActive()
     repaintBase()
     clearOverlay()
@@ -794,7 +857,6 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   const clearActiveText = () => {
     activeTextId.value = null
-    activeImageId.value = null
   }
   // Metin kaba kutusu (ölçümsüz tahmin; vuruş-testi ve daire-değme için yeterli).
   const textBBoxOf = (t: TextItem): { x0: number; y0: number; x1: number; y1: number } => {
@@ -824,17 +886,18 @@ export const useDrawingStore = defineStore('drawing', () => {
       color: color.value,
       size: textSize.value,
     }
+    pushHistory()
     activePage.value.texts.push(item)
     activeTextId.value = item.id
     selectedIds.value = []
     activeImageId.value = null
-    redoStack.value = []
     scheduleSave()
     return item.id
   }
   const updateText = (id: string, text: string): boolean => {
     const t = activePage.value.texts.find((x) => x.id === id)
     if (!t) return false
+    pushHistoryKeyed('text-type')
     t.text = text.slice(0, 2000)
     recountActive()
     repaintBase()
@@ -844,6 +907,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const updateTextStyle = (id: string, patch: { color?: string; size?: number }): boolean => {
     const t = activePage.value.texts.find((x) => x.id === id)
     if (!t) return false
+    pushHistoryKeyed('text-style')
     if (patch.color !== undefined && /^#[0-9a-fA-F]{6}$/.test(patch.color)) t.color = patch.color
     if (patch.size !== undefined && Number.isFinite(patch.size)) {
       t.size = Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, Math.round(patch.size)))
@@ -863,17 +927,15 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (nx === t.x && ny === t.y) return false
     t.x = nx
     t.y = ny
-    redoStack.value = []
     repaintBase()
     scheduleSave()
     return true
   }
   const deleteText = (id: string): boolean => {
-    const before = activePage.value.texts.length
+    if (!activePage.value.texts.some((t) => t.id === id)) return false
+    pushHistory()
     activePage.value.texts = activePage.value.texts.filter((t) => t.id !== id)
-    if (activePage.value.texts.length === before) return false
     if (activeTextId.value === id) activeTextId.value = null
-    redoStack.value = []
     recountActive()
     repaintBase()
     clearOverlay()
@@ -906,7 +968,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (nx === img.x && ny === img.y) return false
     img.x = nx
     img.y = ny
-    redoStack.value = []
     repaintBase()
     scheduleSave()
     return true
@@ -918,9 +979,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     const nw = Math.min(3000, Math.max(16, Math.round(w)))
     const nh = Math.min(3000, Math.max(16, Math.round(h)))
     if (nw === img.w && nh === img.h) return false
+    pushHistoryKeyed('img-size')
     img.w = nw
     img.h = nh
-    redoStack.value = []
     repaintBase()
     scheduleSave()
     return true
@@ -928,11 +989,10 @@ export const useDrawingStore = defineStore('drawing', () => {
   const deleteImage = (id: string): boolean => {
     const img = activePage.value.images.find((x) => x.id === id)
     if (!img) return false
+    pushHistory()
     activePage.value.images = activePage.value.images.filter((t) => t.id !== id)
     if (activeImageId.value === id) activeImageId.value = null
-    // Bytes'ı da sil (paylaşım yok — her ekleme kendi dosyasını yazar).
-    void idbDeleteFile(img.fileId).catch(() => {})
-    redoStack.value = []
+    // Bytes SİLİNMEZ: undo referansı geri getirebilir (tekil silinti yetimleri IDB'de kalır).
     recountActive()
     repaintBase()
     clearOverlay()
@@ -1002,6 +1062,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       await idbSetImage(rec)
       imgBitmaps.set(fileId, canvas)
+      pushHistory()
       const item: ImageItem = {
         id: newStrokeId(),
         x: Math.min(size.w - 8, Math.max(-w + 8, Math.round(x - w / 2))),
@@ -1014,7 +1075,6 @@ export const useDrawingStore = defineStore('drawing', () => {
       activeImageId.value = item.id
       selectedIds.value = []
       activeTextId.value = null
-      redoStack.value = []
       recountActive()
       repaintBase()
       clearOverlay()
@@ -1062,6 +1122,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const addLayer = (name?: string): string => {
     const p = activePage.value
     const clean = typeof name === 'string' ? name.trim().slice(0, 40) : ''
+    pushHistory()
     const layer: Layer = {
       id: newStrokeId(),
       name: clean || `Katman ${p.layers.length + 1}`,
@@ -1073,7 +1134,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
-    redoStack.value = []
     recountActive()
     repaintBase()
     clearOverlay()
@@ -1084,6 +1144,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     const p = activePage.value
     const i = p.layers.findIndex((l) => l.id === id)
     if (i === -1) return false
+    pushHistory()
     if (p.layers.length <= 1) {
       // Son katman silinmez — içi boşaltılır (metin/resim durur).
       p.layers[0]!.strokes = []
@@ -1096,8 +1157,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
-    redoStack.value = []
-    erasedGrave.length = 0
     recountActive()
     repaintBase()
     clearOverlay()
@@ -1109,6 +1168,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (!l) return false
     const clean = typeof name === 'string' ? name.trim().slice(0, 40) : ''
     if (!clean || clean === l.name) return false
+    pushHistory()
     l.name = clean
     scheduleSave()
     return true
@@ -1124,6 +1184,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const toggleLayerVisible = (id: string): boolean => {
     const l = activePage.value.layers.find((x) => x.id === id)
     if (!l) return false
+    pushHistory()
     l.visible = !l.visible
     repaintBase()
     scheduleSave()
@@ -1135,6 +1196,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     const i = p.layers.findIndex((l) => l.id === id)
     const j = i + dir
     if (i === -1 || j < 0 || j >= p.layers.length) return false
+    pushHistory()
     const tmp = p.layers[i]!
     p.layers[i] = p.layers[j]!
     p.layers[j] = tmp
@@ -1257,23 +1319,18 @@ export const useDrawingStore = defineStore('drawing', () => {
     return 0.5
   }
 
-  // --- Vuruş-silgi (stroke-eraser): dokunduğu çizgiyi tümden söker ---
-  // Silgi stroke'ları hedef değildir (mürekkep hortlamasın). Sökülenler mezara
-  // (sayfa+katman kimlikli) konur → undo kronolojik olmasa da geri getirir.
-  // 200'de cap'lenir (bellek emniyeti).
-  type GraveRemoved =
-    | { kind: 'stroke'; stroke: Stroke; index: number }
-    | { kind: 'text'; text: TextItem; index: number }
-  interface GraveEntry {
-    pageId: string
-    layerId: string
-    session: number
-    removed: GraveRemoved[]
-    addedIds: string[]
-  }
-  let erasedGrave: GraveEntry[] = []
-  // Silgi oturumu: basılı-sürükleme turu. Aynı turun kayıtları tek undo'da birleşir.
+  // --- Silgi (iki mod da veri-seviyesinde): sökülen history'de yaşar ---
+  // Vuruş: dokunduğu çizgiyi/metin kutusunu tümden söker. Kes: dairede kalanı keser.
+  // Silgi stroke'ları hedef değildir (mürekkep hortlamasın).
   let eraseSession = 0
+  let lastPushedSession = -1
+  // Oturumun ilk gerçek sökümünde tek kayıt açar (sürükleme tek undo olur).
+  const noteEraseMutation = () => {
+    if (lastPushedSession !== eraseSession) {
+      lastPushedSession = eraseSession
+      pushHistory()
+    }
+  }
   // Metinler mürekkebin ÜSTÜNDE boyanır → vuruşta önce metne bakılır.
   const eraseStrokeAt = (x: number, y: number): boolean => {
     const hitText = textAt(x, y)
@@ -1281,16 +1338,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       const tarr = activePage.value.texts
       const idx = tarr.findIndex((t) => t.id === hitText.id)
       if (idx !== -1) {
+        noteEraseMutation()
         const [gone] = tarr.splice(idx, 1)
-        erasedGrave.push({
-          pageId: activePage.value.id,
-          layerId: activeLayer.value.id,
-          session: eraseSession,
-          removed: [{ kind: 'text', text: gone!, index: idx }],
-          addedIds: [],
-        })
-        if (erasedGrave.length > 200) erasedGrave.shift()
-        redoStack.value = []
         if (activeTextId.value === gone!.id) activeTextId.value = null
         return true
       }
@@ -1302,16 +1351,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       const bb = strokeBBox(s)
       if (!bb) continue
       if (x < bb.x0 || x > bb.x1 || y < bb.y0 || y > bb.y1) continue
+      noteEraseMutation()
       const [gone] = arr.splice(i, 1)
-      erasedGrave.push({
-        pageId: activePage.value.id,
-        layerId: activeLayer.value.id,
-        session: eraseSession,
-        removed: [{ kind: 'stroke', stroke: gone!, index: i }],
-        addedIds: [],
-      })
-      if (erasedGrave.length > 200) erasedGrave.shift()
-      redoStack.value = []
       if (selectedIds.value.includes(gone!.id)) {
         selectedIds.value = selectedIds.value.filter((id) => id !== gone!.id)
       }
@@ -1327,8 +1368,13 @@ export const useDrawingStore = defineStore('drawing', () => {
   const eraseRadius = (): number => Math.max(strokeWidth.value / 2, 2.5)
   const splitEraseAt = (x: number, y: number, radius: number): boolean => {
     const layer = activeLayer.value
-    const removed: GraveRemoved[] = []
-    const addedIds: string[] = []
+    let touched = false
+    const touch = () => {
+      if (!touched) {
+        touched = true
+        noteEraseMutation()
+      }
+    }
     // Metin kutuları parçalanmaz: daire değerse tümden gider.
     const tarr = activePage.value.texts
     for (let i = tarr.length - 1; i >= 0; i--) {
@@ -1340,8 +1386,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       const dx = x - nx
       const dy = y - ny
       if (dx * dx + dy * dy > radius * radius) continue
+      touch()
       const [gone] = tarr.splice(i, 1)
-      removed.push({ kind: 'text', text: gone!, index: i })
       if (activeTextId.value === gone!.id) activeTextId.value = null
     }
     const keptSel = new Set(selectedIds.value)
@@ -1353,8 +1399,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (bb.x1 < x - radius || bb.x0 > x + radius || bb.y1 < y - radius || bb.y0 > y + radius) continue
       const runs = splitRunsOutside(s.points, x, y, radius)
       if (runs.length === 1 && runs[0]!.length === s.points.length) continue // değmedi
-      const [gone] = layer.strokes.splice(i, 1)
-      removed.push({ kind: 'stroke', stroke: gone!, index: i })
+      touch()
+      layer.strokes.splice(i, 1)
       const pieces: Stroke[] = []
       for (const run of runs) {
         if (run.length === 0) continue
@@ -1368,7 +1414,6 @@ export const useDrawingStore = defineStore('drawing', () => {
           points: run,
         }
         pieces.push(piece)
-        addedIds.push(piece.id)
       }
       // Parçalar orijinal sıraya (z-düzeni korunur).
       layer.strokes.splice(i, 0, ...pieces)
@@ -1377,10 +1422,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         selChanged = true
       }
     }
-    if (removed.length === 0) return false
-    erasedGrave.push({ pageId: activePage.value.id, layerId: layer.id, session: eraseSession, removed, addedIds })
-    if (erasedGrave.length > 200) erasedGrave.shift()
-    redoStack.value = []
+    if (!touched) return false
     if (selChanged) selectedIds.value = [...keptSel]
     return true
   }
@@ -1519,10 +1561,9 @@ export const useDrawingStore = defineStore('drawing', () => {
             ]
           : [...points.value],
       }
+      // Yeni mürekkep: ÖNCE pre-state kaydı, sonra ekle (undo çizeri geri alır).
+      pushHistory()
       activeLayer.value.strokes.push(stroke)
-      // Yeni mürekkep redo'yu ve eski seçimi öldürür (vuruş-silgi mezarı da kapanır).
-      redoStack.value = []
-      erasedGrave.length = 0
       selectedIds.value = []
       activeTextId.value = null
     activeImageId.value = null
@@ -1970,11 +2011,10 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Canvası temizle — sadece AKTİF sayfa (sayfalar varken global silme yok).
   const clearCanvas = () => {
     deleteImageFilesOf([activePage.value])
+    pushHistory()
     activeLayer.value.strokes = []
     activePage.value.texts = []
     activePage.value.images = []
-    redoStack.value = []
-    erasedGrave.length = 0
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -2136,7 +2176,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       pdfId.value = id
       pdfName.value = file.name
       activePageIndex.value = 0
-      redoStack.value = []
+      clearHistory()
       selectedIds.value = []
       activeTextId.value = null
     activeImageId.value = null
@@ -2631,7 +2671,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         typeof idx === 'number' && Number.isFinite(idx)
           ? Math.min(clean.length - 1, Math.max(0, Math.floor(idx)))
           : 0
-      redoStack.value = []
+      clearHistory()
       selectedIds.value = []
       activeTextId.value = null
       activeImageId.value = null
@@ -2672,7 +2712,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     deleteImageFilesOf(pages.value)
     pages.value = [blankPage()]
     activePageIndex.value = 0
-    redoStack.value = []
+    clearHistory()
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -3062,7 +3102,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (!loaded || loaded.length === 0) return false
     pages.value = loaded
     savedSession.value = null
-    redoStack.value = []
+    clearHistory()
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -3088,56 +3128,13 @@ export const useDrawingStore = defineStore('drawing', () => {
     return true
   }
 
-  // ✅ Son stroke'u geri al (undo) — aktif sayfada
+  // ✅ Geri al — snapshot history'den (tüm yapısal op'lar: mürekkep/silgi/taşı/yapıştır/metin/resim/katman/sayfa).
   const undoLastStroke = () => {
-    // Önce mezar: silgiyle sökülen aynı sayfa+katmandaysa yerine konur.
-    // Kes-silgi parçaları kaldırılır, orijinaller sırasına döner.
-    // Başka sayfaya geçildiyse bayat kayıtlar sessizce düşer.
-    let g = erasedGrave.pop()
-    while (g && (g.pageId !== activePage.value.id || g.layerId !== activeLayer.value.id)) {
-      g = erasedGrave.pop()
-    }
-    if (g) {
-      // Aynı oturumun ardışık kayıtları tek undo'da birleşir (sürükle-sil tek hamlede döner).
-      // Ara parçalar hem eklenen hem sökülen tarafta görünür → net etki korunur:
-      // eklenen id'si olan sökük atlanır, gerçek kayıp geri konur.
-      let top = erasedGrave[erasedGrave.length - 1]
-      while (
-        top &&
-        top.session === g.session &&
-        top.pageId === g.pageId &&
-        top.layerId === g.layerId
-      ) {
-        erasedGrave.pop()
-        g.removed.push(...top.removed)
-        g.addedIds.push(...top.addedIds)
-        top = erasedGrave[erasedGrave.length - 1]
-      }
-      const added = new Set(g.addedIds)
-      if (added.size > 0) {
-        activeLayer.value.strokes = activeLayer.value.strokes.filter((s) => !added.has(s.id))
-      }
-      for (const r of g.removed) {
-        if (r.kind === 'stroke') {
-          if (added.has(r.stroke.id)) continue
-          const arr = activeLayer.value.strokes
-          arr.splice(Math.min(r.index, arr.length), 0, r.stroke)
-        } else {
-          const arr = activePage.value.texts
-          arr.splice(Math.min(r.index, arr.length), 0, r.text)
-        }
-      }
-      points.value = []
-      isDrawing.value = false
-      repaintBase()
-      clearOverlay()
-      bb = null
-      recountActive()
-      scheduleSave()
-      return
-    }
-    const popped = activeLayer.value.strokes.pop()
-    if (popped) redoStack.value.push(popped)
+    const prev = undoStack.value.pop()
+    if (!prev) return
+    redoStack.value.push(snapshotDoc())
+    if (redoStack.value.length > HISTORY_CAP) redoStack.value.shift()
+    restoreDoc(prev)
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -3150,11 +3147,13 @@ export const useDrawingStore = defineStore('drawing', () => {
     scheduleSave()
   }
 
-  // ✅ Yinele (redo) — undo ile çıkan en son stroke'u geri koyar (aktif sayfada).
+  // ✅ Yinele — ileri snapshot'a döner.
   const redo = (): boolean => {
-    const s = redoStack.value.pop()
-    if (!s) return false
-    activeLayer.value.strokes.push(s)
+    const next = redoStack.value.pop()
+    if (!next) return false
+    undoStack.value.push(snapshotDoc())
+    if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
+    restoreDoc(next)
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -3169,8 +3168,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     const clamped = Math.min(pages.value.length - 1, Math.max(0, Math.floor(i)))
     if (clamped === activePageIndex.value) return
     activePageIndex.value = clamped
-    // Sayfa değişimi redo'yu ve seçimi öldürür (global stack sayfalar arası taşınmaz).
-    redoStack.value = []
+    // Sayfa değişimi seçimi öldürür; redo YAŞAR (snapshot tüm belgeyi tutar).
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -3185,23 +3183,24 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   const addPage = () => {
+    pushHistory()
     pages.value.push(blankPage())
     goToPage(pages.value.length - 1)
     scheduleSave()
   }
 
   // Silinen aktifse komşuya geçilir. Son sayfa silinemez. Veri kaybına karşı
-  // component confirm() sorar (undo sayfa silişini geri getirmez).
+  // component confirm() sorar (silme history'den geri alınabilir).
   const deletePage = (i: number): boolean => {
     if (pages.value.length <= 1) return false
     const clamped = Math.min(pages.value.length - 1, Math.max(0, Math.floor(i)))
+    pushHistory()
     const [removed] = pages.value.splice(clamped, 1)
     if (removed) {
       bgCanvases.delete(removed.id)
       pdfRenderScales.delete(removed.id)
       deleteImageFilesOf([removed])
     }
-    redoStack.value = []
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -3364,6 +3363,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     undoLastStroke,
     redo,
     redoStack,
+    undoStack,
+    pushHistory,
     pdfBusy,
     pdfId,
     pdfName,

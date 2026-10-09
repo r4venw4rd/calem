@@ -371,7 +371,7 @@
 
       <button
         @click="undo"
-        :disabled="store.strokes.length === 0"
+        :disabled="store.undoStack.length === 0"
         class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition disabled:opacity-40 disabled:cursor-not-allowed"
         title="Geri al (Ctrl+Z)"
       >
@@ -1055,6 +1055,7 @@ let selCurrent: { x: number; y: number } | null = null
 let selPoly: { x: number; y: number }[] | null = null
 let selMoving = false
 let selLast: { x: number; y: number } | null = null
+let selHistOpen = false
 
 const cancelSelGesture = () => {
   selActive = false
@@ -1063,6 +1064,7 @@ const cancelSelGesture = () => {
   selAnchor = null
   selCurrent = null
   selPoly = null
+  selHistOpen = false
   activePointerId = null
 }
 
@@ -1165,6 +1167,10 @@ const selectMove = (e: PointerEvent) => {
   for (const ev of coalescedOf(e)) {
     const p = store.eventToPage(ev)
     if (selMoving && selLast) {
+      if (!selHistOpen) {
+        selHistOpen = true
+        store.pushHistory()
+      }
       store.moveSelected(p.x - selLast.x, p.y - selLast.y)
       selLast = p
     } else if (selPoly) {
@@ -1187,6 +1193,7 @@ const selectUp = (e?: PointerEvent) => {
   }
   selActive = false
   activePointerId = null
+  selHistOpen = false
   if (selMoving) {
     selMoving = false
     selLast = null
@@ -1276,6 +1283,7 @@ const textMove = (e: PointerEvent) => {
         textMoving = true
         textMoveId = textDownHit
         textMoveLast = p
+        store.pushHistory()
         store.clearActiveText()
       }
     } else if (textMoving && textMoveId && textMoveLast) {
@@ -1381,6 +1389,7 @@ const imageMove = (e: PointerEvent) => {
         imgMoving = true
         imgMoveId = imgDownHit
         imgMoveLast = p
+        store.pushHistory()
       }
     } else if (imgMoving && imgMoveId && imgMoveLast) {
       store.moveImage(imgMoveId, p.x - imgMoveLast.x, p.y - imgMoveLast.y)
@@ -1663,6 +1672,7 @@ const onKeyDown = (e: KeyboardEvent) => {
       const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
       const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
       if (dx || dy) {
+        store.pushHistory()
         store.moveSelected(dx, dy)
         drawSelectionOverlay()
         updateHud(true)
