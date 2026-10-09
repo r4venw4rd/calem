@@ -420,6 +420,7 @@
         class="w-[min(92vw,380px)] max-h-[85vh] flex flex-col rounded-xl bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] shadow-2xl"
         role="dialog"
         aria-label="Ayarlar"
+        @keydown.tab="trapFocus"
       >
         <div class="flex items-center justify-between px-3 pt-3 pb-2">
           <span class="font-medium text-[var(--chrome-title)]">Ayarlar</span>
@@ -1610,6 +1611,28 @@ const onTextColorInput = (hex: string) => {
   store.updateTextStyle(store.activeTextId, { color: hex })
 }
 
+// Sekme odağını modal içinde tut (arkadaki toolbar'a kaçmasın).
+const trapFocus = (e: KeyboardEvent) => {
+  const panel = settingsPanel.value
+  if (!panel) return
+  const nodes = [
+    ...panel.querySelectorAll<HTMLElement>(
+      'button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    ),
+  ].filter((n) => !n.hasAttribute('disabled') && n.offsetParent !== null)
+  if (nodes.length === 0) return
+  const first = nodes[0]!
+  const last = nodes[nodes.length - 1]!
+  const active = document.activeElement as HTMLElement | null
+  if (e.shiftKey && (active === first || !panel.contains(active))) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault()
+    first.focus()
+  }
+}
+
 const closeTextEditor = () => {
   const t = store.activeText()
   // Boş bırakılan kutu çöp olmasın.
@@ -1930,6 +1953,8 @@ const onKeyDown = (e: KeyboardEvent) => {
   if (!mod && !e.altKey && e.key === 'Escape') {
     if (closeMenus()) return
   }
+  // Açık bir diyalog/panel varken araç kısayolları arkada tetiklenmesin (scrim altında state değişmesin).
+  if (showFile.value || showSettings.value || showLayers.value) return
   // Space basılı kaydırma (önce Space, sonra sürükle). Tekrarlanan keydown yoksayılır.
   if (!mod && !e.altKey && e.key === ' ' && !e.repeat) {
     if (t && t.tagName === 'BUTTON') return
@@ -2415,6 +2440,7 @@ const toggleScroll = async () => {
 let stopSelWatch: (() => void) | null = null
 let stopTextWatch: (() => void) | null = null
 let stopPageWatch: (() => void) | null = null
+let stopSettingsWatch: (() => void) | null = null
 
 // Sayfa şeridi: düşük çözünürlüklü önbellek, tick+sayfa-değişiminde debounce'lu tazelenir.
 const thumbs = ref<string[]>([])
@@ -2476,6 +2502,16 @@ onMounted(() => {
     () => store.selectedIds,
     () => drawSelectionOverlay(),
   )
+  // Diyalog açılınca ilk kontrole odaklan, kapanınca tetikleyiciye dön.
+  stopSettingsWatch = watch(showSettings, (open) => {
+    if (open) {
+      nextTick(() =>
+        settingsPanel.value?.querySelector<HTMLElement>('button, input, select, textarea')?.focus(),
+      )
+    } else {
+      settingsBtn.value?.querySelector<HTMLElement>('button')?.focus()
+    }
+  })
   // Editör açılınca fareyi bekletme — klavye hazır gelsin.
   stopTextWatch = watch(
     () => store.activeTextId,
@@ -2523,6 +2559,8 @@ onUnmounted(() => {
   stopBlockWatch = null
   stopPageWatch?.()
   stopPageWatch = null
+  stopSettingsWatch?.()
+  stopSettingsWatch = null
   if (blockTimer) clearTimeout(blockTimer)
   blockTimer = undefined
   blockEls.clear()
