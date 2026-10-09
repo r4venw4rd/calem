@@ -258,7 +258,7 @@
             <button
               @click="store.removeColorFromPalette(hex)"
               title="Rengi paletten kaldır"
-              class="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 hidden group-hover:flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[9px] leading-none text-[var(--chrome-text)]"
+              class="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 hidden group-hover:flex group-focus-within:flex pointer-coarse:flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[9px] leading-none text-[var(--chrome-text)]"
             >
               ×
             </button>
@@ -302,7 +302,7 @@
               v-if="store.customColors[i - 1]"
               @click="store.removeCustomColor(store.customColors[i - 1]!)"
               title="Custom rengi kaldır"
-              class="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 hidden group-hover:flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[9px] leading-none text-[var(--chrome-text)]"
+              class="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 hidden group-hover:flex group-focus-within:flex pointer-coarse:flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[9px] leading-none text-[var(--chrome-text)]"
             >
               ×
             </button>
@@ -310,7 +310,7 @@
               v-if="store.customColors[i - 1]"
               @click="editingCustom = i - 1"
               title="Düzenle: damladan yeni rengi seç"
-              class="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 hidden group-hover:flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[9px] leading-none text-[var(--chrome-text)]"
+              class="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 hidden group-hover:flex group-focus-within:flex pointer-coarse:flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[9px] leading-none text-[var(--chrome-text)]"
             >
               ✎
             </button>
