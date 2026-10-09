@@ -328,7 +328,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // v5 öncesi kayıtlarda el en sondadır; kullanıcının gizlilik/sıra tercihini
   // bozmadan sadece elin konumunu düzeltir.
   const migrateToolbarHand = (order: Tool[]): Tool[] => {
-    const next = order.filter((t) => t !== 'hand')
+    const next: Tool[] = order.filter((t) => t !== 'hand')
     const ei = next.indexOf('eraser')
     const at = ei === -1 ? Math.min(2, next.length) : ei + 1
     next.splice(at, 0, 'hand')
