@@ -102,7 +102,9 @@ Aşağıdakiler manuel/E2E şemasıdır. Her maddede **beklenen sonuç** yazar.
 | 11.1 | Açık tema | Menü düğmeleri + select listeleri okunur (beyaz üstüne beyaz yok) |
 | 11.2 | Menü açıkken dışarı tıkla / Esc | Menü kapanır, çizim etkilenmez |
 | 11.3 | Sunum (F) | Fullscreen + sade chrome, sayaç + Çık; Esc çıkarır |
-| 11.4 | Yeniden yükle | Tema + toolbar + kâğıt + smoothing korunur |
+| 11.4 | Ayarlar modalı + backdrop tıkla | Ortalanmış pencere, kayar gövde; backdrop kapatır |
+| 11.5 | Dokunmayla kaydır açıkken parmak sürükle | Ekran kayar, mürekkep bulaşmaz |
+| 11.6 | Yeniden yükle | Tema + toolbar + kâğıt + smoothing + dokun-kaydır korunur |
 
 ## 12. Regresyon kapısı (her push öncesi)
 - `npm run type-check` temiz, `npm run build-only` temiz, `npm test` 33/33.
