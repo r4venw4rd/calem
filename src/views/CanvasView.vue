@@ -255,9 +255,11 @@
         </div>
         <div class="flex items-center gap-1.5">
           <input
+            ref="customPicker"
             type="color"
             :value="store.color"
             @input="onCustomInput(($event.target as HTMLInputElement).value)"
+            @cancel="pickerArmed = false"
             class="w-6 h-6 rounded-full bg-transparent border border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0 shrink-0"
             title="Özel renk (custom slot seçiliyse onu düzenler)"
           />
@@ -276,8 +278,8 @@
             ></button>
             <button
               v-else
-              @click="store.addCustomColor()"
-              title="Mevcut rengi buraya ekle"
+              @click="pickCustom()"
+              title="Renk seçiciyi aç"
               class="w-6 h-6 rounded-full border border-dashed border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition font-mono block"
             >
               +
@@ -1524,10 +1526,32 @@ const onTextInput = (e: Event) => {
 }
 
 // Damla: custom slot seçiliyse onu yerinde düzenler, değilse rengi seçer.
+// Boş "+" önce damla diyaloğunu açar; seçim o diyaloğa düşer (iptalde @cancel temizler).
+const customPicker = ref<HTMLInputElement | null>(null)
+let pickerArmed = false
 const onCustomInput = (hex: string) => {
+  if (pickerArmed) {
+    pickerArmed = false
+    store.addCustomColor(hex)
+    return
+  }
   const idx = store.customColors.indexOf(store.color)
   if (idx !== -1) store.setCustomSlot(idx, hex)
   else store.setColor(hex)
+}
+const pickCustom = () => {
+  const picker = customPicker.value
+  pickerArmed = false
+  if (picker && typeof picker.showPicker === 'function') {
+    try {
+      pickerArmed = true
+      picker.showPicker()
+      return
+    } catch {
+      pickerArmed = false
+    }
+  }
+  store.addCustomColor()
 }
 
 const onTextSizeInput = (n: number) => {
