@@ -2356,6 +2356,7 @@ const movePageR = () => {
 }
 
 const restoreSession = async () => {
+  if (store.hasInk && !confirm('Mevcut çalışma önceki oturumla değişecek. Devam?')) return
   const ok = await store.loadPersisted()
   if (!ok) showPdfError('Oturum yüklenemedi')
   updateHud(true)
