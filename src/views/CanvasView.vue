@@ -533,6 +533,17 @@
             class="w-full accent-indigo-600"
             title="0=kapalı, 2=çok hassas"
           />
+          <div class="mb-1 mt-2 text-[var(--chrome-muted)]">Kalem yumuşatma <span class="text-[var(--chrome-faint)]">(titreme filtresi)</span></div>
+          <input
+            type="range"
+            min="0"
+            max="0.9"
+            step="0.05"
+            :value="store.smoothing"
+            @input="store.setSmoothing(Number(($event.target as HTMLInputElement).value))"
+            class="w-full accent-indigo-600"
+            title="0=ham, 0.9=çok yumuşak"
+          />
           <label class="flex items-center gap-2 mt-2 cursor-pointer" title="Açıkken parmakla çizim engellenir">
             <input
               type="checkbox"
