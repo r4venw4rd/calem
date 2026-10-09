@@ -17,6 +17,7 @@ import {
   selectByRect as selByRect,
   strokeBBox,
 } from '../lib/select'
+import { splitRunsOutside } from '../lib/erase'
 
 export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text' | 'image' | 'hand'
 export type ShapeTool = 'line' | 'rect' | 'ellipse' | 'arrow'
@@ -1250,7 +1251,13 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Silgi stroke'ları hedef değildir (mürekkep hortlamasın). Sökülenler mezara
   // (sayfa+katman kimlikli) konur → undo kronolojik olmasa da geri getirir.
   // 200'de cap'lenir (bellek emniyeti).
-  let erasedGrave: { pageId: string; layerId: string; stroke: Stroke; index: number }[] = []
+  interface GraveEntry {
+    pageId: string
+    layerId: string
+    removed: { stroke: Stroke; index: number }[]
+    addedIds: string[]
+  }
+  let erasedGrave: GraveEntry[] = []
   const eraseStrokeAt = (x: number, y: number): boolean => {
     const arr = activeLayer.value.strokes
     for (let i = arr.length - 1; i >= 0; i--) {
@@ -1260,7 +1267,12 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (!bb) continue
       if (x < bb.x0 || x > bb.x1 || y < bb.y0 || y > bb.y1) continue
       const [gone] = arr.splice(i, 1)
-      erasedGrave.push({ pageId: activePage.value.id, layerId: activeLayer.value.id, stroke: gone!, index: i })
+      erasedGrave.push({
+        pageId: activePage.value.id,
+        layerId: activeLayer.value.id,
+        removed: [{ stroke: gone!, index: i }],
+        addedIds: [],
+      })
       if (erasedGrave.length > 200) erasedGrave.shift()
       redoStack.value = []
       if (selectedIds.value.includes(gone!.id)) {
@@ -1269,6 +1281,56 @@ export const useDrawingStore = defineStore('drawing', () => {
       return true
     }
     return false
+  }
+
+  // --- Kes-silgi (standart silgi): arkaplanı BOYAMAZ, çizgi verisini keser ---
+  // Silgi dairesine giren segmentler history'den çıkar (koşular yeni parça olur).
+  // Arkaplan (kâğıt deseni / PDF / resim) tanımsız korunur — layer mekaniği gibi
+  // ama render katmanı bölmeden, veri seviyesinde. Undo mezarla geri getirir.
+  const eraseRadius = (): number => Math.max(strokeWidth.value / 2, 2.5)
+  const splitEraseAt = (x: number, y: number, radius: number): boolean => {
+    const layer = activeLayer.value
+    const removed: { stroke: Stroke; index: number }[] = []
+    const addedIds: string[] = []
+    const keptSel = new Set(selectedIds.value)
+    let selChanged = false
+    for (let i = layer.strokes.length - 1; i >= 0; i--) {
+      const s = layer.strokes[i]!
+      const bb = strokeBBox(s)
+      if (!bb) continue
+      if (bb.x1 < x - radius || bb.x0 > x + radius || bb.y1 < y - radius || bb.y0 > y + radius) continue
+      const runs = splitRunsOutside(s.points, x, y, radius)
+      if (runs.length === 1 && runs[0]!.length === s.points.length) continue // değmedi
+      const [gone] = layer.strokes.splice(i, 1)
+      removed.push({ stroke: gone!, index: i })
+      const pieces: Stroke[] = []
+      for (const run of runs) {
+        if (run.length === 0) continue
+        const piece: Stroke = {
+          id: newStrokeId(),
+          tool: s.tool,
+          color: s.color,
+          width: s.width,
+          dash: s.dash,
+          opacity: s.opacity,
+          points: run,
+        }
+        pieces.push(piece)
+        addedIds.push(piece.id)
+      }
+      // Parçalar orijinal sıraya (z-düzeni korunur).
+      layer.strokes.splice(i, 0, ...pieces)
+      if (keptSel.delete(s.id)) {
+        for (const p of pieces) keptSel.add(p.id)
+        selChanged = true
+      }
+    }
+    if (removed.length === 0) return false
+    erasedGrave.push({ pageId: activePage.value.id, layerId: layer.id, removed, addedIds })
+    if (erasedGrave.length > 200) erasedGrave.shift()
+    redoStack.value = []
+    if (selChanged) selectedIds.value = [...keptSel]
+    return true
   }
 
   // ✅ Başlat - basılı tutunca. rejectTouch'ta touch yok sayılır.
@@ -1282,6 +1344,18 @@ export const useDrawingStore = defineStore('drawing', () => {
       isDrawing.value = true
       const { x, y } = getPos(e)
       if (eraseStrokeAt(x, y)) {
+        recountActive()
+        repaintBase()
+        scheduleSave()
+      }
+      return true
+    }
+    // Kes-silgi nokta toplamaz, boyamaz: dairede kalan segmenti history'den keser.
+    // Arkaplan (desen/PDF) hiçbir katmanda ezilmez.
+    if (currentTool.value === 'eraser') {
+      isDrawing.value = true
+      const { x, y } = getPos(e)
+      if (splitEraseAt(x, y, eraseRadius())) {
         recountActive()
         repaintBase()
         scheduleSave()
@@ -1304,10 +1378,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     lastPressure = p
     points.value = [{ x: cx, y: cy, pressure: p }]
     bb = { x0: cx, y0: cy, x1: cx, y1: cy }
-    // Silgi ilk temasta base'e nokta koyar (overlay'de önizleme olmaz).
-    if (currentTool.value === 'eraser') {
-      paintEraserOnBase(points.value, strokeWidth.value, paperFor(activePage.value))
-    }
     return true
   }
 
@@ -1326,6 +1396,23 @@ export const useDrawingStore = defineStore('drawing', () => {
       for (const ev of events) {
         const p = getPos(ev as PointerEvent)
         if (eraseStrokeAt(p.x, p.y)) hit = true
+      }
+      if (hit) {
+        recountActive()
+        repaintBase()
+        scheduleSave()
+      }
+      return
+    }
+
+    // Kes-silgi: dairede kalanı kes, tur başına tek boya (arkaplan ezilmez).
+    if (currentTool.value === 'eraser') {
+      const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
+      const r = eraseRadius()
+      let hit = false
+      for (const ev of events) {
+        const p = getPos(ev as PointerEvent)
+        if (splitEraseAt(p.x, p.y, r)) hit = true
       }
       if (hit) {
         recountActive()
@@ -1358,49 +1445,10 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (y < bb.y0) bb.y0 = y
       else if (y > bb.y1) bb.y1 = y
     }
-    // Silgi: yeni segmenti hemen base'e işle (overlay bypass).
-    if (currentTool.value === 'eraser') {
-      paintEraserOnBase(pts, strokeWidth.value, paperFor(activePage.value))
-    }
-  }
-
-  // Silgi overlay'de ÇALIŞMAZ (destination-out şeffaf katmanda görünmez).
-  // Bu yüzden silgi doğrudan base'e inkremental işlenir: her yeni segment tek çizilir.
-  // History'de normal stroke olarak durur → undo/resize replay ile tutarlı.
-  // Kâğıt modunda silgi = kâğıt rengi boya (seam yok); şeffaf modda gerçek silme.
-  const paintEraserOnBase = (pts: Point[], width: number, paperHex: string | null) => {
-    if (pts.length === 0) return
-    const ctx = getCtx(canvasRef.value)
-    if (!ctx) return
-    applyView(ctx, () => {
-      ctx.save()
-      applyStyleForStroke(ctx, 'eraser', '#000000', width, paperHex)
-      if (pts.length === 1) {
-        const p = pts[0]!
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, Math.max(width / 2, 2.5), 0, Math.PI * 2)
-        if (paperHex) {
-          ctx.globalCompositeOperation = 'source-over'
-          ctx.fillStyle = paperHex
-        } else {
-          ctx.globalCompositeOperation = 'destination-out'
-          ctx.fillStyle = 'rgba(0,0,0,1)'
-        }
-        ctx.fill()
-      } else {
-        const a = pts[pts.length - 2]!
-        const b = pts[pts.length - 1]!
-        ctx.beginPath()
-        ctx.moveTo(a.x, a.y)
-        ctx.lineTo(b.x, b.y)
-        ctx.stroke()
-      }
-      ctx.restore()
-    })
   }
 
   // ✅ Bitti — stroke'u geçmişe kaydet ve base katmanına bir kez işle (overlay temizlenir).
-  // Silgi zaten çizilirken base'e işlendiği için tekrar boyanmaz (idempotent olurdu ama gereksiz).
+  // Silgi nokta toplamaz: kes/vuruş oturumlarında points boştur, kayıt oluşmaz.
   const stopDrawing = () => {
     if (isDrawing.value && points.value.length > 0) {
       // Şekiller uç-noktayla saklanır (ara noktalar sürükleme artığıdır, export'u şişirmesin).
@@ -1462,6 +1510,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     opacity = 1,
   ) => {
     if (tool === 'eraser') {
+      // LEGACY: eski kayıtlardaki boya-silgi replay'i. Yeni silgi keser, boyamaz —
+      // bu dala yeni history düşmez (stopDrawing silgiye nokta kurmaz).
       if (paperHex) {
         // Kâğıt modu: silgi = kâğıt rengi boya (opak base, seam yok, undo tutarlı).
         ctx.globalCompositeOperation = 'source-over'
@@ -2988,15 +3038,22 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // ✅ Son stroke'u geri al (undo) — aktif sayfada
   const undoLastStroke = () => {
-    // Önce mezar: vuruş-silgiyle sökülen aynı sayfa+katmandaysa yerine konur.
+    // Önce mezar: silgiyle sökülen aynı sayfa+katmandaysa yerine konur.
+    // Kes-silgi parçaları kaldırılır, orijinaller sırasına döner.
     // Başka sayfaya geçildiyse bayat kayıtlar sessizce düşer.
     let g = erasedGrave.pop()
     while (g && (g.pageId !== activePage.value.id || g.layerId !== activeLayer.value.id)) {
       g = erasedGrave.pop()
     }
     if (g) {
+      if (g.addedIds.length > 0) {
+        const drop = new Set(g.addedIds)
+        activeLayer.value.strokes = activeLayer.value.strokes.filter((s) => !drop.has(s.id))
+      }
       const arr = activeLayer.value.strokes
-      arr.splice(Math.min(g.index, arr.length), 0, g.stroke)
+      for (const r of g.removed) {
+        arr.splice(Math.min(r.index, arr.length), 0, r.stroke)
+      }
       points.value = []
       isDrawing.value = false
       repaintBase()
