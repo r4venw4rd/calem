@@ -816,7 +816,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     activePage.value.texts.push(item)
     activeTextId.value = item.id
     selectedIds.value = []
-    activeTextId.value = null
     activeImageId.value = null
     redoStack.value = []
     scheduleSave()
@@ -1003,6 +1002,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       activePage.value.images.push(item)
       activeImageId.value = item.id
       selectedIds.value = []
+      activeTextId.value = null
       redoStack.value = []
       recountActive()
       repaintBase()
