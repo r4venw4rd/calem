@@ -1790,6 +1790,9 @@ const cancelPan = () => {
 
 const startDraw = (e: PointerEvent) => {
   if (!overlayCanvas.value) return
+  // Avuç reddi pinch'ten ÖNCE: parmak (touchPan kapalıyken) hiç işleme girmez; yoksa
+  // dinlenen avuç ikinci pointer olup aktif kalem çizgisini iptal ediyordu.
+  if (e.pointerType === 'touch' && store.rejectTouch && !store.touchPan) return
   pointers.set(e.pointerId, ptrPos(e))
   if (pointers.size === 2) {
     store.cancelActiveStroke()
@@ -1830,7 +1833,6 @@ const startDraw = (e: PointerEvent) => {
     imageDown(e)
     return
   }
-  if (store.rejectTouch && e.pointerType === 'touch') return
   // pointer capture ile canvas dışına taşınca bile çizmeye devam et
   try {
     overlayCanvas.value.setPointerCapture(e.pointerId)
