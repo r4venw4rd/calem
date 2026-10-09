@@ -45,10 +45,12 @@ export interface ToolbarConfig {
 }
 export type SelectMode = 'rect' | 'lasso'
 // Renk paletleri: kayıtlı setler, aktif olanı toolbar'da dizilir.
+// Her paletin kendi custom satırı vardır (palet değişince customs da değişir).
 export interface ColorPalette {
   id: string
   name: string
   colors: string[]
+  customs: string[]
 }
 export const PALETTE_MAX_COLORS = 12
 export const PALETTE_MAX_COUNT = 8
@@ -58,16 +60,19 @@ export const DEFAULT_PALETTES: ColorPalette[] = [
     id: 'varsayilan',
     name: 'Varsayılan',
     colors: ['#ffffff', '#000000', '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7'],
+    customs: [],
   },
   {
     id: 'pastel',
     name: 'Pastel',
     colors: ['#fecaca', '#fed7aa', '#fef08a', '#bbf7d0', '#bfdbfe', '#ddd6fe', '#fbcfe8', '#ffffff'],
+    customs: [],
   },
   {
     id: 'neon',
     name: 'Neon',
     colors: ['#ff0000', '#ff8000', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#ff00ff', '#ffffff'],
+    customs: [],
   },
 ]
 export interface Point { x: number; y: number; pressure?: number }
@@ -340,9 +345,8 @@ export const useDrawingStore = defineStore('drawing', () => {
         toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
         smoothing: smoothing.value,
         touchPan: touchPan.value,
-        palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors] })),
+        palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors], customs: [...x.customs] })),
         activePaletteId: activePaletteId.value,
-        customColors: [...customColors.value],
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
@@ -365,9 +369,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
       smoothing: smoothing.value,
       touchPan: touchPan.value,
-      palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors] })),
+      palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors], customs: [...x.customs] })),
       activePaletteId: activePaletteId.value,
-      customColors: [...customColors.value],
       format: pageFormat.value,
       orientation: pageOrientation.value,
       customW: customW.value,
@@ -410,10 +413,6 @@ export const useDrawingStore = defineStore('drawing', () => {
       touchPan.value = r.touchPan
       applied = true
     }
-    if (Array.isArray(r.customColors)) {
-      customColors.value = cleanCustomList(r.customColors)
-      applied = true
-    }
     if ('palettes' in r && r.palettes !== undefined) {
       const clean = cleanPalettes(r.palettes)
       if (clean.length > 0) {
@@ -421,6 +420,21 @@ export const useDrawingStore = defineStore('drawing', () => {
         const aid = typeof r.activePaletteId === 'string' ? r.activePaletteId : ''
         activePaletteId.value = clean.some((x) => x.id === aid) ? aid : clean[0]!.id
         applied = true
+      }
+    }
+    // Eski üst-seviye custom satırı aktif palete taşınır (veri kaybı yok).
+    if (Array.isArray(r.customColors)) {
+      const target =
+        palettes.value.find((x) => x.id === activePaletteId.value) ?? palettes.value[0]
+      if (target) {
+        let moved = false
+        for (const h of cleanCustomList(r.customColors)) {
+          if (!target.customs.includes(h) && target.customs.length < CUSTOM_SLOT_COUNT) {
+            target.customs.push(h)
+            moved = true
+          }
+        }
+        if (moved) applied = true
       }
     }
     if ('toolbar' in r && r.toolbar !== undefined) {
@@ -479,15 +493,24 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (typeof raw.touchPan === 'boolean') {
         touchPan.value = raw.touchPan
       }
-      if (Array.isArray(raw.customColors)) {
-        customColors.value = cleanCustomList(raw.customColors)
-      }
       if (raw.palettes !== undefined) {
         const clean = cleanPalettes(raw.palettes)
         if (clean.length > 0) {
           palettes.value = clean
           const aid = typeof raw.activePaletteId === 'string' ? raw.activePaletteId : ''
           activePaletteId.value = clean.some((x) => x.id === aid) ? aid : clean[0]!.id
+        }
+      }
+      // Eski üst-seviye custom satırı aktif palete taşınır (veri kaybı yok).
+      if (Array.isArray(raw.customColors)) {
+        const target =
+          palettes.value.find((x) => x.id === activePaletteId.value) ?? palettes.value[0]
+        if (target) {
+          for (const h of cleanCustomList(raw.customColors)) {
+            if (!target.customs.includes(h) && target.customs.length < CUSTOM_SLOT_COUNT) {
+              target.customs.push(h)
+            }
+          }
         }
       }
       if (raw.toolbar !== undefined) {
@@ -516,8 +539,16 @@ export const useDrawingStore = defineStore('drawing', () => {
   const color = ref('#ffffff')
   const cleanHexColor = (v: unknown): string | null =>
     typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : null
-  const cleanPalettes = (input: unknown): ColorPalette[] => {
+  const cleanCustomList = (input: unknown): string[] => {
     if (!Array.isArray(input)) return []
+    const clean: string[] = []
+    for (const c of input) {
+      const hex = cleanHexColor(c)
+      if (hex && !clean.includes(hex) && clean.length < CUSTOM_SLOT_COUNT) clean.push(hex)
+    }
+    return clean
+  }
+  const cleanPalettes = (input: unknown): ColorPalette[] => {    if (!Array.isArray(input)) return []
     const out: ColorPalette[] = []
     for (const p of input) {
       if (!p || typeof p !== 'object' || out.length >= PALETTE_MAX_COUNT) continue
@@ -533,6 +564,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         id: typeof r.id === 'string' && r.id ? r.id : newStrokeId(),
         name: typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 24) : `Palet ${out.length + 1}`,
         colors,
+        customs: cleanCustomList(r.customs),
       })
     }
     return out
@@ -1433,6 +1465,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       id: newStrokeId(),
       name: clean || `Palet ${palettes.value.length + 1}`,
       colors: seed,
+      customs: [],
     }
     palettes.value.push(p)
     activePaletteId.value = p.id
@@ -1497,48 +1530,44 @@ export const useDrawingStore = defineStore('drawing', () => {
     return true
   }
 
-  // Bağımsız custom satırı (paletlerden ayrı, header'da ikinci satır).
+  // Custom satırı palet-başınadır: palet değişince customs da değişir.
   // Sabit 8 slot: dolular önden dizilir, boşlar "+" gösterir. Boş tık ekler,
-  // doluya tek tık seçer, çift tık mevcut renkle günceller.
-  const customColors = ref<string[]>([])
-  const cleanCustomList = (input: unknown): string[] => {
-    if (!Array.isArray(input)) return []
-    const clean: string[] = []
-    for (const c of input) {
-      const hex = cleanHexColor(c)
-      if (hex && !clean.includes(hex) && clean.length < CUSTOM_SLOT_COUNT) clean.push(hex)
-    }
-    return clean
-  }
+  // doluya tek tık seçer, ✎ damlayla düzenler.
+  const customColors = computed(() => activePalette.value?.customs ?? [])
   // Slotu mevcut renkle güncelle (sadece dolu slot).
   const setCustomSlot = (i: number, hex?: string): boolean => {
+    const p = activePalette.value
+    if (!p) return false
     const h = cleanHexColor(hex ?? color.value)
     if (!h) return false
-    if (!Number.isInteger(i) || i < 0 || i >= customColors.value.length) return false
-    const next = [...customColors.value]
+    if (!Number.isInteger(i) || i < 0 || i >= p.customs.length) return false
+    const next = [...p.customs]
     next[i] = h
-    customColors.value = next
+    p.customs = next
     color.value = h
     void persistSettings()
     return true
   }
   const addCustomColor = (hex?: string): boolean => {
+    const p = activePalette.value
+    if (!p) return false
     const h = cleanHexColor(hex ?? color.value)
     if (!h) return false
-    if (customColors.value.includes(h)) {
+    if (p.customs.includes(h)) {
       color.value = h
       return true
     }
-    if (customColors.value.length >= CUSTOM_SLOT_COUNT) return false
-    customColors.value.push(h)
+    if (p.customs.length >= CUSTOM_SLOT_COUNT) return false
+    p.customs.push(h)
     color.value = h
     void persistSettings()
     return true
   }
   const removeCustomColor = (hex: string): boolean => {
-    if (!customColors.value.includes(hex)) return false
-    customColors.value = customColors.value.filter((c) => c !== hex)
-    if (color.value === hex && customColors.value.length > 0) color.value = customColors.value[0]!
+    const p = activePalette.value
+    if (!p || !p.customs.includes(hex)) return false
+    p.customs = p.customs.filter((c) => c !== hex)
+    if (color.value === hex && p.customs.length > 0) color.value = p.customs[0]!
     void persistSettings()
     return true
   }
@@ -2843,9 +2872,8 @@ export const useDrawingStore = defineStore('drawing', () => {
         toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
         smoothing: smoothing.value,
         touchPan: touchPan.value,
-        palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors] })),
+        palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors], customs: [...x.customs] })),
         activePaletteId: activePaletteId.value,
-        customColors: [...customColors.value],
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
