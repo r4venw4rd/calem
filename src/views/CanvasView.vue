@@ -402,12 +402,12 @@
 
       <div
         v-if="showSettings"
-        class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-black/50"
+        class="fixed inset-0 z-30 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50"
         @pointerdown.self="showSettings = false"
       >
       <div
         ref="settingsPanel"
-        class="w-[min(92vw,380px)] max-h-[85vh] flex flex-col rounded-xl bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] shadow-2xl"
+        class="w-full sm:w-[min(94vw,400px)] h-[86vh] sm:h-auto sm:max-h-[85vh] flex flex-col rounded-t-2xl sm:rounded-xl bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] shadow-2xl"
         role="dialog"
         :aria-label="t('settings')"
         @keydown.tab="trapFocus"
@@ -420,6 +420,12 @@
         </div>
 
         <div class="overflow-y-auto px-3 pb-3">
+        <details open class="group mb-2 rounded-lg border border-[var(--chrome-border)]">
+          <summary class="flex items-center justify-between gap-2 px-2.5 py-2 cursor-pointer list-none select-none font-medium text-[var(--chrome-muted)] hover:text-[var(--chrome-title)]">
+            <span>{{ t('secAppearance') }}</span>
+            <span class="font-mono text-[10px] transition group-open:rotate-180">▾</span>
+          </summary>
+          <div class="px-2.5 pb-2.5 pt-1">
         <div class="mb-1 text-[var(--chrome-muted)]">{{ t('uiTheme') }}</div>
         <div class="flex gap-1 mb-3">
           <button
@@ -507,7 +513,15 @@
           />
           {{ t('marginLine') }}
         </label>
+          </div>
+        </details>
 
+        <details class="group mb-2 rounded-lg border border-[var(--chrome-border)]">
+          <summary class="flex items-center justify-between gap-2 px-2.5 py-2 cursor-pointer list-none select-none font-medium text-[var(--chrome-muted)] hover:text-[var(--chrome-title)]">
+            <span>{{ t('secToolbar') }}</span>
+            <span class="font-mono text-[10px] transition group-open:rotate-180">▾</span>
+          </summary>
+          <div class="px-2.5 pb-2.5 pt-1">
         <div class="mb-1 text-[var(--chrome-muted)]">{{ t('toolbar') }}</div>
         <div class="flex flex-col gap-0.5 mb-3">
           <div
@@ -616,7 +630,15 @@
             {{ t('newPalette') }}
           </button>
         </div>
+          </div>
+        </details>
 
+        <details class="group mb-2 rounded-lg border border-[var(--chrome-border)]">
+          <summary class="flex items-center justify-between gap-2 px-2.5 py-2 cursor-pointer list-none select-none font-medium text-[var(--chrome-muted)] hover:text-[var(--chrome-title)]">
+            <span>{{ t('secPage') }}</span>
+            <span class="font-mono text-[10px] transition group-open:rotate-180">▾</span>
+          </summary>
+          <div class="px-2.5 pb-2.5 pt-1">
         <div class="mb-1 text-[var(--chrome-muted)]">{{ t('pageFormat') }} <span class="text-[var(--chrome-faint)]">{{ t('newPages') }}</span></div>
         <select
           :value="store.pageFormat"
@@ -669,6 +691,15 @@
           </label>
         </div>
 
+          </div>
+        </details>
+
+        <details class="group mb-2 rounded-lg border border-[var(--chrome-border)]">
+          <summary class="flex items-center justify-between gap-2 px-2.5 py-2 cursor-pointer list-none select-none font-medium text-[var(--chrome-muted)] hover:text-[var(--chrome-title)]">
+            <span>{{ t('secInput') }}</span>
+            <span class="font-mono text-[10px] transition group-open:rotate-180">▾</span>
+          </summary>
+          <div class="px-2.5 pb-2.5 pt-1">
         <div class="mt-3 pt-2 border-t border-[var(--chrome-border)]">
           <div class="mb-1 text-[var(--chrome-muted)]">{{ t('pressure') }} <span class="text-[var(--chrome-faint)]">{{ t('pressureOff') }}</span></div>
           <input
@@ -711,7 +742,15 @@
             {{ t('touchPan') }}
           </label>
         </div>
+          </div>
+        </details>
 
+        <details class="group mb-2 rounded-lg border border-[var(--chrome-border)]">
+          <summary class="flex items-center justify-between gap-2 px-2.5 py-2 cursor-pointer list-none select-none font-medium text-[var(--chrome-muted)] hover:text-[var(--chrome-title)]">
+            <span>{{ t('secData') }}</span>
+            <span class="font-mono text-[10px] transition group-open:rotate-180">▾</span>
+          </summary>
+          <div class="px-2.5 pb-2.5 pt-1">
         <div class="mt-3 pt-2 border-t border-[var(--chrome-border)]">
           <div class="mb-1 text-[var(--chrome-muted)]">{{ t('settingsBackup') }}</div>
           <div class="flex gap-1">
@@ -745,6 +784,8 @@
             <div>{{ t('sc8') }}</div>
           </div>
         </div>
+          </div>
+        </details>
         </div>
       </div>
       </div>
