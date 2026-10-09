@@ -271,7 +271,7 @@
             :value="store.color"
             @input="onCustomInput(($event.target as HTMLInputElement).value)"
             @cancel="pickerArmed = false"
-            class="w-6 h-6 rounded-full bg-transparent border border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0 shrink-0"
+            class="w-6 h-6 rounded-full appearance-none bg-transparent border border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0 shrink-0"
             :title="t('customColor')"
           />
           <span
@@ -291,7 +291,7 @@
               :style="{ background: store.customColors[i - 1] }"
             ></button>
             <button
-              v-else
+              v-else-if="i === firstEmptySlot"
               @click="pickCustom()"
               :title="t('openPicker')"
               class="w-6 h-6 rounded-full border border-dashed border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition font-mono block"
@@ -341,6 +341,7 @@
             <option value="dash">{{ t('dashed') }}</option>
             <option value="dot">{{ t('dotted') }}</option>
           </select>
+          <span class="text-xs text-[var(--chrome-muted)]">{{ t('opacity') }}</span>
           <input
             type="range"
             :min="SLIDERS.opacity.min"
@@ -1273,6 +1274,12 @@ const locTools = computed(() => TOOL_LABELS[store.locale] ?? TOOL_LABELS.tr)
 
 // Katman listesi üstte-ilk (dizi 0 = en alt).
 const layersTopFirst = computed(() => [...store.activePage.layers].reverse())
+
+// Custom renk satırında yalnızca İLK boş slot "+" gösterir; kalanı çizilmez.
+// (Aksi halde boşken 8 tane "+" yan yana dizilip toolbar'ı şişiriyordu.)
+const firstEmptySlot = computed<number | null>(() =>
+  store.customColors.length < CUSTOM_SLOT_COUNT ? store.customColors.length + 1 : null,
+)
 
 const activateLayer = (id: string) => {
   store.setActiveLayer(id)
