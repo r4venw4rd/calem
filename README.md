@@ -1,6 +1,8 @@
 # Calem
 
-This template should help get you started developing with Vue 3 in Vite.
+![Calem](public/banner.png)
+
+Unbloated handwriting + PDF annotation for Chromebook (Vue 3 + Vite).
 
 ## Recommended IDE Setup
 

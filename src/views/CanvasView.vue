@@ -1,6 +1,13 @@
 <template>
   <div class="h-screen flex flex-col bg-[var(--page-bg)] overflow-hidden">
     <header v-if="!presenting" class="relative z-10 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-[var(--chrome-bg)] border-b border-[var(--chrome-border)]">
+      <img
+        src="/icon-192.png"
+        alt="Calem"
+        title="Calem"
+        class="h-7 w-7 rounded-md select-none"
+        draggable="false"
+      />
       <div class="relative">
         <button
           @click="showFile = !showFile"
