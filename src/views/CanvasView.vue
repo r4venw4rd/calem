@@ -141,7 +141,7 @@
         </button>
       </div>
 
-      <div class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)] max-sm:w-full max-sm:overflow-x-auto" role="toolbar" :aria-label="t('tools')">
+      <div v-if="!isMobile" class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]" role="toolbar" :aria-label="t('tools')">
         <button
           v-for="tool in visibleTools"
           :key="tool"
@@ -167,7 +167,7 @@
       </div>
 
       <div
-        v-if="store.currentTool === 'select'"
+        v-if="!isMobile && store.currentTool === 'select'"
         class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]"
         role="toolbar"
         :aria-label="t('selOps')"
@@ -222,8 +222,8 @@
         </button>
       </div>
 
-      <div v-if="store.currentTool !== 'select'" class="flex flex-col gap-1 max-sm:w-full" role="toolbar" :aria-label="t('palette')">
-        <div class="flex items-center gap-1.5 max-sm:overflow-x-auto">
+      <div v-if="!isMobile && store.currentTool !== 'select'" class="flex flex-col gap-1" role="toolbar" :aria-label="t('palette')">
+        <div class="flex items-center gap-1.5">
           <select
             :value="store.activePaletteId"
             @change="store.setActivePalette(($event.target as HTMLSelectElement).value)"
@@ -307,7 +307,7 @@
         </div>
       </div>
 
-      <div v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'" class="flex items-center gap-2 max-sm:w-full max-sm:flex-wrap">
+      <div v-if="!isMobile && store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'" class="flex items-center gap-2">
         <span class="text-sm text-[var(--chrome-muted)]">{{ t('width') }}</span>
         <input
           type="range"
@@ -364,7 +364,7 @@
         </template>
       </div>
 
-      <div v-if="store.currentTool === 'text'" class="flex items-center gap-2">
+      <div v-if="!isMobile && store.currentTool === 'text'" class="flex items-center gap-2">
         <span class="text-sm text-[var(--chrome-muted)]">{{ t('textLabel') }}</span>
         <input
           type="range"
@@ -380,6 +380,7 @@
       </div>
 
       <button
+        v-if="!isMobile"
         @click="undo"
         :disabled="store.undoStack.length === 0"
         class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition disabled:opacity-40 disabled:cursor-not-allowed"
@@ -389,6 +390,7 @@
       </button>
 
       <button
+        v-if="!isMobile"
         @click="redo"
         :disabled="store.redoStack.length === 0"
         class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition disabled:opacity-40 disabled:cursor-not-allowed"
@@ -1171,6 +1173,175 @@
       </div>
     </div>
 
+    <!-- MOBİL ALT ARAÇ ÇUBUĞU (başparmak bölgesi, <900px) -->
+    <div
+      v-if="!presenting && isMobile"
+      class="relative z-10 shrink-0 flex items-center gap-1 px-1 py-1 bg-[var(--chrome-bg)] border-t border-[var(--chrome-border)]"
+      role="toolbar"
+      :aria-label="t('tools')"
+    >
+      <div class="flex-1 min-w-0 overflow-x-auto flex items-center gap-1">
+        <button
+          v-for="tool in visibleTools"
+          :key="tool"
+          @click="store.setTool(tool)"
+          :class="store.currentTool === tool ? TOOL_META[tool].active : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="shrink-0 min-w-[3.25rem] px-2 py-1.5 rounded-lg text-[11px] font-medium transition text-center"
+          :title="locTools[tool].title"
+        >
+          {{ locTools[tool].label }}
+        </button>
+      </div>
+      <span class="w-px h-6 bg-[var(--chrome-border)] shrink-0"></span>
+      <button
+        @click="mobileOptions = true"
+        class="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]"
+        :title="t('palette')"
+      >
+        <span
+          class="w-4 h-4 rounded-full border border-[var(--chrome-border-strong)]"
+          :style="{ background: store.color }"
+        ></span>
+        <span class="text-[11px] font-mono">{{ store.strokeWidth }}</span>
+      </button>
+      <button
+        @click="undo"
+        :disabled="store.undoStack.length === 0"
+        class="shrink-0 w-9 h-9 rounded-lg hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+        :title="t('undoTitle')"
+      >
+        ↶
+      </button>
+      <button
+        @click="redo"
+        :disabled="store.redoStack.length === 0"
+        class="shrink-0 w-9 h-9 rounded-lg hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+        :title="t('redoTitle')"
+      >
+        ↷
+      </button>
+    </div>
+
+    <!-- MOBİL SEÇENEKLER: renk / kalınlık / çizgi stili (alt sheet) -->
+    <div
+      v-if="mobileOptions"
+      class="fixed inset-0 z-40 flex items-end bg-black/50"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="t('palette')"
+      @pointerdown.self="mobileOptions = false"
+    >
+      <div
+        class="w-full max-h-[70vh] overflow-y-auto rounded-t-2xl bg-[var(--chrome-bg)] border-t border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-2xl"
+      >
+        <div class="flex items-center justify-between mb-2">
+          <span class="font-medium text-[var(--chrome-title)]">{{ t('palette') }}</span>
+          <button @click="mobileOptions = false" class="px-2 py-1 rounded hover:bg-[var(--chrome-bg-soft)]">{{ t('done') }}</button>
+        </div>
+
+        <template v-if="store.currentTool !== 'select'">
+          <select
+            :value="store.activePaletteId"
+            @change="store.setActivePalette(($event.target as HTMLSelectElement).value)"
+            class="w-full mb-2 px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
+          >
+            <option v-for="p in store.palettes" :key="p.id" :value="p.id">{{ p.name }}</option>
+          </select>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="hex in store.activePalette.colors"
+              :key="hex"
+              @click="store.setColor(hex)"
+              class="w-9 h-9 rounded-full border-2"
+              :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-105' : 'border-[var(--chrome-border-strong)]'"
+              :style="{ background: hex }"
+            ></button>
+          </div>
+        </template>
+
+        <div
+          v-if="['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow'].includes(store.currentTool)"
+          class="mt-3"
+        >
+          <div class="mb-1 text-[var(--chrome-muted)]">{{ t('width') }} <span class="font-mono">{{ store.strokeWidth }}</span></div>
+          <input
+            type="range"
+            :min="store.widthMin"
+            :max="store.widthMax"
+            :value="store.strokeWidth"
+            @input="store.setStrokeWidth(Number(($event.target as HTMLInputElement).value))"
+            class="w-full accent-indigo-600"
+          />
+        </div>
+
+        <div v-if="['pen', 'line', 'rect', 'ellipse', 'arrow'].includes(store.currentTool)" class="mt-3 flex items-center gap-2">
+          <select
+            :value="store.strokeDash"
+            @change="store.setStrokeDash(($event.target as HTMLSelectElement).value)"
+            class="px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
+          >
+            <option value="solid">{{ t('solid') }}</option>
+            <option value="dash">{{ t('dashed') }}</option>
+            <option value="dot">{{ t('dotted') }}</option>
+          </select>
+          <input
+            type="range"
+            :min="SLIDERS.opacity.min"
+            :max="SLIDERS.opacity.max"
+            :step="SLIDERS.opacity.step"
+            :value="store.strokeOpacity"
+            @input="store.setStrokeOpacity(Number(($event.target as HTMLInputElement).value))"
+            class="flex-1 accent-indigo-600"
+          />
+          <span class="font-mono w-10 text-right">{{ Math.round(store.strokeOpacity * 100) }}%</span>
+        </div>
+
+        <div v-if="store.currentTool === 'eraser'" class="mt-3 flex gap-1">
+          <button
+            @click="store.setEraserMode('standard')"
+            :class="store.eraserMode === 'standard' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)]'"
+            class="flex-1 px-2 py-1.5 rounded font-medium transition"
+          >
+            {{ t('eraserStandard') }}
+          </button>
+          <button
+            @click="store.setEraserMode('stroke')"
+            :class="store.eraserMode === 'stroke' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)]'"
+            class="flex-1 px-2 py-1.5 rounded font-medium transition"
+          >
+            {{ t('eraserStroke') }}
+          </button>
+        </div>
+
+        <div v-if="store.currentTool === 'text'" class="mt-3">
+          <div class="mb-1 text-[var(--chrome-muted)]">{{ t('textSizeShort') }} <span class="font-mono">{{ store.textSize }}</span></div>
+          <input
+            type="range"
+            :min="SLIDERS.textSize.min"
+            :max="SLIDERS.textSize.max"
+            :step="SLIDERS.textSize.step"
+            :value="store.textSize"
+            @input="store.setTextSize(Number(($event.target as HTMLInputElement).value))"
+            class="w-full accent-indigo-600"
+          />
+        </div>
+
+        <div v-if="store.currentTool === 'select'" class="flex flex-wrap gap-1">
+          <button @click="store.setSelectMode('rect')" :class="store.selectMode === 'rect' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)]'" class="px-3 py-1.5 rounded font-medium transition">{{ t('rectSel') }}</button>
+          <button @click="store.setSelectMode('lasso')" :class="store.selectMode === 'lasso' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)]'" class="px-3 py-1.5 rounded font-medium transition">{{ t('lassoSel') }}</button>
+          <button @click="selAll" class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)]">{{ t('selectAll') }}</button>
+          <button @click="selCopy" :disabled="store.selectionCount === 0" class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)] disabled:opacity-30">{{ t('copy') }}</button>
+          <button @click="selPaste" :disabled="store.clipboardCount === 0" class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)] disabled:opacity-30">{{ t('paste') }}</button>
+          <button @click="selDelete" :disabled="store.selectionCount === 0" class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)] disabled:opacity-30">{{ t('delSel') }}</button>
+        </div>
+
+        <div class="mt-3 pt-2 border-t border-[var(--chrome-border)] flex gap-1">
+          <button @click="askClearCanvas" class="flex-1 px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] text-red-400 transition">{{ t('clear') }}</button>
+          <button @click="togglePresent" class="flex-1 px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] transition">{{ t('present') }}</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Uygulama-içi onay / ad-sor diyaloğu (native confirm/prompt yerine) -->
     <div
       v-if="dialogOpen"
@@ -1240,6 +1411,14 @@ const showSettings = ref(false)
 const showFile = ref(false)
 const showLayers = ref(false)
 const presenting = ref(false)
+// Mobil layout (< 900px): araclar alta iner, header sadeleşir. matchMedia ile izlenir.
+const isMobile = ref(false)
+const mobileOptions = ref(false)
+let mobileMq: MediaQueryList | null = null
+const syncIsMobile = () => {
+  isMobile.value = !!mobileMq?.matches
+  if (!isMobile.value) mobileOptions.value = false
+}
 // Kaydırmalı mod: sayfalar alt alta statik bloklar, canlı canvas aktif slotta yüzer.
 const scrollMode = ref(false)
 const scrollBox = ref<HTMLElement | null>(null)
@@ -2666,6 +2845,9 @@ onMounted(() => {
     })
   updateHud(true)
 
+  mobileMq = window.matchMedia('(max-width: 899px)')
+  syncIsMobile()
+  mobileMq.addEventListener('change', syncIsMobile)
   window.addEventListener('resize', sizeCanvas)
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
@@ -2748,6 +2930,8 @@ onUnmounted(() => {
   if (blockTimer) clearTimeout(blockTimer)
   blockTimer = undefined
   blockEls.clear()
+  mobileMq?.removeEventListener('change', syncIsMobile)
+  mobileMq = null
   window.removeEventListener('resize', sizeCanvas)
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
