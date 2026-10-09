@@ -1,6 +1,6 @@
 <template>
   <div class="h-screen flex flex-col bg-[var(--page-bg)] overflow-hidden">
-    <header v-if="!presenting" class="relative z-10 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-[var(--chrome-bg)] border-b border-[var(--chrome-border)]">
+    <header v-if="!presenting" class="relative z-10 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 max-sm:gap-x-2 max-sm:gap-y-1.5 max-sm:px-2 max-sm:py-2 bg-[var(--chrome-bg)] border-b border-[var(--chrome-border)]">
       <img
         src="/icon-192.png"
         alt="Calem"
@@ -141,7 +141,7 @@
         </button>
       </div>
 
-      <div class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]" role="toolbar" :aria-label="t('tools')">
+      <div class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)] max-sm:w-full max-sm:overflow-x-auto" role="toolbar" :aria-label="t('tools')">
         <button
           v-for="tool in visibleTools"
           :key="tool"
@@ -222,8 +222,8 @@
         </button>
       </div>
 
-      <div v-if="store.currentTool !== 'select'" class="flex flex-col gap-1" role="toolbar" :aria-label="t('palette')">
-        <div class="flex items-center gap-1.5">
+      <div v-if="store.currentTool !== 'select'" class="flex flex-col gap-1 max-sm:w-full" role="toolbar" :aria-label="t('palette')">
+        <div class="flex items-center gap-1.5 max-sm:overflow-x-auto">
           <select
             :value="store.activePaletteId"
             @change="store.setActivePalette(($event.target as HTMLSelectElement).value)"
@@ -307,7 +307,7 @@
         </div>
       </div>
 
-      <div v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'" class="flex items-center gap-2">
+      <div v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'" class="flex items-center gap-2 max-sm:w-full max-sm:flex-wrap">
         <span class="text-sm text-[var(--chrome-muted)]">{{ t('width') }}</span>
         <input
           type="range"
