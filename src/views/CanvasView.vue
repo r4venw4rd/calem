@@ -31,7 +31,7 @@
             Calem Aç…
             <input
               type="file"
-              accept=".calem,application/json"
+              :accept="CALEM_ACCEPT"
               class="hidden"
               :disabled="store.pdfBusy"
               @change="onCalemFile"
@@ -54,7 +54,7 @@
             PDF Aç…
             <input
               type="file"
-              accept="application/pdf,.pdf"
+              :accept="PDF_ACCEPT"
               class="hidden"
               :disabled="store.pdfBusy"
               @change="onPdfFile"
@@ -332,9 +332,9 @@
           </select>
           <input
             type="range"
-            min="0.1"
-            max="1"
-            step="0.05"
+            :min="SLIDERS.opacity.min"
+            :max="SLIDERS.opacity.max"
+            :step="SLIDERS.opacity.step"
             :value="store.strokeOpacity"
             @input="store.setStrokeOpacity(Number(($event.target as HTMLInputElement).value))"
             class="w-16 accent-indigo-600"
@@ -367,9 +367,9 @@
         <span class="text-sm text-[var(--chrome-muted)]">Yazı:</span>
         <input
           type="range"
-          min="8"
-          max="72"
-          step="1"
+          :min="SLIDERS.textSize.min"
+          :max="SLIDERS.textSize.max"
+          :step="SLIDERS.textSize.step"
           :value="store.textSize"
           @input="store.setTextSize(Number(($event.target as HTMLInputElement).value))"
           class="w-24 accent-indigo-600"
@@ -475,9 +475,9 @@
           <span class="text-[var(--chrome-faint)] whitespace-nowrap">Aralık</span>
           <input
             type="range"
-            min="12"
-            max="48"
-            step="1"
+            :min="SLIDERS.paperSpacing.min"
+            :max="SLIDERS.paperSpacing.max"
+            :step="SLIDERS.paperSpacing.step"
             :value="store.paperBackground.spacing"
             @input="store.setPaperBackground({ spacing: Number(($event.target as HTMLInputElement).value) })"
             class="flex-1 accent-indigo-600"
@@ -637,8 +637,8 @@
             <span class="text-[var(--chrome-faint)]">Genişlik</span>
             <input
               type="number"
-              min="100"
-              max="3000"
+              :min="PAGE_MIN"
+              :max="PAGE_MAX"
               :value="store.customW"
               @change="store.setCustomSize(Number(($event.target as HTMLInputElement).value), store.customH)"
               class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
@@ -648,8 +648,8 @@
             <span class="text-[var(--chrome-faint)]">Yükseklik</span>
             <input
               type="number"
-              min="100"
-              max="3000"
+              :min="PAGE_MIN"
+              :max="PAGE_MAX"
               :value="store.customH"
               @change="store.setCustomSize(store.customW, Number(($event.target as HTMLInputElement).value))"
               class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
@@ -661,9 +661,9 @@
           <div class="mb-1 text-[var(--chrome-muted)]">Kalem basıncı <span class="text-[var(--chrome-faint)]">(0=kapalı)</span></div>
           <input
             type="range"
-            min="0"
-            max="2"
-            step="0.1"
+            :min="SLIDERS.pressure.min"
+            :max="SLIDERS.pressure.max"
+            :step="SLIDERS.pressure.step"
             :value="store.pressureSensitivity"
             @input="store.setPressureSensitivity(Number(($event.target as HTMLInputElement).value))"
             class="w-full accent-indigo-600"
@@ -672,9 +672,9 @@
           <div class="mb-1 mt-2 text-[var(--chrome-muted)]">Kalem yumuşatma <span class="text-[var(--chrome-faint)]">(titreme filtresi)</span></div>
           <input
             type="range"
-            min="0"
-            max="0.9"
-            step="0.05"
+            :min="SLIDERS.smoothing.min"
+            :max="SLIDERS.smoothing.max"
+            :step="SLIDERS.smoothing.step"
             :value="store.smoothing"
             @input="store.setSmoothing(Number(($event.target as HTMLInputElement).value))"
             class="w-full accent-indigo-600"
@@ -715,7 +715,7 @@
               title="Yedekten geri yükle"
             >
               Geri yükle
-              <input type="file" accept="application/json,.json" class="hidden" @change="onSettingsFile" />
+              <input type="file" :accept="SETTINGS_ACCEPT" class="hidden" @change="onSettingsFile" />
             </label>
           </div>
         </div>
@@ -881,7 +881,7 @@
       <input
         ref="imgInput"
         type="file"
-        accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg"
+        :accept="IMAGE_ACCEPT"
         class="hidden"
         @change="onImageFile"
       />
@@ -904,9 +904,9 @@
         <div class="flex items-center gap-2 mt-2">
           <input
             type="range"
-            min="8"
-            max="72"
-            step="1"
+            :min="SLIDERS.textSize.min"
+            :max="SLIDERS.textSize.max"
+            :step="SLIDERS.textSize.step"
             :value="store.activeText()?.size ?? store.textSize"
             @input="onTextSizeInput(Number(($event.target as HTMLInputElement).value))"
             class="flex-1 accent-indigo-600"
@@ -952,9 +952,9 @@
           <span class="text-[var(--chrome-faint)] whitespace-nowrap">Boyut</span>
           <input
             type="range"
-            min="32"
-            max="1200"
-            step="4"
+            :min="SLIDERS.imageWidth.min"
+            :max="SLIDERS.imageWidth.max"
+            :step="SLIDERS.imageWidth.step"
             :value="store.activeImage()?.w ?? 200"
             @input="onImgWidth(Number(($event.target as HTMLInputElement).value))"
             class="flex-1 accent-indigo-600"
@@ -1125,6 +1125,16 @@ import { drawingPerf, useDrawingStore } from '@/stores/drawing'
 import { PAGE_FORMATS, PAPER_THEMES } from '@/config/paper'
 import { CUSTOM_SLOT_COUNT } from '@/config/palettes'
 import { TOOL_META } from '@/config/tools'
+import { SLIDERS } from '@/config/ui'
+import { PAGE_MIN, PAGE_MAX } from '@/config/engine'
+import {
+  CALEM_ACCEPT,
+  IMAGE_ACCEPT,
+  PDF_ACCEPT,
+  SETTINGS_ACCEPT,
+  pngFileName,
+  settingsBackupName,
+} from '@/config/files'
 import { selectionBBox, coalescedOf } from '@/lib/select'
 
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
@@ -2068,7 +2078,7 @@ const exportPng = () => {
   if (!url) return
   const a = document.createElement('a')
   a.href = url
-  a.download = `calem-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`
+  a.download = pngFileName()
   a.click()
 }
 
@@ -2083,7 +2093,7 @@ const backupSettings = () => {
   const blob = new Blob([store.exportSettingsJSON()], { type: 'application/json' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `calem-ayarlar-${new Date().toISOString().slice(0, 10)}.json`
+  a.download = settingsBackupName()
   a.click()
   window.setTimeout(() => URL.revokeObjectURL(a.href), 5000)
 }

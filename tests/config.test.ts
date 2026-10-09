@@ -28,6 +28,18 @@ import {
   PALETTE_MAX_COLORS,
   PALETTE_MAX_COUNT,
 } from '../src/config/palettes'
+import {
+  CALEM_ACCEPT,
+  IMAGE_ACCEPT,
+  PDF_ACCEPT,
+  SERVICE_WORKER_PATH,
+  SETTINGS_ACCEPT,
+  calemFileName,
+  pdfFileName,
+  pngFileName,
+  settingsBackupName,
+} from '../src/config/files'
+import { SLIDERS } from '../src/config/ui'
 
 // Değer kilitleri: davranış değişikliği bilinçli yapılır, sessiz kayma olmaz.
 describe('engine', () => {
@@ -127,5 +139,37 @@ describe('palettes', () => {
       expect(p.colors).toHaveLength(8)
       expect(p.customs).toEqual([])
     }
+  })
+})
+
+describe('ui', () => {
+  it('slider araliklari store kelepcesini asmaz', () => {
+    // textSize UI 72 < store 120: daraltma serbest, genişletme yasak
+    expect(SLIDERS.textSize).toEqual({ min: 8, max: 72, step: 1 })
+    expect(SLIDERS.opacity).toEqual({ min: 0.1, max: 1, step: 0.05 })
+    expect(SLIDERS.pressure).toEqual({ min: 0, max: 2, step: 0.1 })
+    expect(SLIDERS.smoothing).toEqual({ min: 0, max: 0.9, step: 0.05 })
+    expect(SLIDERS.imageWidth).toEqual({ min: 32, max: 1200, step: 4 })
+    expect(SLIDERS.paperSpacing.min).toBe(12)
+    expect(SLIDERS.paperSpacing.max).toBe(48)
+  })
+})
+
+describe('files', () => {
+  it('dosya adlari sabit formatta', () => {
+    const d = new Date('2026-10-09T12:34:56Z')
+    expect(pngFileName(d)).toBe('calem-2026-10-09-12-34-56.png')
+    expect(settingsBackupName(d)).toBe('calem-ayarlar-2026-10-09.json')
+    expect(pdfFileName(d)).toBe('calem-2026-10-09.pdf')
+    expect(calemFileName(d)).toBe('calem-2026-10-09.calem')
+  })
+  it('accept filtreleri', () => {
+    expect(PDF_ACCEPT).toContain('.pdf')
+    expect(IMAGE_ACCEPT).toContain('image/*')
+    expect(SETTINGS_ACCEPT).toContain('.json')
+    expect(CALEM_ACCEPT).toContain('.calem')
+  })
+  it('sw yolu', () => {
+    expect(SERVICE_WORKER_PATH).toBe('/service-worker.js')
   })
 })

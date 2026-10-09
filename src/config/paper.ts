@@ -5,6 +5,10 @@ import type { PaperBackground } from '../lib/paper'
 // A4 punto — boş sayfaların varsayılan boyutu.
 export const A4 = { w: 595, h: 842 }
 
+// Desen aralığı kelepçesi (pt) — geometri + slider buradan beslenir.
+export const PAPER_SPACING_MIN = 12
+export const PAPER_SPACING_MAX = 48
+
 // Kâğıt renk temaları.
 export const PAPER_THEMES = {
   gece: '#111827',
