@@ -2349,8 +2349,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     isDrawing.value = false
     cachedRect = null
     bb = null
-    const ctx = getCtx(canvasRef.value)
-    if (ctx) clearLayer(ctx)
+    // Sadece mürekkep gider: repaint kâğıt/deseni ve PDF arkaplanını geri koyar.
+    repaintBase()
     clearOverlay()
     scheduleSave()
   }
