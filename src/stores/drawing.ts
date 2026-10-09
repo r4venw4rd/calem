@@ -1456,9 +1456,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     void persistSettings()
     return true
   }
-  // Mevcut rengi aktif palete ekler (yoksa; varsa sadece seçer).
-  const addColorToPalette = (hex?: string): boolean => {
-    const p = activePalette.value
+  // Mevcut rengi palete ekler (yoksa; varsa sadece seçer). Hedef verilmezse aktif palet.
+  const addColorToPalette = (hex?: string, paletteId?: string): boolean => {
+    const p = paletteId ? (palettes.value.find((x) => x.id === paletteId) ?? activePalette.value) : activePalette.value
     if (!p) return false
     const h = cleanHexColor(hex ?? color.value)
     if (!h) return false

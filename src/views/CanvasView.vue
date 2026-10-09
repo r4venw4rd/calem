@@ -555,6 +555,13 @@
               ></span>
             </span>
             <button
+              @click="store.addColorToPalette(undefined, p.id)"
+              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] font-mono"
+              title="Mevcut rengi bu palete ekle"
+            >
+              +
+            </button>
+            <button
               @click="renamePaletteBtn(p.id)"
               class="px-1 rounded hover:bg-[var(--chrome-bg-soft)]"
               title="Adlandır"
