@@ -99,6 +99,7 @@ describe('tools', () => {
       'pen',
       'highlighter',
       'eraser',
+      'hand',
       'select',
       'line',
       'rect',
@@ -106,7 +107,6 @@ describe('tools', () => {
       'arrow',
       'text',
       'image',
-      'hand',
     ])
   })
   it('kalinlik tablolari tum araclari kapsar', () => {
