@@ -18,6 +18,7 @@ import {
   strokeBBox,
 } from '../lib/select'
 import { splitRunsOutside } from '../lib/erase'
+import { calemFileName, pdfFileName } from '../config/files'
 import { ALL_TOOLS, DEFAULT_WIDTHS, WIDTH_MAX, WIDTH_MIN } from '../config/tools'
 import { A4, DEFAULT_PAPER_BACKGROUND, PAGE_FORMATS, PAPER_THEMES } from '../config/paper'
 import type { PageFormat, PageOrientation, PaperTheme } from '../config/paper'
@@ -2773,7 +2774,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     try {
       const built = await buildPdfDocument()
       if ('error' in built) return built
-      const fileName = `calem-${new Date().toISOString().slice(0, 10)}.pdf`
+      const fileName = pdfFileName()
       // Varsayılan: konum + isim sor. API yoksa (Firefox vb.) klasik indirme klasörü.
       if (opts.prompt !== false) {
         const how = await savePdfBlob(built.doc.output('blob'), fileName)
@@ -2901,7 +2902,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     try {
       const built = await buildCalemJSON()
       if ('error' in built) return built
-      const fileName = `calem-${new Date().toISOString().slice(0, 10)}.calem`
+      const fileName = calemFileName()
       if (opts.prompt !== false) {
         const how = await saveCalemBlob(new Blob([built.json], { type: 'application/json' }), fileName)
         if (how === 'saved') return { pages: pages.value.length }
