@@ -687,21 +687,50 @@
     </header>
 
     <div class="relative flex-1 bg-[var(--page-bg)] min-h-0">
-      <!-- Alt katman: commit'lenmiş stroke'lar. Üst katman: aktif çizgi (pointer burada). -->
-      <canvas
-        ref="baseCanvas"
-        class="absolute inset-0 w-full h-full block"
-      ></canvas>
-      <canvas
-        ref="overlayCanvas"
-        class="absolute inset-0 w-full h-full touch-none select-none block"
-        :style="{ cursor: store.currentTool === 'text' ? 'text' : store.currentTool === 'image' ? 'copy' : store.currentTool === 'hand' ? 'grab' : store.currentTool === 'select' ? 'default' : 'crosshair' }"
-        @pointerdown="startDraw"
-        @pointermove="draw"
-        @pointerup="endDraw"
-        @pointerleave="endDraw"
-        @pointercancel="endDraw"
-      ></canvas>
+      <!-- Tekli mod: tam-alan canlı canvas. Kaydırmalı mod: statik bloklar + aktif slota yüzen canlı canvas. -->
+      <template v-if="!scrollMode">
+        <canvas
+          ref="baseCanvas"
+          class="absolute inset-0 w-full h-full block"
+        ></canvas>
+        <canvas
+          ref="overlayCanvas"
+          class="absolute inset-0 w-full h-full touch-none select-none block"
+          :style="{ cursor: store.currentTool === 'text' ? 'text' : store.currentTool === 'image' ? 'copy' : store.currentTool === 'hand' ? 'grab' : store.currentTool === 'select' ? 'default' : 'crosshair' }"
+          @pointerdown="startDraw"
+          @pointermove="draw"
+          @pointerup="endDraw"
+          @pointerleave="endDraw"
+          @pointercancel="endDraw"
+        ></canvas>
+      </template>
+      <div v-else ref="scrollBox" class="absolute inset-0 overflow-y-auto">
+        <div class="mx-auto w-full max-w-[860px] px-3 pt-3 pb-28 flex flex-col gap-4">
+          <div
+            v-for="(p, i) in store.pages"
+            :key="p.id"
+            :ref="(el) => setBlockRef(el, p.id)"
+            class="w-full rounded-sm overflow-hidden"
+            :style="{ aspectRatio: `${p.size.w} / ${p.size.h}`, visibility: i === store.activePageIndex ? 'hidden' : 'visible' }"
+          ></div>
+        </div>
+        <div ref="activeSlot" class="absolute" style="display: none">
+          <canvas
+            ref="baseCanvas"
+            class="absolute inset-0 w-full h-full block"
+          ></canvas>
+          <canvas
+            ref="overlayCanvas"
+            class="absolute inset-0 w-full h-full touch-none select-none block"
+            :style="{ cursor: store.currentTool === 'text' ? 'text' : store.currentTool === 'image' ? 'copy' : store.currentTool === 'hand' ? 'grab' : store.currentTool === 'select' ? 'default' : 'crosshair' }"
+            @pointerdown="startDraw"
+            @pointermove="draw"
+            @pointerup="endDraw"
+            @pointerleave="endDraw"
+            @pointercancel="endDraw"
+          ></canvas>
+        </div>
+      </div>
       <input
         ref="imgInput"
         type="file"
@@ -843,6 +872,14 @@
         >
           Sil
         </button>
+        <button
+          @click="toggleScroll"
+          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] font-mono"
+          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': scrollMode }"
+          title="Sürekli kaydırma görünümü (tıkla-düzenle)"
+        >
+          Kaydır
+        </button>
         <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
         <button
           @click="zoomOut"
@@ -949,6 +986,15 @@ const showSettings = ref(false)
 const showFile = ref(false)
 const showLayers = ref(false)
 const presenting = ref(false)
+// Kaydırmalı mod: sayfalar alt alta statik bloklar, canlı canvas aktif slotta yüzer.
+const scrollMode = ref(false)
+const scrollBox = ref<HTMLElement | null>(null)
+const activeSlot = ref<HTMLElement | null>(null)
+const blockEls = new Map<string, HTMLElement>()
+const setBlockRef = (el: unknown, id: string) => {
+  if (el instanceof HTMLElement) blockEls.set(id, el)
+  else blockEls.delete(id)
+}
 // Menü kapsayıcıları (dışarı-tıkla kapatma için; paneller v-if'li, butonlar ayrı div'de).
 const fileMenu = ref<HTMLElement | null>(null)
 const settingsBtn = ref<HTMLElement | null>(null)
@@ -1979,7 +2025,9 @@ const onFullscreenChange = () => {
 
 // Trackpad/mause tekeri: yalın = pan, ctrl/cmd = imleç sabitli zoom.
 // passive:false ŞART (sayfa-zoom'u engellemek için preventDefault).
+// Kaydırmalı modda yalın tekerlek native kayar (dokunulmaz), ctrl/cmd zoom'lar.
 const onWheel = (e: WheelEvent) => {
+  if (scrollMode.value && !e.ctrlKey && !e.metaKey) return
   e.preventDefault()
   if (!overlayCanvas.value) return
   const r = overlayCanvas.value.getBoundingClientRect()
@@ -2062,13 +2110,84 @@ const restoreSession = async () => {
 
 const sizeCanvas = () => {
   if (!baseCanvas.value || !overlayCanvas.value) return
+  if (scrollMode.value) positionSlot()
   store.resizeCanvas()
   drawSelectionOverlay()
+}
+
+// Aktif slotu aktif bloğun üstüne oturtur (ölçüler bloktan, eşleşme birebir).
+const positionSlot = () => {
+  if (!scrollMode.value || !scrollBox.value || !activeSlot.value) return
+  const slot = activeSlot.value
+  const pg = store.pages[store.activePageIndex]
+  const block = pg ? blockEls.get(pg.id) : undefined
+  if (!block || block.offsetWidth === 0) {
+    slot.style.display = 'none'
+    return
+  }
+  slot.style.display = ''
+  slot.style.top = `${block.offsetTop}px`
+  slot.style.left = `${block.offsetLeft}px`
+  slot.style.width = `${block.offsetWidth}px`
+  slot.style.height = `${block.offsetHeight}px`
+}
+
+const scrollActiveIntoView = () => {
+  if (!scrollMode.value) return
+  const pg = store.pages[store.activePageIndex]
+  const block = pg ? blockEls.get(pg.id) : undefined
+  block?.scrollIntoView({ block: 'nearest' })
+}
+
+// Pasif sayfaların statik resmi (aktif sayfa canlı canvas'la gelir, atlanır).
+let blockTimer: ReturnType<typeof setTimeout> | undefined
+let stopBlockWatch: (() => void) | null = null
+const refreshBlocks = () => {
+  if (!scrollMode.value) return
+  if (blockTimer) clearTimeout(blockTimer)
+  blockTimer = setTimeout(() => {
+    blockTimer = undefined
+    try {
+      const activeId = store.pages[store.activePageIndex]?.id
+      for (const p of store.pages) {
+        if (p.id === activeId) continue
+        const el = blockEls.get(p.id)
+        if (!el) continue
+        const c = store.exportPageToCanvas(p, p.size.w > 0 ? 860 / p.size.w : 0.5)
+        if (!c) continue
+        c.className = 'block w-full h-auto'
+        el.replaceChildren(c)
+      }
+    } catch {
+      /* boş blok */
+    }
+  }, 350)
+}
+
+const toggleScroll = async () => {
+  cancelSelGesture()
+  cancelTextGesture()
+  cancelImageGesture()
+  cancelPan()
+  activePointerId = null
+  pointers.clear()
+  scrollMode.value = !scrollMode.value
+  await nextTick()
+  bindCanvases()
+  if (scrollMode.value) {
+    refreshBlocks()
+    positionSlot()
+    scrollActiveIntoView()
+  }
+  store.resizeCanvas()
+  drawSelectionOverlay()
+  updateHud(true)
 }
 
 // Seçim değişince bbox'ı tazele (taşıma nokta-mutasyonu, id aynı — orası explicit redraw).
 let stopSelWatch: (() => void) | null = null
 let stopTextWatch: (() => void) | null = null
+let stopPageWatch: (() => void) | null = null
 
 // Sayfa şeridi: düşük çözünürlüklü önbellek, tick+sayfa-değişiminde debounce'lu tazelenir.
 const thumbs = ref<string[]>([])
@@ -2095,12 +2214,18 @@ const goStrip = (i: number) => {
 }
 
 // Canvas initialization
-onMounted(() => {
-  if (!baseCanvas.value || !overlayCanvas.value) return
+// Canvas'lar mod değişiminde remount olur → ref'leri + wheel'i yeniden bağlar.
+const bindCanvases = () => {
+  if (!baseCanvas.value || !overlayCanvas.value) return false
   overlayCanvas.value.style.touchAction = 'none'
-
   store.setCanvasRef(baseCanvas.value)
   store.setOverlayRef(overlayCanvas.value)
+  overlayCanvas.value.addEventListener('wheel', onWheel, { passive: false })
+  return true
+}
+
+onMounted(() => {
+  bindCanvases()
   // Önce ayarlar (kâğıt rengi), sonra ilk boya — yanlış renk flaşı yok.
   // Otomatik oturum yükleme YOK: kayıt varsa banner çıkar, seçim kullanıcıda.
   store
@@ -2120,7 +2245,6 @@ onMounted(() => {
   window.addEventListener('keyup', onKeyUp)
   document.addEventListener('fullscreenchange', onFullscreenChange)
   document.addEventListener('pointerdown', onDocPointerDown)
-  overlayCanvas.value.addEventListener('wheel', onWheel, { passive: false })
   stopSelWatch = watch(
     () => store.selectedIds,
     () => drawSelectionOverlay(),
@@ -2134,6 +2258,20 @@ onMounted(() => {
   )
   stopThumbWatch = watch(() => [store.thumbTick, store.pages] as const, refreshThumbs)
   refreshThumbs()
+  stopBlockWatch = watch(() => store.thumbTick, refreshBlocks)
+  stopPageWatch = watch(
+    () => store.activePageIndex,
+    () => {
+      if (!scrollMode.value) return
+      nextTick(() => {
+        positionSlot()
+        store.resizeCanvas()
+        drawSelectionOverlay()
+        refreshBlocks()
+        scrollActiveIntoView()
+      })
+    },
+  )
 })
 
 onUnmounted(() => {
@@ -2154,6 +2292,13 @@ onUnmounted(() => {
   stopThumbWatch = null
   if (thumbTimer) clearTimeout(thumbTimer)
   thumbTimer = undefined
+  stopBlockWatch?.()
+  stopBlockWatch = null
+  stopPageWatch?.()
+  stopPageWatch = null
+  if (blockTimer) clearTimeout(blockTimer)
+  blockTimer = undefined
+  blockEls.clear()
   window.removeEventListener('resize', sizeCanvas)
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
