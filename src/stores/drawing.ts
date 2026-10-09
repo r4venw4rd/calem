@@ -109,6 +109,7 @@ export interface AppSettings {
   eraserMode?: EraserMode
   toolbar?: ToolbarConfig
   smoothing?: number
+  touchPan?: boolean
   format: PageFormat
   orientation: PageOrientation
   customW: number
@@ -309,6 +310,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         eraserMode: eraserMode.value,
         toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
         smoothing: smoothing.value,
+        touchPan: touchPan.value,
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
@@ -330,6 +332,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       eraserMode: eraserMode.value,
       toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
       smoothing: smoothing.value,
+      touchPan: touchPan.value,
       format: pageFormat.value,
       orientation: pageOrientation.value,
       customW: customW.value,
@@ -366,6 +369,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     if (typeof r.smoothing === 'number' && Number.isFinite(r.smoothing)) {
       smoothing.value = Math.min(0.9, Math.max(0, Math.round(r.smoothing * 100) / 100))
+      applied = true
+    }
+    if (typeof r.touchPan === 'boolean') {
+      touchPan.value = r.touchPan
       applied = true
     }
     if ('toolbar' in r && r.toolbar !== undefined) {
@@ -420,6 +427,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       if (typeof raw.smoothing === 'number' && Number.isFinite(raw.smoothing)) {
         smoothing.value = Math.min(0.9, Math.max(0, Math.round(raw.smoothing * 100) / 100))
+      }
+      if (typeof raw.touchPan === 'boolean') {
+        touchPan.value = raw.touchPan
       }
       if (raw.toolbar !== undefined) {
         const tb = cleanToolbar(raw.toolbar)
@@ -1326,6 +1336,14 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   const setRejectTouch = (v: boolean) => {
     rejectTouch.value = v
+  }
+
+  // Dokunmayla kaydır (opsiyonel): açıkken PARMAK her araçta kaydırır, kalem/fare çizer.
+  // Avuç reddiyle iyi ikili olur (parmak=kaydır, kalem=çizer, avuç=yok).
+  const touchPan = ref(false)
+  const setTouchPan = (v: boolean) => {
+    touchPan.value = v
+    void persistSettings()
   }
 
   const shouldIgnoreEvent = (e: PointerEvent): boolean => {
@@ -2609,6 +2627,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         eraserMode: eraserMode.value,
         toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
         smoothing: smoothing.value,
+        touchPan: touchPan.value,
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
@@ -3452,6 +3471,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     setColor,
     setStrokeWidth,
     setRejectTouch,
+    touchPan,
+    setTouchPan,
     smoothing,
     setSmoothing,
     strokeDash,
