@@ -558,6 +558,15 @@
             />
             Avuç reddi
           </label>
+          <label class="flex items-center gap-2 mt-2 cursor-pointer" title="Açıkken parmak her araçta kaydırır, kalem/fare çizer">
+            <input
+              type="checkbox"
+              :checked="store.touchPan"
+              @change="store.setTouchPan(($event.target as HTMLInputElement).checked)"
+              class="accent-indigo-600"
+            />
+            Dokunmayla kaydır
+          </label>
         </div>
 
         <div class="mt-3 pt-2 border-t border-[var(--chrome-border)]">
@@ -1576,6 +1585,11 @@ const startDraw = (e: PointerEvent) => {
     return
   }
   if (pointers.size !== 1 || gesture || gestureConsumed) return
+  // Dokun-kaydır açıksa parmak her araçta kaydırır (kalem/fare etkilenmez).
+  if (e.pointerType === 'touch' && store.touchPan) {
+    panDown(e)
+    return
+  }
   // Space-kaydırma her aracı ezer (pinch sonrası değil); el aracı dokunmayla da kaydırır.
   if (spacePan || store.currentTool === 'hand') {
     panDown(e)
