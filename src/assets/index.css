@@ -6,6 +6,7 @@
    Kâğıt rengi ayrıdır (paper setting) — bu sadece uygulama iskeleti. */
 :root,
 :root[data-theme='koyu'] {
+  color-scheme: dark;
   --chrome-bg: #111827;
   --chrome-bg-soft: rgb(255 255 255 / 0.05);
   --chrome-bg-solid: #1f2937;
@@ -19,6 +20,7 @@
 }
 
 :root[data-theme='acik'] {
+  color-scheme: light;
   --chrome-bg: #f3f4f6;
   --chrome-bg-soft: rgb(0 0 0 / 0.05);
   --chrome-bg-solid: #ffffff;
