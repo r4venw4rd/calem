@@ -108,6 +108,7 @@ export interface AppSettings {
   background?: PaperBackground
   eraserMode?: EraserMode
   toolbar?: ToolbarConfig
+  smoothing?: number
   format: PageFormat
   orientation: PageOrientation
   customW: number
@@ -205,6 +206,8 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Reactive olsaydı her yazım Pinia/devtools'a mutation olarak düşer → oturum uzadıkça kasar.
   let lastPressure = 1
   let cachedRect: DOMRect | null = null
+  // Yumuşatma durumu (SAYFA uzayı): startDrawing'de başa alınır.
+  let smoothPt: { x: number; y: number } | null = null
   // Aktif çizginin kirli kutusu (SAYFA uzayında) — overlay fullscreen değil, bu kutu temizlenir.
   let bb: { x0: number; y0: number; x1: number; y1: number } | null = null
   // Kâğıt rengi (ayar; esnek config'in ilk üyesi — tema/toolbar konumu vs. buraya eklenir).
@@ -305,6 +308,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         background: { ...paperBackground.value },
         eraserMode: eraserMode.value,
         toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
+        smoothing: smoothing.value,
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
@@ -325,6 +329,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       background: { ...paperBackground.value },
       eraserMode: eraserMode.value,
       toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
+      smoothing: smoothing.value,
       format: pageFormat.value,
       orientation: pageOrientation.value,
       customW: customW.value,
@@ -357,6 +362,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     if (r.eraserMode === 'standard' || r.eraserMode === 'stroke') {
       eraserMode.value = r.eraserMode
+      applied = true
+    }
+    if (typeof r.smoothing === 'number' && Number.isFinite(r.smoothing)) {
+      smoothing.value = Math.min(0.9, Math.max(0, Math.round(r.smoothing * 100) / 100))
       applied = true
     }
     if ('toolbar' in r && r.toolbar !== undefined) {
@@ -408,6 +417,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       if ((raw.v === 3 || raw.v === 4) && (raw.eraserMode === 'standard' || raw.eraserMode === 'stroke')) {
         eraserMode.value = raw.eraserMode
+      }
+      if (typeof raw.smoothing === 'number' && Number.isFinite(raw.smoothing)) {
+        smoothing.value = Math.min(0.9, Math.max(0, Math.round(raw.smoothing * 100) / 100))
       }
       if (raw.toolbar !== undefined) {
         const tb = cleanToolbar(raw.toolbar)
@@ -464,6 +476,14 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   // 0 = basınç kapalı, 2 = çok hassas. UI slider'dan ayarlanır.
   const pressureSensitivity = ref(1)
+  // Yumuşatma 0..0.9: giriş noktalarına tek-kutuplu lowpass (titreme yutar, 0=ham).
+  // Silgide uygulanmaz (kesim dairesi tam konum ister).
+  const smoothing = ref(0.25)
+  const setSmoothing = (n: number) => {
+    if (!Number.isFinite(n)) return
+    smoothing.value = Math.min(0.9, Math.max(0, Math.round(n * 100) / 100))
+    void persistSettings()
+  }
   // Açıkken touch ile çizim engellenir (stylus + mouse serbest) — Chromebook avuç reddi.
   const rejectTouch = ref(false)
   // Backing-store ölçeği — noktalar SAYFA uzayında saklanır, render DPR × view-fit ile ölçeklenir.
@@ -1552,6 +1572,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     const cy = Math.min(size.h, Math.max(0, y))
     const p = readPressure(e)
     lastPressure = p
+    smoothPt = { x: cx, y: cy }
     points.value = [{ x: cx, y: cy, pressure: p }]
     bb = { x0: cx, y0: cy, x1: cx, y1: cy }
     return true
@@ -1599,8 +1620,15 @@ export const useDrawingStore = defineStore('drawing', () => {
     const raw = getPos(e)
     const size = activePage.value.size
     // Sayfa dışına taşan hareket kenara kelepçelenir (ekran/export tutarlılığı).
-    const x = Math.min(size.w, Math.max(0, raw.x))
-    const y = Math.min(size.h, Math.max(0, raw.y))
+    let x = Math.min(size.w, Math.max(0, raw.x))
+    let y = Math.min(size.h, Math.max(0, raw.y))
+    // Yumuşatma: ham girdiyi lowpass'ten geçir (k=0 ham demektir).
+    const k = smoothing.value
+    if (k > 0 && smoothPt) {
+      x = smoothPt.x + (x - smoothPt.x) * (1 - k)
+      y = smoothPt.y + (y - smoothPt.y) * (1 - k)
+    }
+    smoothPt = { x, y }
     const pressureVal = readPressure(e)
     lastPressure = pressureVal
 
@@ -2580,6 +2608,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         background: { ...paperBackground.value },
         eraserMode: eraserMode.value,
         toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
+        smoothing: smoothing.value,
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
@@ -3423,6 +3452,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     setColor,
     setStrokeWidth,
     setRejectTouch,
+    smoothing,
+    setSmoothing,
     strokeDash,
     setStrokeDash,
     strokeOpacity,
