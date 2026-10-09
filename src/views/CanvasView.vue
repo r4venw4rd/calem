@@ -261,7 +261,7 @@
             @input="onCustomInput(($event.target as HTMLInputElement).value)"
             @cancel="pickerArmed = false"
             class="w-6 h-6 rounded-full bg-transparent border border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0 shrink-0"
-            title="Özel renk (custom slot seçiliyse onu düzenler)"
+            title="Özel renk"
           />
           <span
             v-for="i in CUSTOM_SLOT_COUNT"
@@ -270,10 +270,13 @@
           >
             <button
               v-if="store.customColors[i - 1]"
-              @click="store.setColor(store.customColors[i - 1]!)"
-              :title="`${store.customColors[i - 1]} (damlayla düzenlenir)`"
+              @click="store.setColor(store.customColors[i - 1]!); editingCustom = null"
+              :title="`${store.customColors[i - 1]} (✎ ile düzenlenir)`"
               class="w-6 h-6 rounded-full border transition block"
-              :class="store.color.toLowerCase() === store.customColors[i - 1] ? 'border-[var(--chrome-title)] scale-110' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
+              :class="[
+                store.color.toLowerCase() === store.customColors[i - 1] ? 'border-[var(--chrome-title)] scale-110' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]',
+                editingCustom === i - 1 ? 'ring-2 ring-indigo-500' : '',
+              ]"
               :style="{ background: store.customColors[i - 1] }"
             ></button>
             <button
@@ -291,6 +294,14 @@
               class="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 hidden group-hover:flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[9px] leading-none text-[var(--chrome-text)]"
             >
               ×
+            </button>
+            <button
+              v-if="store.customColors[i - 1]"
+              @click="editingCustom = i - 1"
+              title="Düzenle: damladan yeni rengi seç"
+              class="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 hidden group-hover:flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[9px] leading-none text-[var(--chrome-text)]"
+            >
+              ✎
             </button>
           </span>
         </div>
@@ -560,6 +571,14 @@
               title="Mevcut rengi bu palete ekle"
             >
               +
+            </button>
+            <button
+              @click="store.appendCustomsToPalette(p.id)"
+              :disabled="store.customColors.length === 0"
+              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] font-mono disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Custom satırdakileri bu palete ekle"
+            >
+              C+
             </button>
             <button
               @click="renamePaletteBtn(p.id)"
@@ -1532,9 +1551,10 @@ const onTextInput = (e: Event) => {
   store.updateText(store.activeTextId, (e.target as HTMLTextAreaElement).value)
 }
 
-// Damla: custom slot seçiliyse onu yerinde düzenler, değilse rengi seçer.
+// Damla: normalde rengi seçer. ✎ ile silahlanmış slot varsa onu düzenler (tek atımlık).
 // Boş "+" önce damla diyaloğunu açar; seçim o diyaloğa düşer (iptalde @cancel temizler).
 const customPicker = ref<HTMLInputElement | null>(null)
+const editingCustom = ref<number | null>(null)
 let pickerArmed = false
 const onCustomInput = (hex: string) => {
   if (pickerArmed) {
@@ -1542,9 +1562,13 @@ const onCustomInput = (hex: string) => {
     store.addCustomColor(hex)
     return
   }
-  const idx = store.customColors.indexOf(store.color)
-  if (idx !== -1) store.setCustomSlot(idx, hex)
-  else store.setColor(hex)
+  if (editingCustom.value !== null) {
+    const i = editingCustom.value
+    editingCustom.value = null
+    store.setCustomSlot(i, hex)
+    return
+  }
+  store.setColor(hex)
 }
 const pickCustom = () => {
   const picker = customPicker.value
