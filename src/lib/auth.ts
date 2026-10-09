@@ -12,6 +12,8 @@ export interface CalemUser {
   provider: string
   email?: string
   tier: MembershipTier
+  /** Kurucu üye rozeti (ücretli geçişte indirim hakkı; local'da her zaman tanımsız). */
+  founder?: boolean
 }
 
 export type AuthListener = (user: CalemUser | null) => void

@@ -1,10 +1,12 @@
 import type { Tool } from '../stores/drawing'
 
 // Araç kataloğu: sıra + geçerlilik beyaz listesi (toolbar config buradan beslenir).
+// El silginin sağındadır (istenen varsayılan dizilim).
 export const ALL_TOOLS: Tool[] = [
   'pen',
   'highlighter',
   'eraser',
+  'hand',
   'select',
   'line',
   'rect',
@@ -12,7 +14,6 @@ export const ALL_TOOLS: Tool[] = [
   'arrow',
   'text',
   'image',
-  'hand',
 ]
 
 /** Araç başına kalınlık aralığı (pt). */

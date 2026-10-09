@@ -16,6 +16,28 @@ Cookie/localStorage yok, olmayacak — cookie 4KB ve her HTTP isteğinde gider; 
 - **Membership:** `MembershipTier` (free/pro), kota kapıları saf fonksiyon (`canAddPage`, `storageQuotaBytes`) `config/membership.ts` placeholder sabitleriyle; kota sayıları en son belirlenecek. Local'da özellik kilidi yok — üyelik yalnızca bulutu açar (sync/kota/paylaşım), tier rozettir kapı açmaz. Billing kodu yok.
 - **Anonim→hesap taşıma:** login sonrası "local veriyi hesaba taşı?" modalı, varsayılan EVET, tek tık. Otomatik merge yok; `.calem` import'u asla otomatik upload edilmez.
 
+## Bulut maliyet gerçekleri (doğrulandı: 2026-10, supabase.com/docs + /pricing)
+
+Supabase FREE tavanları **proje başına toplamdır** (kullanıcı başına değil):
+
+| Kaynak | Free | Pro ($25/ay) |
+|---|---|---|
+| DB boyutu | 500 MB (aşınca read-only kilit) | 8 GB dahil |
+| Dosya storage | 1 GB | 100 GB dahil |
+| Egress | 5 GB + 5 GB cache /ay | 250 GB dahil |
+| Auth MAU | 50.000 | 100.000 dahil |
+| Proje | 2 aktif | duraklatma yok |
+
+- **7 gün işlemsizlik → proje duraklatılır** (uyarı e-postası gelir, 1 yıl içinde dashboard'dan resume, cold-start 10-30sn). Günlük birkaç sorgu canlı tutar ama gerçek kullanıcıya "senkronum çalışmıyor" yaşatır.
+- **Free'de otomatik yedek YOKTUR** — `.calem` dışa aktarım yedek görevi görür, görünür kalır.
+- Kota matematiği: free 25MB × 40 kullanıcı = 1GB tavan. Tavan yaklaşınca ücretsiz alım durur veya Pro'ya geçilir.
+
+Kararlar:
+- Sync ilk günden **"beta"** etiketli açılır; `.calem` dışa aktarım yedek olarak menüde kalır.
+- PDF arkaplan bytes'ları sync'e girmez (local'de yeniden import edilir); yalnızca vektör mürekkep + küçük resimler senkronlanır — storage/egress'i korur.
+- İlk sabit gider: Supabase Pro ~$25/ay. İlk gelirden önce kapatılması gereken kalemdir.
+- Dağıtım hamleleri (faturalama yokken bile): bekleme listesi butonu YOK — karar: önce altyapı dikişi. MoR (Polar/Lemon Squeezy ~%5 + $0.50 — küçük sepette ~%10 efektif, doğrula) hesabını erken açıp KYC/onayı bekletme. Erken kullanıcıya **kurucu üye rozeti + %50 ömür indirimi** sözü (`FOUNDER_DISCOUNT_PCT`, `CalemUser.founder`) — ücretli geçişte "tuzağa düştüm" hissi olmaz.
+
 ## Fazlar
 - **Faz 1 — `src/config/` paketi:** sabit taşıma + kilit testleri (yapıldı).
 - **Faz 2 — storage interface:** `DocStorage` + IDB adaptörü (yapıldı).
@@ -27,6 +49,10 @@ Cookie/localStorage yok, olmayacak — cookie 4KB ve her HTTP isteğinde gider; 
   - `src/config/membership.ts`: `MembershipTier` (free/pro), placeholder kotalar, `canAddPage`/`storageQuotaBytes` (local'da çağrılmaz, kilit yok), `canUseCloud`.
   - Testler: `tests/auth|storage|sync|membership.test.ts` (29 test; toplam 80/80).
   - YapılMAyan: ağ aktarımı, login ekranı, anonim→hesap taşıma modalı, billing — hesap geldikten sonra.
+- **Faz 5 — billing altyapı dikişi:** (yapıldı, ağ yok, bekleme listesi UI yok).
+  - `src/lib/billing.ts`: `BillingProvider` (`getStatus/checkout/openPortal/onBillingChange`) + `NoopBillingProvider` (checkout/portal açıkça reddeder), `getBilling/setBillingProvider` binding.
+  - `src/config/membership.ts`: `FOUNDER_DISCOUNT_PCT` (%50) + `applyDiscount` (aşağı yuvarlar); `CalemUser.founder?` bayrağı.
+  - Testler: `tests/billing.test.ts` + founder indirimi kilitleri.
 
 ## Bilerek yapılMAYacak
 - Cookie/localStorage'a taşıma, backend kodu, kullanıcı hesabı (bu planda sadece dikişleri var).
