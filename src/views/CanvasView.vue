@@ -222,49 +222,74 @@
         </button>
       </div>
 
-      <div v-if="store.currentTool !== 'select'" class="flex items-center gap-1.5" role="toolbar" aria-label="Renk paleti">
-        <select
-          :value="store.activePaletteId"
-          @change="store.setActivePalette(($event.target as HTMLSelectElement).value)"
-          class="max-w-24 px-1.5 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)]"
-          title="Renk paleti seç"
-        >
-          <option v-for="p in store.palettes" :key="p.id" :value="p.id">{{ p.name }}</option>
-        </select>
-        <span
-          v-for="hex in store.activePalette.colors"
-          :key="hex"
-          class="relative group shrink-0"
-        >
-          <button
-            @click="store.setColor(hex)"
-            :title="hex"
-            class="w-6 h-6 rounded-full border transition block"
-            :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
-            :style="{ background: hex }"
-          ></button>
-          <button
-            @click="store.removeColorFromPalette(hex)"
-            title="Rengi paletten kaldır"
-            class="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 hidden group-hover:flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[9px] leading-none text-[var(--chrome-text)]"
+      <div v-if="store.currentTool !== 'select'" class="flex flex-col gap-1" role="toolbar" aria-label="Renk paleti">
+        <div class="flex items-center gap-1.5">
+          <select
+            :value="store.activePaletteId"
+            @change="store.setActivePalette(($event.target as HTMLSelectElement).value)"
+            class="max-w-24 px-1.5 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)]"
+            title="Renk paleti seç"
           >
-            ×
+            <option v-for="p in store.palettes" :key="p.id" :value="p.id">{{ p.name }}</option>
+          </select>
+          <span
+            v-for="hex in store.activePalette.colors"
+            :key="hex"
+            class="relative group shrink-0"
+          >
+            <button
+              @click="store.setColor(hex)"
+              :title="hex"
+              class="w-6 h-6 rounded-full border transition block"
+              :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
+              :style="{ background: hex }"
+            ></button>
+            <button
+              @click="store.removeColorFromPalette(hex)"
+              title="Rengi paletten kaldır"
+              class="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 hidden group-hover:flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[9px] leading-none text-[var(--chrome-text)]"
+            >
+              ×
+            </button>
+          </span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <input
+            type="color"
+            :value="store.color"
+            @input="store.setColor(($event.target as HTMLInputElement).value)"
+            class="w-6 h-6 rounded-full bg-transparent border border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0 shrink-0"
+            title="Özel renk (damla)"
+          />
+          <button
+            @click="store.addCustomColor()"
+            class="w-6 h-6 rounded-full border border-dashed border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition font-mono shrink-0"
+            title="Mevcut rengi custom satıra ekle"
+          >
+            +
           </button>
-        </span>
-        <input
-          type="color"
-          :value="store.color"
-          @input="store.setColor(($event.target as HTMLInputElement).value)"
-          class="w-6 h-6 rounded-full bg-transparent border border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0 shrink-0"
-          title="Özel renk"
-        />
-        <button
-          @click="store.addColorToPalette()"
-          class="w-6 h-6 rounded-full border border-dashed border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition font-mono shrink-0"
-          title="Mevcut rengi palete ekle"
-        >
-          +
-        </button>
+          <span
+            v-for="hex in store.customColors"
+            :key="'c' + hex"
+            class="relative group shrink-0"
+          >
+            <button
+              @click="store.setColor(hex)"
+              :title="hex"
+              class="w-6 h-6 rounded-full border transition block"
+              :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
+              :style="{ background: hex }"
+            ></button>
+            <button
+              @click="store.removeCustomColor(hex)"
+              title="Custom rengi kaldır"
+              class="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 hidden group-hover:flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[9px] leading-none text-[var(--chrome-text)]"
+            >
+              ×
+            </button>
+          </span>
+          <span v-if="store.customColors.length === 0" class="text-[10px] text-[var(--chrome-faint)] font-mono">custom → +</span>
+        </div>
       </div>
 
       <div v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'" class="flex items-center gap-2">
