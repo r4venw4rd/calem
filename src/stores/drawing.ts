@@ -13,6 +13,7 @@ import {
   type PaperBackgroundType,
 } from '../lib/paper'
 import {
+  coalescedOf,
   selectByLasso as selByLasso,
   selectByRect as selByRect,
   strokeBBox,
@@ -791,16 +792,21 @@ export const useDrawingStore = defineStore('drawing', () => {
     activeTextId.value = null
     activeImageId.value = null
   }
+  // Metin kaba kutusu (ölçümsüz tahmin; vuruş-testi ve daire-değme için yeterli).
+  const textBBoxOf = (t: TextItem): { x0: number; y0: number; x1: number; y1: number } => {
+    const lines = t.text.split('\n')
+    const w = Math.max(...lines.map((l) => l.length)) * t.size * 0.62 + 8
+    const h = lines.length * t.size * 1.25 + 4
+    return { x0: t.x - 4, y0: t.y - 4, x1: t.x + w, y1: t.y + h }
+  }
   // Tıklanan noktadaki en üst metin (kaba kutu: ölçümsüz tahmin, editör gerçeği gösterir).
   const textAt = (x: number, y: number): TextItem | null => {
     const items = activePage.value.texts
     for (let i = items.length - 1; i >= 0; i--) {
       const t = items[i]!
       if (!t.text) continue
-      const lines = t.text.split('\n')
-      const w = Math.max(...lines.map((l) => l.length)) * t.size * 0.62 + 8
-      const h = lines.length * t.size * 1.25 + 4
-      if (x >= t.x - 4 && x <= t.x + w && y >= t.y - 4 && y <= t.y + h) return t
+      const bb = textBBoxOf(t)
+      if (x >= bb.x0 && x <= bb.x1 && y >= bb.y0 && y <= bb.y1) return t
     }
     return null
   }
@@ -1251,14 +1257,40 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Silgi stroke'ları hedef değildir (mürekkep hortlamasın). Sökülenler mezara
   // (sayfa+katman kimlikli) konur → undo kronolojik olmasa da geri getirir.
   // 200'de cap'lenir (bellek emniyeti).
+  type GraveRemoved =
+    | { kind: 'stroke'; stroke: Stroke; index: number }
+    | { kind: 'text'; text: TextItem; index: number }
   interface GraveEntry {
     pageId: string
     layerId: string
-    removed: { stroke: Stroke; index: number }[]
+    session: number
+    removed: GraveRemoved[]
     addedIds: string[]
   }
   let erasedGrave: GraveEntry[] = []
+  // Silgi oturumu: basılı-sürükleme turu. Aynı turun kayıtları tek undo'da birleşir.
+  let eraseSession = 0
+  // Metinler mürekkebin ÜSTÜNDE boyanır → vuruşta önce metne bakılır.
   const eraseStrokeAt = (x: number, y: number): boolean => {
+    const hitText = textAt(x, y)
+    if (hitText) {
+      const tarr = activePage.value.texts
+      const idx = tarr.findIndex((t) => t.id === hitText.id)
+      if (idx !== -1) {
+        const [gone] = tarr.splice(idx, 1)
+        erasedGrave.push({
+          pageId: activePage.value.id,
+          layerId: activeLayer.value.id,
+          session: eraseSession,
+          removed: [{ kind: 'text', text: gone!, index: idx }],
+          addedIds: [],
+        })
+        if (erasedGrave.length > 200) erasedGrave.shift()
+        redoStack.value = []
+        if (activeTextId.value === gone!.id) activeTextId.value = null
+        return true
+      }
+    }
     const arr = activeLayer.value.strokes
     for (let i = arr.length - 1; i >= 0; i--) {
       const s = arr[i]!
@@ -1270,7 +1302,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       erasedGrave.push({
         pageId: activePage.value.id,
         layerId: activeLayer.value.id,
-        removed: [{ stroke: gone!, index: i }],
+        session: eraseSession,
+        removed: [{ kind: 'stroke', stroke: gone!, index: i }],
         addedIds: [],
       })
       if (erasedGrave.length > 200) erasedGrave.shift()
@@ -1290,8 +1323,23 @@ export const useDrawingStore = defineStore('drawing', () => {
   const eraseRadius = (): number => Math.max(strokeWidth.value / 2, 2.5)
   const splitEraseAt = (x: number, y: number, radius: number): boolean => {
     const layer = activeLayer.value
-    const removed: { stroke: Stroke; index: number }[] = []
+    const removed: GraveRemoved[] = []
     const addedIds: string[] = []
+    // Metin kutuları parçalanmaz: daire değerse tümden gider.
+    const tarr = activePage.value.texts
+    for (let i = tarr.length - 1; i >= 0; i--) {
+      const t = tarr[i]!
+      if (!t.text) continue
+      const bb = textBBoxOf(t)
+      const nx = Math.min(Math.max(x, bb.x0), bb.x1)
+      const ny = Math.min(Math.max(y, bb.y0), bb.y1)
+      const dx = x - nx
+      const dy = y - ny
+      if (dx * dx + dy * dy > radius * radius) continue
+      const [gone] = tarr.splice(i, 1)
+      removed.push({ kind: 'text', text: gone!, index: i })
+      if (activeTextId.value === gone!.id) activeTextId.value = null
+    }
     const keptSel = new Set(selectedIds.value)
     let selChanged = false
     for (let i = layer.strokes.length - 1; i >= 0; i--) {
@@ -1302,7 +1350,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       const runs = splitRunsOutside(s.points, x, y, radius)
       if (runs.length === 1 && runs[0]!.length === s.points.length) continue // değmedi
       const [gone] = layer.strokes.splice(i, 1)
-      removed.push({ stroke: gone!, index: i })
+      removed.push({ kind: 'stroke', stroke: gone!, index: i })
       const pieces: Stroke[] = []
       for (const run of runs) {
         if (run.length === 0) continue
@@ -1326,7 +1374,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
     }
     if (removed.length === 0) return false
-    erasedGrave.push({ pageId: activePage.value.id, layerId: layer.id, removed, addedIds })
+    erasedGrave.push({ pageId: activePage.value.id, layerId: layer.id, session: eraseSession, removed, addedIds })
     if (erasedGrave.length > 200) erasedGrave.shift()
     redoStack.value = []
     if (selChanged) selectedIds.value = [...keptSel]
@@ -1342,6 +1390,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     // Vuruş-silgi nokta toplamaz: dokunduğu anda söker.
     if (currentTool.value === 'eraser' && eraserMode.value === 'stroke') {
       isDrawing.value = true
+      eraseSession += 1
       const { x, y } = getPos(e)
       if (eraseStrokeAt(x, y)) {
         recountActive()
@@ -1354,6 +1403,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     // Arkaplan (desen/PDF) hiçbir katmanda ezilmez.
     if (currentTool.value === 'eraser') {
       isDrawing.value = true
+      eraseSession += 1
       const { x, y } = getPos(e)
       if (splitEraseAt(x, y, eraseRadius())) {
         recountActive()
@@ -1391,10 +1441,9 @@ export const useDrawingStore = defineStore('drawing', () => {
 
     // Vuruş-silgi: birikmiş olaylarda tek tek sök, tur başına tek boya.
     if (currentTool.value === 'eraser' && eraserMode.value === 'stroke') {
-      const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
       let hit = false
-      for (const ev of events) {
-        const p = getPos(ev as PointerEvent)
+      for (const ev of coalescedOf(e)) {
+        const p = getPos(ev)
         if (eraseStrokeAt(p.x, p.y)) hit = true
       }
       if (hit) {
@@ -1407,11 +1456,10 @@ export const useDrawingStore = defineStore('drawing', () => {
 
     // Kes-silgi: dairede kalanı kes, tur başına tek boya (arkaplan ezilmez).
     if (currentTool.value === 'eraser') {
-      const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
       const r = eraseRadius()
       let hit = false
-      for (const ev of events) {
-        const p = getPos(ev as PointerEvent)
+      for (const ev of coalescedOf(e)) {
+        const p = getPos(ev)
         if (splitEraseAt(p.x, p.y, r)) hit = true
       }
       if (hit) {
@@ -3046,13 +3094,34 @@ export const useDrawingStore = defineStore('drawing', () => {
       g = erasedGrave.pop()
     }
     if (g) {
-      if (g.addedIds.length > 0) {
-        const drop = new Set(g.addedIds)
-        activeLayer.value.strokes = activeLayer.value.strokes.filter((s) => !drop.has(s.id))
+      // Aynı oturumun ardışık kayıtları tek undo'da birleşir (sürükle-sil tek hamlede döner).
+      // Ara parçalar hem eklenen hem sökülen tarafta görünür → net etki korunur:
+      // eklenen id'si olan sökük atlanır, gerçek kayıp geri konur.
+      let top = erasedGrave[erasedGrave.length - 1]
+      while (
+        top &&
+        top.session === g.session &&
+        top.pageId === g.pageId &&
+        top.layerId === g.layerId
+      ) {
+        erasedGrave.pop()
+        g.removed.push(...top.removed)
+        g.addedIds.push(...top.addedIds)
+        top = erasedGrave[erasedGrave.length - 1]
       }
-      const arr = activeLayer.value.strokes
+      const added = new Set(g.addedIds)
+      if (added.size > 0) {
+        activeLayer.value.strokes = activeLayer.value.strokes.filter((s) => !added.has(s.id))
+      }
       for (const r of g.removed) {
-        arr.splice(Math.min(r.index, arr.length), 0, r.stroke)
+        if (r.kind === 'stroke') {
+          if (added.has(r.stroke.id)) continue
+          const arr = activeLayer.value.strokes
+          arr.splice(Math.min(r.index, arr.length), 0, r.stroke)
+        } else {
+          const arr = activePage.value.texts
+          arr.splice(Math.min(r.index, arr.length), 0, r.text)
+        }
       }
       points.value = []
       isDrawing.value = false
