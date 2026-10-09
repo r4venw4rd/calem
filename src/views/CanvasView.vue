@@ -334,19 +334,24 @@
       <span v-if="pdfError" class="text-[10px] text-red-400 font-mono">{{ pdfError }}</span>
 
       <div
-        ref="settingsPanel"
         v-if="showSettings"
-        class="absolute left-2 top-full mt-1 z-20 w-64 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
+        class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-black/50"
+        @pointerdown.self="showSettings = false"
+      >
+      <div
+        ref="settingsPanel"
+        class="w-[min(92vw,380px)] max-h-[85vh] flex flex-col rounded-xl bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] shadow-2xl"
         role="dialog"
         aria-label="Ayarlar"
       >
-        <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center justify-between px-3 pt-3 pb-2">
           <span class="font-medium text-[var(--chrome-title)]">Ayarlar</span>
-          <button @click="showSettings = false" class="text-[var(--chrome-faint)] hover:text-[var(--chrome-title)]" title="Kapat">
+          <button @click="showSettings = false" class="text-[var(--chrome-faint)] hover:text-[var(--chrome-title)]" title="Kapat (Esc)">
             Kapat
           </button>
         </div>
 
+        <div class="overflow-y-auto px-3 pb-3">
         <div class="mb-1 text-[var(--chrome-muted)]">Arayüz teması</div>
         <div class="flex gap-1 mb-3">
           <button
@@ -587,6 +592,8 @@
             <div>Del/Esc/oklar (seçimde)</div>
           </div>
         </div>
+        </div>
+      </div>
       </div>
 
       <div
