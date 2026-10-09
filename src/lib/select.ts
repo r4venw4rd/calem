@@ -73,8 +73,15 @@ export const pointInPolygon = (
   return inside
 }
 
-// Dikdörtgen seçim: bbox'u kesişen stroke'lar. Küçük tıklama (3pt altı)
-// nokta seçimi sayılır — altında kalan ilk stroke döner.
+// Coalesced olaylar: donanım biriktirir, sentetik/CDP boş dönebilir.
+// Boşsa olayın kendisi kullanılır (nokta kaybı olmasın).
+export const coalescedOf = (e: PointerEvent): PointerEvent[] => {
+  if (typeof e.getCoalescedEvents === 'function') {
+    const list = e.getCoalescedEvents()
+    if (list.length > 0) return list as PointerEvent[]
+  }
+  return [e]
+}
 export const selectByRect = (
   strokes: Pick<Stroke, 'id' | 'points' | 'width'>[],
   a: { x: number; y: number },

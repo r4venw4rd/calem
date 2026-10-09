@@ -931,7 +931,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
 import { drawingPerf, PAGE_FORMATS, PAPER_THEMES, useDrawingStore } from '@/stores/drawing'
-import { selectionBBox } from '@/lib/select'
+import { selectionBBox, coalescedOf } from '@/lib/select'
 
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
@@ -1147,9 +1147,8 @@ const selectDown = (e: PointerEvent) => {
 const selectMove = (e: PointerEvent) => {
   if (!selActive || e.pointerId !== activePointerId) return
   if (e.buttons === 0 && e.pointerType === 'mouse') return
-  const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
-  for (const ev of events) {
-    const p = store.eventToPage(ev as PointerEvent)
+  for (const ev of coalescedOf(e)) {
+    const p = store.eventToPage(ev)
     if (selMoving && selLast) {
       store.moveSelected(p.x - selLast.x, p.y - selLast.y)
       selLast = p
@@ -1253,9 +1252,8 @@ const textDown = (e: PointerEvent) => {
 const textMove = (e: PointerEvent) => {
   if (e.pointerId !== activePointerId || !textDownPos) return
   if (e.buttons === 0 && e.pointerType === 'mouse') return
-  const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
-  for (const ev of events) {
-    const p = store.eventToPage(ev as PointerEvent)
+  for (const ev of coalescedOf(e)) {
+    const p = store.eventToPage(ev)
     if (!textMoving && textDownHit) {
       const dx = p.x - textDownPos.x
       const dy = p.y - textDownPos.y
@@ -1359,9 +1357,8 @@ const imageDown = (e: PointerEvent) => {
 const imageMove = (e: PointerEvent) => {
   if (e.pointerId !== activePointerId || !imgDownPos) return
   if (e.buttons === 0 && e.pointerType === 'mouse') return
-  const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
-  for (const ev of events) {
-    const p = store.eventToPage(ev as PointerEvent)
+  for (const ev of coalescedOf(e)) {
+    const p = store.eventToPage(ev)
     if (!imgMoving && imgDownHit) {
       const dx = p.x - imgDownPos.x
       const dy = p.y - imgDownPos.y
@@ -1551,8 +1548,7 @@ const draw = (e: PointerEvent) => {
   // Sadece basılıyken çiz (pointermove hover'da ateşlenir)
   if (e.buttons === 0 && e.pointerType === 'mouse') return
   // coalesced events: birikmiş ara noktaları da işle, çizgi köşelenmesin
-  const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
-  for (const ev of events) store.draw(ev as PointerEvent)
+  for (const ev of coalescedOf(e)) store.draw(ev)
   scheduleRender()
 }
 
