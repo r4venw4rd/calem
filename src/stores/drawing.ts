@@ -25,6 +25,24 @@ export type ShapeTool = 'line' | 'rect' | 'ellipse' | 'arrow'
 // Şekil araçları: serbest path değil, ilk+son noktadan primitif çizilir.
 export const isShapeTool = (t: Tool): t is ShapeTool =>
   t === 'line' || t === 'rect' || t === 'ellipse' || t === 'arrow'
+// Toolbar'da listelenen tüm araçlar (sıralama/gizleme buradan beslenir).
+export const ALL_TOOLS: Tool[] = [
+  'pen',
+  'highlighter',
+  'eraser',
+  'select',
+  'line',
+  'rect',
+  'ellipse',
+  'arrow',
+  'text',
+  'image',
+  'hand',
+]
+export interface ToolbarConfig {
+  order: Tool[]
+  hidden: Tool[]
+}
 export type SelectMode = 'rect' | 'lasso'
 export interface Point { x: number; y: number; pressure?: number }
 // Çizgi stili: kalem + şekillerde kesikli/noktalı ve opaklık. Vurgu/silgi sabit stillidir.
@@ -81,14 +99,15 @@ export interface Page {
 }
 
 // Uygulama ayarları (çizimden ayrı anahtar; çizim silinse de durur).
-// v1: kâğıt rengi + biçim; v2: + kâğıt deseni; v3: + silgi modu.
+// v1: kâğıt rengi + biçim; v2: + kâğıt deseni; v3: + silgi modu; v4: + toolbar.
 export type UiTheme = 'koyu' | 'acik'
 export type EraserMode = 'standard' | 'stroke'
 export interface AppSettings {
-  v: 1 | 2 | 3
+  v: 1 | 2 | 3 | 4
   paper: string
   background?: PaperBackground
   eraserMode?: EraserMode
+  toolbar?: ToolbarConfig
   format: PageFormat
   orientation: PageOrientation
   customW: number
@@ -281,10 +300,11 @@ export const useDrawingStore = defineStore('drawing', () => {
   const persistSettings = async (): Promise<void> => {
     try {
       const doc: AppSettings = {
-        v: 3,
+        v: 4,
         paper: paper.value,
         background: { ...paperBackground.value },
         eraserMode: eraserMode.value,
+        toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
@@ -300,10 +320,11 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Ayar yedeği: indirilen JSON'u başka cihaza/tarayıcıya taşımak için.
   const exportSettingsJSON = (): string => {
     const doc: AppSettings = {
-      v: 3,
+      v: 4,
       paper: paper.value,
       background: { ...paperBackground.value },
       eraserMode: eraserMode.value,
+      toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
       format: pageFormat.value,
       orientation: pageOrientation.value,
       customW: customW.value,
@@ -338,6 +359,12 @@ export const useDrawingStore = defineStore('drawing', () => {
       eraserMode.value = r.eraserMode
       applied = true
     }
+    if ('toolbar' in r && r.toolbar !== undefined) {
+      const tb = cleanToolbar(r.toolbar)
+      toolbarOrder.value = tb.order
+      hiddenTools.value = tb.hidden
+      applied = true
+    }
     const fmt = r.format
     if (fmt === 'custom' || (typeof fmt === 'string' && fmt in PAGE_FORMATS)) {
       pageFormat.value = fmt as PageFormat
@@ -369,7 +396,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const loadSettings = async (): Promise<void> => {    try {
       const raw = await idbGetKey<AppSettings>(SETTINGS_KEY)
       // Kayıt yoksa bile temayı uygula: data-theme hep yazılır (seçiciler + color-scheme deterministik).
-      if (!raw || (raw.v !== 1 && raw.v !== 2 && raw.v !== 3)) {
+      if (!raw || (raw.v !== 1 && raw.v !== 2 && raw.v !== 3 && raw.v !== 4)) {
         applyUiTheme()
         return
       }
@@ -379,8 +406,13 @@ export const useDrawingStore = defineStore('drawing', () => {
       if ((raw.v === 2 || raw.v === 3) && raw.background !== undefined) {
         paperBackground.value = cleanPaperBackground(raw.background)
       }
-      if (raw.v === 3 && (raw.eraserMode === 'standard' || raw.eraserMode === 'stroke')) {
+      if ((raw.v === 3 || raw.v === 4) && (raw.eraserMode === 'standard' || raw.eraserMode === 'stroke')) {
         eraserMode.value = raw.eraserMode
+      }
+      if (raw.toolbar !== undefined) {
+        const tb = cleanToolbar(raw.toolbar)
+        toolbarOrder.value = tb.order
+        hiddenTools.value = tb.hidden
       }
       if (raw.format === 'custom' || (typeof raw.format === 'string' && raw.format in PAGE_FORMATS)) {
         pageFormat.value = raw.format as PageFormat
@@ -1203,6 +1235,54 @@ export const useDrawingStore = defineStore('drawing', () => {
     repaintBase()
     scheduleSave()
     return true
+  }
+  // --- Toolbar konfigürasyonu (Faz 9): sıra + gizli araçlar, v4 ayar ---
+  const toolbarOrder = ref<Tool[]>([...ALL_TOOLS])
+  const hiddenTools = ref<Tool[]>([])
+  const cleanToolbar = (input: unknown): ToolbarConfig => {
+    const fb: ToolbarConfig = { order: [...ALL_TOOLS], hidden: [] }
+    if (!input || typeof input !== 'object') return fb
+    const r = input as Record<string, unknown>
+    const order: Tool[] = []
+    if (Array.isArray(r.order)) {
+      for (const t of r.order) {
+        if (typeof t === 'string' && (ALL_TOOLS as string[]).includes(t) && !order.includes(t as Tool)) {
+          order.push(t as Tool)
+        }
+      }
+    }
+    for (const t of ALL_TOOLS) if (!order.includes(t)) order.push(t)
+    const hidden: Tool[] = []
+    if (Array.isArray(r.hidden)) {
+      for (const t of r.hidden) {
+        if (typeof t === 'string' && (ALL_TOOLS as string[]).includes(t) && !hidden.includes(t as Tool)) {
+          hidden.push(t as Tool)
+        }
+      }
+    }
+    return { order, hidden }
+  }
+  const setToolVisible = (t: Tool, visible: boolean) => {
+    const i = hiddenTools.value.indexOf(t)
+    if (visible && i !== -1) hiddenTools.value.splice(i, 1)
+    if (!visible && i === -1 && hiddenTools.value.length < ALL_TOOLS.length - 1) {
+      hiddenTools.value.push(t)
+    }
+    void persistSettings()
+  }
+  const moveTool = (t: Tool, dir: 1 | -1) => {
+    const arr = toolbarOrder.value
+    const i = arr.indexOf(t)
+    const j = i + dir
+    if (i === -1 || j < 0 || j >= arr.length) return
+    arr[i] = arr[j]!
+    arr[j] = t
+    void persistSettings()
+  }
+  const resetToolbar = () => {
+    toolbarOrder.value = [...ALL_TOOLS]
+    hiddenTools.value = []
+    void persistSettings()
   }
   // Araç değişimi seçimi ve metin editörünü temizler (gizli durumla mürekkep karışmasın).
   const setTool = (tool: Tool) => {
@@ -2495,10 +2575,11 @@ export const useDrawingStore = defineStore('drawing', () => {
         }
       }
       const settings: AppSettings = {
-        v: 3,
+        v: 4,
         paper: paper.value,
         background: { ...paperBackground.value },
         eraserMode: eraserMode.value,
+        toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
@@ -3337,6 +3418,11 @@ export const useDrawingStore = defineStore('drawing', () => {
     deleteImage,
     imgBusy,
     addImage,
+    toolbarOrder,
+    hiddenTools,
+    setToolVisible,
+    moveTool,
+    resetToolbar,
     setCanvasRef,
     setOverlayRef,
     setupCanvas,
