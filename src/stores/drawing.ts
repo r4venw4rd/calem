@@ -3270,6 +3270,56 @@ export const useDrawingStore = defineStore('drawing', () => {
     scheduleSave()
   }
 
+  // Aktif sayfayı arkaya kopyalar (taze id'ler; PDF bitmap + resim bytes paylaşılır).
+  const duplicatePage = (): boolean => {
+    const src = activePage.value
+    const idx = activePageIndex.value
+    pushHistory()
+    const layerId = new Map<string, string>()
+    const layers = src.layers.map((l) => {
+      const nid = newStrokeId()
+      layerId.set(l.id, nid)
+      return { id: nid, name: l.name, visible: l.visible, strokes: l.strokes.map(snapshotStroke) }
+    })
+    const np: Page = {
+      id: newPageId(),
+      layers,
+      activeLayerId: layerId.get(src.activeLayerId) ?? layers[0]!.id,
+      texts: src.texts.map((t) => ({ ...snapshotText(t), id: newStrokeId() })),
+      images: src.images.map((m) => ({ ...snapshotImage(m), id: newStrokeId() })),
+      size: { w: src.size.w, h: src.size.h },
+      ...(src.pdfPageIndex !== undefined ? { pdfPageIndex: src.pdfPageIndex } : {}),
+    }
+    if (src.pdfPageIndex !== undefined) {
+      const bmp = bgCanvases.get(src.id)
+      if (bmp) bgCanvases.set(np.id, bmp)
+      const sc = pdfRenderScales.get(src.id)
+      if (sc !== undefined) pdfRenderScales.set(np.id, sc)
+    }
+    pages.value.splice(idx + 1, 0, np)
+    goToPage(idx + 1)
+    return true
+  }
+
+  // Aktif sayfayı sola/sağa taşır (seçim korunur — aynı sayfa aktif kalır).
+  const movePageActive = (dir: 1 | -1): boolean => {
+    const i = activePageIndex.value
+    const j = i + dir
+    if (j < 0 || j >= pages.value.length) return false
+    pushHistory()
+    const arr = pages.value
+    const tmp = arr[i]!
+    arr[i] = arr[j]!
+    arr[j] = tmp
+    activePageIndex.value = j
+    layoutView()
+    recountActive()
+    repaintBase()
+    clearOverlay()
+    scheduleSave()
+    return true
+  }
+
   // Silinen aktifse komşuya geçilir. Son sayfa silinemez. Veri kaybına karşı
   // component confirm() sorar (silme history'den geri alınabilir).
   const deletePage = (i: number): boolean => {
@@ -3353,6 +3403,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     goToPage,
     addPage,
     deletePage,
+    duplicatePage,
+    movePageActive,
     setPageBackground,
     clearPageBackground,
     exportPageToCanvas,

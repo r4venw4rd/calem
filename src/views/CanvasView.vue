@@ -75,6 +75,33 @@
           >
             PNG İndir
           </button>
+          <div class="my-1 border-t border-[var(--chrome-border)]"></div>
+          <div class="px-3 pt-1 text-[10px] text-[var(--chrome-faint)] font-mono">Sayfa</div>
+          <button
+            @click="dupPage"
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
+            title="Aktif sayfayı arkaya kopyala (D)"
+          >
+            Sayfayı Çoğalt
+          </button>
+          <div class="flex gap-1 px-3 pb-1">
+            <button
+              @click="movePageL"
+              :disabled="store.activePageIndex === 0"
+              class="flex-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed font-mono"
+              title="Sayfayı sola taşı"
+            >
+              ←
+            </button>
+            <button
+              @click="movePageR"
+              :disabled="store.activePageIndex >= store.pages.length - 1"
+              class="flex-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed font-mono"
+              title="Sayfayı sağa taşı"
+            >
+              →
+            </button>
+          </div>
           <div
             v-if="store.pdfName || store.lastSavedAt"
             class="mt-1 pt-1 border-t border-[var(--chrome-border)] px-3 py-1 text-[10px] text-[var(--chrome-faint)] font-mono truncate"
@@ -542,7 +569,7 @@
           <div class="font-mono text-[10px] leading-relaxed text-[var(--chrome-faint)]">
             <div>V/P/H/E seç/kalem/vurgu/silgi</div>
             <div>L/R/O/A çizgi/kare/elips/ok</div>
-            <div>T/G metin/resim · F sunum</div>
+            <div>T/G metin/resim · F sunum · D çoğalt</div>
             <div>Space sürükle-kaydır</div>
             <div>Ctrl+Z/Y geri/yinele</div>
             <div>Ctrl+A/C/X/V (seçimde)</div>
@@ -1688,7 +1715,7 @@ const onKeyDown = (e: KeyboardEvent) => {
       return
     }
   }
-  // Araç kısayolları (modsuz): V seç, P kalem, H vurgu, E silgi, L/R/O/A şekiller, T metin, G resim, F sunum.
+  // Araç kısayolları (modsuz): V seç, P kalem, H vurgu, E silgi, L/R/O/A şekiller, T metin, G resim, F sunum, D çoğalt.
   if (!mod && !e.altKey) {
     const k = e.key.toLowerCase()
     if (k === 'v') {
@@ -1729,6 +1756,12 @@ const onKeyDown = (e: KeyboardEvent) => {
     }
     if (k === 'g') {
       store.setTool('image')
+      return
+    }
+    if (k === 'd') {
+      showFile.value = false
+      store.duplicatePage()
+      updateHud(true)
       return
     }
     if (k === 'f') {
@@ -1991,6 +2024,22 @@ const askDeletePage = () => {
     store.deletePage(store.activePageIndex)
     updateHud(true)
   }
+}
+
+const dupPage = () => {
+  showFile.value = false
+  store.duplicatePage()
+  updateHud(true)
+}
+
+const movePageL = () => {
+  store.movePageActive(-1)
+  updateHud(true)
+}
+
+const movePageR = () => {
+  store.movePageActive(1)
+  updateHud(true)
 }
 
 const restoreSession = async () => {
