@@ -1,6 +1,6 @@
 # Calem Test Şeması
 
-Otomatik: `npm test` (vitest — `tests/` altında 33 test: paper/select/erase saf helper'ları).
+Otomatik: `npm test` (vitest — `tests/` altında 80 test: paper/select/erase/config/membership/auth/storage/sync).
 Aşağıdakiler manuel/E2E şemasıdır. Her maddede **beklenen sonuç** yazar.
 
 ## 0. Kurulum
@@ -107,4 +107,4 @@ Aşağıdakiler manuel/E2E şemasıdır. Her maddede **beklenen sonuç** yazar.
 | 11.6 | Yeniden yükle | Tema + toolbar + kâğıt + smoothing + dokun-kaydır korunur |
 
 ## 12. Regresyon kapısı (her push öncesi)
-- `npm run type-check` temiz, `npm run build-only` temiz, `npm test` 33/33.
+- `npm run type-check` temiz, `npm run build-only` temiz, `npm test` 80/80.
