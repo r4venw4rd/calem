@@ -368,7 +368,11 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   const loadSettings = async (): Promise<void> => {    try {
       const raw = await idbGetKey<AppSettings>(SETTINGS_KEY)
-      if (!raw || (raw.v !== 1 && raw.v !== 2 && raw.v !== 3)) return
+      // Kayıt yoksa bile temayı uygula: data-theme hep yazılır (seçiciler + color-scheme deterministik).
+      if (!raw || (raw.v !== 1 && raw.v !== 2 && raw.v !== 3)) {
+        applyUiTheme()
+        return
+      }
       if (typeof raw.paper === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw.paper)) {
         paper.value = raw.paper
       }
