@@ -1,6 +1,10 @@
 // Kâğıt deseni saf helper'ları (Faz 1).
 // Bilerek render/Pinia bağımsız: test edilebilir, sayfa-uzayında (pt) çalışır.
 // Boyama `drawing.ts paintPage()` içinde yapılacak; burası sadece geometri + doğrulama.
+// Varsayılan değer config/paper'dadır; kullananlar oradan alır.
+import { DEFAULT_PAPER_BACKGROUND } from '../config/paper'
+
+export { DEFAULT_PAPER_BACKGROUND }
 
 export type PaperBackgroundType = 'blank' | 'ruled' | 'graph' | 'dotted' | 'staff'
 
@@ -17,14 +21,6 @@ export interface PaperBackground {
 
 export const PAPER_SPACING_MIN = 12
 export const PAPER_SPACING_MAX = 48
-
-export const DEFAULT_PAPER_BACKGROUND: PaperBackground = {
-  type: 'blank',
-  spacing: 28,
-  lineColor: '#334155',
-  margin: false,
-  marginColor: '#ef4444',
-}
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
 
