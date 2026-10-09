@@ -8,7 +8,7 @@
         class="h-7 w-7 rounded-md select-none"
         draggable="false"
       />
-      <div class="relative">
+      <div ref="fileMenu" class="relative">
         <button
           @click="showFile = !showFile"
           class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
@@ -23,6 +23,29 @@
           role="menu"
           aria-label="Dosya"
         >
+          <label
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer"
+            :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
+            title="Calem belgesi aç — sayfalar + ayarlar değişir"
+          >
+            Calem Aç…
+            <input
+              type="file"
+              accept=".calem,application/json"
+              class="hidden"
+              :disabled="store.pdfBusy"
+              @change="onCalemFile"
+            />
+          </label>
+          <button
+            @click="exportCalemDoc"
+            :disabled="store.pdfBusy"
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Vektör belge olarak kaydet (sayfalar + ayarlar + resimler)"
+          >
+            Calem Kaydet…
+          </button>
+          <div class="my-1 border-t border-[var(--chrome-border)]"></div>
           <label
             class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer"
             :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
@@ -52,29 +75,6 @@
           >
             PNG İndir
           </button>
-          <div class="my-1 border-t border-[var(--chrome-border)]"></div>
-          <label
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer"
-            :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
-            title="Calem belgesi aç — sayfalar + ayarlar değişir"
-          >
-            Calem Aç…
-            <input
-              type="file"
-              accept=".calem,application/json"
-              class="hidden"
-              :disabled="store.pdfBusy"
-              @change="onCalemFile"
-            />
-          </label>
-          <button
-            @click="exportCalemDoc"
-            :disabled="store.pdfBusy"
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Vektör belge olarak kaydet (sayfalar + ayarlar + resimler)"
-          >
-            Calem Kaydet…
-          </button>
           <div
             v-if="store.pdfName || store.lastSavedAt"
             class="mt-1 pt-1 border-t border-[var(--chrome-border)] px-3 py-1 text-[10px] text-[var(--chrome-faint)] font-mono truncate"
@@ -92,7 +92,7 @@
         </div>
       </div>
 
-      <div class="relative">
+      <div ref="settingsBtn" class="relative">
         <button
           @click="showSettings = !showSettings; showLayers = false"
           class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
@@ -103,7 +103,7 @@
         </button>
       </div>
 
-      <div class="relative">
+      <div ref="layersBtn" class="relative">
         <button
           @click="showLayers = !showLayers; showSettings = false"
           class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
@@ -391,6 +391,7 @@
       <span v-if="pdfError" class="text-[10px] text-red-400 font-mono">{{ pdfError }}</span>
 
       <div
+        ref="settingsPanel"
         v-if="showSettings"
         class="absolute left-2 top-full mt-1 z-20 w-64 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
         role="dialog"
@@ -591,6 +592,7 @@
       </div>
 
       <div
+        ref="layersPanel"
         v-if="showLayers"
         class="absolute left-2 top-full mt-1 z-20 w-64 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
         role="dialog"
@@ -948,6 +950,12 @@ const showSettings = ref(false)
 const showFile = ref(false)
 const showLayers = ref(false)
 const presenting = ref(false)
+// Menü kapsayıcıları (dışarı-tıkla kapatma için; paneller v-if'li, butonlar ayrı div'de).
+const fileMenu = ref<HTMLElement | null>(null)
+const settingsBtn = ref<HTMLElement | null>(null)
+const settingsPanel = ref<HTMLElement | null>(null)
+const layersBtn = ref<HTMLElement | null>(null)
+const layersPanel = ref<HTMLElement | null>(null)
 const store = useDrawingStore()
 
 // Katman listesi üstte-ilk (dizi 0 = en alt).
@@ -1623,6 +1631,10 @@ const onKeyDown = (e: KeyboardEvent) => {
     void togglePresent()
     return
   }
+  // Açık menü varsa Esc önce onu kapatır (seçim/editör dallarından önce).
+  if (!mod && !e.altKey && e.key === 'Escape') {
+    if (closeMenus()) return
+  }
   // Space basılı kaydırma (önce Space, sonra sürükle). Tekrarlanan keydown yoksayılır.
   if (!mod && !e.altKey && e.key === ' ' && !e.repeat) {
     if (t && t.tagName === 'BUTTON') return
@@ -1856,6 +1868,37 @@ const askClosePdf = () => {
   updateHud(true)
 }
 
+// Açık menü varsa dışarı-tıklamada kapat (çizim akışını kesmez, sadece gizler).
+const closeMenus = (): boolean => {
+  let closed = false
+  if (showFile.value) {
+    showFile.value = false
+    closed = true
+  }
+  if (showSettings.value) {
+    showSettings.value = false
+    closed = true
+  }
+  if (showLayers.value) {
+    showLayers.value = false
+    closed = true
+  }
+  return closed
+}
+
+const onDocPointerDown = (e: PointerEvent) => {
+  const t = e.target as Node | null
+  if (!t || !(t instanceof Node)) return
+  const inside = (el: HTMLElement | null) => !!el && el.contains(t)
+  if (showFile.value && !inside(fileMenu.value)) showFile.value = false
+  if (showSettings.value && !inside(settingsBtn.value) && !inside(settingsPanel.value)) {
+    showSettings.value = false
+  }
+  if (showLayers.value && !inside(layersBtn.value) && !inside(layersPanel.value)) {
+    showLayers.value = false
+  }
+}
+
 const clearCanvas = () => {
   activePointerId = null
   store.clearCanvas()
@@ -2025,6 +2068,7 @@ onMounted(() => {
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
   document.addEventListener('fullscreenchange', onFullscreenChange)
+  document.addEventListener('pointerdown', onDocPointerDown)
   overlayCanvas.value.addEventListener('wheel', onWheel, { passive: false })
   stopSelWatch = watch(
     () => store.selectedIds,
@@ -2063,6 +2107,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
+  document.removeEventListener('pointerdown', onDocPointerDown)
   overlayCanvas.value?.removeEventListener('wheel', onWheel)
   store.setCanvasRef(null)
   store.setOverlayRef(null)
