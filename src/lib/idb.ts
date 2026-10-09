@@ -40,6 +40,7 @@ export interface PersistedDocV4 {
 }
 
 // v5: mürekkep katmanlara taşındı (eski strokes tek katmana sarılır).
+// ownerId: hesap gelince yazılır; yoksa anonim local sayılır (göç gerekmez).
 export interface PersistedDocV5 {
   v: 5
   savedAt: number
@@ -48,6 +49,7 @@ export interface PersistedDocV5 {
   activePageIndex?: number
   pdfId?: string
   pdfName?: string
+  ownerId?: string
 }
 
 export type PersistedDoc = PersistedDocV1 | PersistedDocV2 | PersistedDocV3 | PersistedDocV4 | PersistedDocV5
@@ -178,3 +180,31 @@ export let storage: DocStorage = idbStorage
 export const setStorage = (s: DocStorage) => {
   storage = s
 }
+
+// Kullanıcı-scoped depolama: hesap gelince doküman + ayar anahtarları
+// kullanıcı başına namespace'e taşınır (mevcut veri anonim local'indir).
+// Dosya bytes'ları içerik-adreslidir, namespace DIŞIDIR (aynı bytes paylaşılır,
+// eksikse yükle kuralıyla; bkz. lib/sync.ts).
+export const ANONYMOUS_OWNER = 'local-anon'
+
+/** Dokümanın sahibi (ownerId yoksa anonim local — eski kayıtlar göçsüz açılır). */
+export const docOwner = (doc: PersistedDoc | { ownerId?: unknown }): string => {
+  const id = (doc as { ownerId?: unknown }).ownerId
+  return typeof id === 'string' && id ? id : ANONYMOUS_OWNER
+}
+
+/** Kullanıcı namespace öneki (ayar+doküman anahtarları için). */
+export const namespaceFor = (userId: string): string => `u:${userId}`
+
+/** Aynı depo üstünde kullanıcı-scoped görünüm (dosyalar global kalır). */
+export const namespacedStorage = (prefix: string, base: DocStorage = idbStorage): DocStorage => ({
+  getDoc: () => base.getKey<PersistedDoc>(`${prefix}:${KEY}`),
+  setDoc: (doc) => base.setKey(`${prefix}:${KEY}`, doc),
+  getKey: <T>(key: string) => base.getKey<T>(`${prefix}:${key}`),
+  setKey: <T>(key: string, value: T) => base.setKey<T>(`${prefix}:${key}`, value),
+  getFile: (id) => base.getFile(id),
+  setFile: (rec) => base.setFile(rec),
+  getImage: (id) => base.getImage(id),
+  setImage: (rec) => base.setImage(rec),
+  deleteFile: (id) => base.deleteFile(id),
+})
