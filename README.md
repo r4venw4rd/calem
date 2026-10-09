@@ -139,12 +139,10 @@ Calem is licensed under the **Apache License 2.0**. Copyright ownership and auth
 
 See [LICENSE](LICENSE) for details.
 
----
+## Support
 
-**Made with ❤️ for offline-first note-taking** — privacy, speed, and zero bloat.
-
-- 📖 **Documentation** — See [BACKEND.md](BACKEND.md) for architecture
-- 🧪 **Tests** — See [TEST.md](TEST.md) for testing docs
+- 📖 **Documentation** — See [BACKEND.md](BACKEND.md) for architecture details
+- 🧪 **Tests** — See [TEST.md](TEST.md) for testing guide
 - 🐛 **Issues** — Found a bug? [Open an issue](https://github.com/r4venw4rd/calem/issues)
 
 ---
