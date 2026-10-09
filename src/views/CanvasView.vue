@@ -825,8 +825,8 @@
       </div>
 
       <button
-        @click="clearCanvas"
-        class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition flex items-center gap-1"
+        @click="askClearCanvas"
+        class="px-3 py-1 rounded text-xs font-medium text-red-400 hover:text-red-300 transition flex items-center gap-1"
         title="Aktif sayfayı temizle"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2199,6 +2199,12 @@ const onDocPointerDown = (e: PointerEvent) => {
   if (showLayers.value && !inside(layersBtn.value) && !inside(layersPanel.value)) {
     showLayers.value = false
   }
+}
+
+// Temizle yıkıcı bir op: diğer silmelerle aynı korumayı uygula.
+const askClearCanvas = () => {
+  if (store.hasInk && !confirm(`Sayfa ${store.activePageIndex + 1} temizlensin mi?`)) return
+  clearCanvas()
 }
 
 const clearCanvas = () => {
