@@ -116,110 +116,26 @@
 
       <div class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]" role="toolbar" aria-label="Araçlar">
         <button
-          @click="store.setTool('pen')"
-          :class="store.currentTool === 'pen' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="px-3 py-1 rounded text-xs font-medium transition flex items-center gap-1"
-          title="Kalem"
+          v-for="t in visibleTools"
+          :key="t"
+          @click="store.setTool(t)"
+          :class="store.currentTool === t ? TOOL_META[t].active : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="px-2 py-1 rounded text-xs font-medium transition flex items-center gap-1"
+          :title="TOOL_META[t].title"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg v-if="TOOL_META[t].icon === 'pen'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7l7 9z" />
           </svg>
-          Kalem
-        </button>
-
-        <button
-          @click="store.setTool('highlighter')"
-          :class="store.currentTool === 'highlighter' ? 'bg-yellow-500 text-black' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="px-3 py-1 rounded text-xs font-medium transition flex items-center gap-1"
-          title="Vurgulayıcı"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg v-else-if="TOOL_META[t].icon === 'hl'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 11l3 3m-2.5-2.5L4 17l5-1.5L19.5 5 15 3.5 9.5 8.5z" />
           </svg>
-          Vurgu
-        </button>
-
-        <button
-          @click="store.setTool('eraser')"
-          :class="store.currentTool === 'eraser' ? 'bg-red-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="px-3 py-1 rounded text-xs font-medium transition flex items-center gap-1"
-          title="Silgi"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg v-else-if="TOOL_META[t].icon === 'eraser'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m12 4h4m4-4v4m-4-6h4m-5.303-5.303L16 16" />
           </svg>
-          Silgi
-        </button>
-
-        <button
-          @click="store.setTool('select')"
-          :class="store.currentTool === 'select' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="px-3 py-1 rounded text-xs font-medium transition flex items-center gap-1"
-          title="Seç/Taşı (V)"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg v-else-if="TOOL_META[t].icon === 'select'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 7-6 2-2 6-6-15z" />
           </svg>
-          Seç
-        </button>
-
-        <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
-
-        <button
-          @click="store.setTool('line')"
-          :class="store.currentTool === 'line' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="px-2 py-1 rounded text-xs font-medium transition"
-          title="Çizgi (L)"
-        >
-          Çizgi
-        </button>
-        <button
-          @click="store.setTool('rect')"
-          :class="store.currentTool === 'rect' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="px-2 py-1 rounded text-xs font-medium transition"
-          title="Kare (R)"
-        >
-          Kare
-        </button>
-        <button
-          @click="store.setTool('ellipse')"
-          :class="store.currentTool === 'ellipse' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="px-2 py-1 rounded text-xs font-medium transition"
-          title="Elips (O)"
-        >
-          Elips
-        </button>
-        <button
-          @click="store.setTool('arrow')"
-          :class="store.currentTool === 'arrow' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="px-2 py-1 rounded text-xs font-medium transition"
-          title="Ok (A)"
-        >
-          Ok
-        </button>
-        <button
-          @click="store.setTool('text')"
-          :class="store.currentTool === 'text' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="px-2 py-1 rounded text-xs font-medium transition"
-          title="Metin (T)"
-        >
-          Metin
-        </button>
-        <button
-          @click="store.setTool('image')"
-          :class="store.currentTool === 'image' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="px-2 py-1 rounded text-xs font-medium transition"
-          title="Resim (G)"
-        >
-          Resim
-        </button>
-        <button
-          @click="store.setTool('hand')"
-          :class="store.currentTool === 'hand' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="px-2 py-1 rounded text-xs font-medium transition"
-          title="El (sürükle-kaydır, veya Space basılı tut)"
-        >
-          El
+          {{ TOOL_META[t].label }}
         </button>
       </div>
 
@@ -481,6 +397,50 @@
           />
           Marjin çizgisi
         </label>
+
+        <div class="mb-1 text-[var(--chrome-muted)]">Araç çubuğu</div>
+        <div class="flex flex-col gap-0.5 mb-3">
+          <div
+            v-for="(t, i) in store.toolbarOrder"
+            :key="t"
+            class="flex items-center gap-1 px-1 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)]"
+          >
+            <input
+              type="checkbox"
+              :checked="!store.hiddenTools.includes(t)"
+              :disabled="!store.hiddenTools.includes(t) && store.toolbarOrder.length - store.hiddenTools.length <= 1"
+              @change="store.setToolVisible(t, ($event.target as HTMLInputElement).checked)"
+              class="accent-indigo-600"
+              :title="`${TOOL_META[t].label} görünürlüğü`"
+            />
+            <span class="flex-1 truncate" :class="store.hiddenTools.includes(t) ? 'opacity-40' : ''">
+              {{ TOOL_META[t].label }}
+            </span>
+            <button
+              @click="store.moveTool(t, -1)"
+              :disabled="i === 0"
+              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+              title="Öne al"
+            >
+              ↑
+            </button>
+            <button
+              @click="store.moveTool(t, 1)"
+              :disabled="i === store.toolbarOrder.length - 1"
+              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+              title="Arkala"
+            >
+              ↓
+            </button>
+          </div>
+          <button
+            @click="store.resetToolbar()"
+            class="mt-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition font-mono"
+            title="Sıra + görünürlük sıfırla"
+          >
+            Sıfırla
+          </button>
+        </div>
 
         <div class="mb-1 text-[var(--chrome-muted)]">Sayfa biçimi <span class="text-[var(--chrome-faint)]">(yeni sayfalar)</span></div>
         <select
@@ -940,6 +900,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
 import { drawingPerf, PAGE_FORMATS, PAPER_THEMES, useDrawingStore } from '@/stores/drawing'
+import type { Tool } from '@/stores/drawing'
 import { selectionBBox, coalescedOf } from '@/lib/select'
 
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
@@ -994,6 +955,26 @@ const renameLayer = (id: string) => {
 
 // Hızlı erişim paleti (yanındaki damlalık özel renk için)
 const PALETTE = ['#ffffff', '#000000', '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7']
+
+// Araç düğme metadatası (sıra/görünürlük store.toolbarOrder/hiddenTools'tan gelir).
+const TOOL_META: Record<Tool, { label: string; title: string; active: string; icon?: 'pen' | 'hl' | 'eraser' | 'select' }> = {
+  pen: { label: 'Kalem', title: 'Kalem (P)', active: 'bg-indigo-600 text-white', icon: 'pen' },
+  highlighter: { label: 'Vurgu', title: 'Vurgulayıcı (H)', active: 'bg-yellow-500 text-black', icon: 'hl' },
+  eraser: { label: 'Silgi', title: 'Silgi (E)', active: 'bg-red-600 text-white', icon: 'eraser' },
+  select: { label: 'Seç', title: 'Seç/Taşı (V)', active: 'bg-indigo-600 text-white', icon: 'select' },
+  line: { label: 'Çizgi', title: 'Çizgi (L)', active: 'bg-indigo-600 text-white' },
+  rect: { label: 'Kare', title: 'Kare (R)', active: 'bg-indigo-600 text-white' },
+  ellipse: { label: 'Elips', title: 'Elips (O)', active: 'bg-indigo-600 text-white' },
+  arrow: { label: 'Ok', title: 'Ok (A)', active: 'bg-indigo-600 text-white' },
+  text: { label: 'Metin', title: 'Metin (T)', active: 'bg-indigo-600 text-white' },
+  image: { label: 'Resim', title: 'Resim (G)', active: 'bg-indigo-600 text-white' },
+  hand: { label: 'El', title: 'El (sürükle-kaydır, veya Space basılı tut)', active: 'bg-indigo-600 text-white' },
+}
+// Hepsi gizlenirse kilitlenmemek için tam listeye düşer.
+const visibleTools = computed(() => {
+  const list = store.toolbarOrder.filter((t) => !store.hiddenTools.includes(t))
+  return list.length > 0 ? list : [...store.toolbarOrder]
+})
 // Her pointermove'da overlay redraw yapma — frame başına en fazla 1 (rAF throttle).
 let rafId = 0
 let lastHudAt = 0
