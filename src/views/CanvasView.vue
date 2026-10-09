@@ -1129,6 +1129,46 @@
         </button>
       </div>
     </div>
+
+    <!-- Uygulama-içi onay / ad-sor diyaloğu (native confirm/prompt yerine) -->
+    <div
+      v-if="dialogOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="dialogTitle"
+      @pointerdown.self="dialogCancel"
+    >
+      <div
+        ref="dialogPanel"
+        class="w-[min(92vw,360px)] rounded-xl bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] shadow-2xl p-3"
+        @keydown.tab="trapDialogFocus"
+      >
+        <div class="font-medium text-[var(--chrome-title)] mb-1">{{ dialogTitle }}</div>
+        <div v-if="dialogMessage" class="text-[var(--chrome-muted)] mb-2">{{ dialogMessage }}</div>
+        <input
+          v-if="dialogKind === 'prompt'"
+          ref="dialogInput"
+          v-model="dialogText"
+          class="w-full mb-2 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
+          @keydown.enter.prevent="dialogOk"
+        />
+        <div class="flex justify-end gap-1">
+          <button
+            @click="dialogCancel"
+            class="px-2 py-1 rounded hover:bg-[var(--chrome-bg-soft)]"
+          >
+            İptal
+          </button>
+          <button
+            @click="dialogOk"
+            class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
+          >
+            Tamam
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1176,6 +1216,55 @@ const layersBtn = ref<HTMLElement | null>(null)
 const layersPanel = ref<HTMLElement | null>(null)
 const store = useDrawingStore()
 
+// --- Uygulama-içi onay/soru diyaloğu ---
+// Native confirm()/prompt() bloklar, stillenemez ve fullscreen'de bastırılabilir;
+// bu yüzden yıkıcı op'lar ve adlandırmalar aynı görsel dilde bir modal kullanır.
+const dialogOpen = ref(false)
+const dialogKind = ref<'confirm' | 'prompt'>('confirm')
+const dialogTitle = ref('')
+const dialogMessage = ref('')
+const dialogText = ref('')
+const dialogPanel = ref<HTMLElement | null>(null)
+const dialogInput = ref<HTMLInputElement | null>(null)
+let dialogResolve: ((v: boolean | string | null) => void) | null = null
+
+const closeDialog = (result: boolean | string | null) => {
+  const r = dialogResolve
+  dialogResolve = null
+  dialogOpen.value = false
+  r?.(result)
+}
+const askConfirm = (title: string, message = ''): Promise<boolean> =>
+  new Promise((resolve) => {
+    dialogResolve = resolve as (v: boolean | string | null) => void
+    dialogKind.value = 'confirm'
+    dialogTitle.value = title
+    dialogMessage.value = message
+    dialogOpen.value = true
+    nextTick(() => dialogPanel.value?.querySelector<HTMLElement>('button')?.focus())
+  })
+const askPrompt = (title: string, def = ''): Promise<string | null> =>
+  new Promise((resolve) => {
+    dialogResolve = resolve as (v: boolean | string | null) => void
+    dialogKind.value = 'prompt'
+    dialogTitle.value = title
+    dialogMessage.value = ''
+    dialogText.value = def
+    dialogOpen.value = true
+    nextTick(() => {
+      dialogInput.value?.focus()
+      dialogInput.value?.select()
+    })
+  })
+const dialogOk = () => {
+  if (!dialogOpen.value) return
+  closeDialog(dialogKind.value === 'prompt' ? dialogText.value : true)
+}
+const dialogCancel = () => {
+  if (!dialogOpen.value) return
+  closeDialog(dialogKind.value === 'prompt' ? null : false)
+}
+
 // l10n: arayüz dili store.locale'dan beslenir, eksik anahtar Türkçe'ye düşer.
 const t = (k: UIKey): string => trFn(store.locale, k)
 const locTools = computed(() => TOOL_LABELS[store.locale] ?? TOOL_LABELS.tr)
@@ -1195,44 +1284,44 @@ const addLayerBtn = () => {
   updateHud(true)
 }
 
-const askDeleteLayer = (id: string) => {
+const askDeleteLayer = async (id: string) => {
   const l = store.activePage.layers.find((x) => x.id === id)
   if (!l) return
   if (store.activePage.layers.length > 1 && l.strokes.length > 0) {
-    if (!confirm(`"${l.name}" silinsin mi? (${l.strokes.length} çizgi kaybolur)`)) return
+    if (!(await askConfirm(`"${l.name}" silinsin mi?`, `${l.strokes.length} çizgi kaybolur`))) return
   }
   store.deleteLayer(id)
   drawSelectionOverlay()
   updateHud(true)
 }
 
-const renameLayer = (id: string) => {
+const renameLayer = async (id: string) => {
   const l = store.activePage.layers.find((x) => x.id === id)
   if (!l) return
-  const name = prompt('Katman adı', l.name)
+  const name = await askPrompt('Katman adı', l.name)
   if (name === null) return
   store.renameLayer(id, name)
 }
 
-const addPaletteBtn = () => {
-  const name = prompt('Palet adı', `Palet ${store.palettes.length + 1}`)
+const addPaletteBtn = async () => {
+  const name = await askPrompt('Palet adı', `Palet ${store.palettes.length + 1}`)
   if (name === null) return
   store.addPalette(name)
   updateHud(true)
 }
 
-const askDeletePalette = (id: string) => {
+const askDeletePalette = async (id: string) => {
   const p = store.palettes.find((x) => x.id === id)
   if (!p || store.palettes.length <= 1) return
-  if (!confirm(`"${p.name}" paleti silinsin mi?`)) return
+  if (!(await askConfirm(`"${p.name}" paleti silinsin mi?`))) return
   store.deletePalette(id)
   updateHud(true)
 }
 
-const renamePaletteBtn = (id: string) => {
+const renamePaletteBtn = async (id: string) => {
   const p = store.palettes.find((x) => x.id === id)
   if (!p) return
-  const name = prompt('Palet adı', p.name)
+  const name = await askPrompt('Palet adı', p.name)
   if (name === null) return
   store.renamePalette(id, name)
 }
@@ -1613,8 +1702,7 @@ const onTextColorInput = (hex: string) => {
 }
 
 // Sekme odağını modal içinde tut (arkadaki toolbar'a kaçmasın).
-const trapFocus = (e: KeyboardEvent) => {
-  const panel = settingsPanel.value
+const trapIn = (panel: HTMLElement | null, e: KeyboardEvent) => {
   if (!panel) return
   const nodes = [
     ...panel.querySelectorAll<HTMLElement>(
@@ -1633,6 +1721,8 @@ const trapFocus = (e: KeyboardEvent) => {
     first.focus()
   }
 }
+const trapFocus = (e: KeyboardEvent) => trapIn(settingsPanel.value, e)
+const trapDialogFocus = (e: KeyboardEvent) => trapIn(dialogPanel.value, e)
 
 const closeTextEditor = () => {
   const t = store.activeText()
@@ -1956,6 +2046,11 @@ const onKeyDown = (e: KeyboardEvent) => {
   if (!mod && !e.altKey && e.key === 'Escape') {
     if (closeMenus()) return
   }
+  // Uygulama-içi diyalog açıksa Esc iptal eder.
+  if (!mod && !e.altKey && e.key === 'Escape' && dialogOpen.value) {
+    dialogCancel()
+    return
+  }
   // Sunumda klavyeyle sayfa ilerlet/geri (uzaktan kumanda/klavye ile sunum).
   if (presenting.value && !mod && !e.altKey) {
     if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) {
@@ -1970,7 +2065,7 @@ const onKeyDown = (e: KeyboardEvent) => {
     }
   }
   // Açık bir diyalog/panel varken araç kısayolları arkada tetiklenmesin (scrim altında state değişmesin).
-  if (showFile.value || showSettings.value || showLayers.value) return
+  if (showFile.value || showSettings.value || showLayers.value || dialogOpen.value) return
   // Sayfa gezinme: PageDown/PageUp her araçta çalışır.
   if (!mod && !e.altKey && (e.key === 'PageDown' || e.key === 'PageUp')) {
     e.preventDefault()
@@ -2181,7 +2276,7 @@ const onPdfFile = async (e: Event) => {
   input.value = ''
   if (!f) return
   const hasInk = store.hasInk
-  if (hasInk && !confirm('Mevcut çizimler PDF sayfalarıyla değişecek. Devam?')) return
+  if (hasInk && !(await askConfirm('Mevcut çizimler PDF sayfalarıyla değişecek. Devam?'))) return
   const res = await store.importPdf(f)
   if ('error' in res) showPdfError(res.error)
   updateHud(true)
@@ -2206,17 +2301,17 @@ const onCalemFile = async (e: Event) => {
   const f = input.files?.[0]
   input.value = ''
   if (!f) return
-  if (store.hasInk && !confirm('Mevcut içerik .calem dosyasıyla değişecek. Devam?')) return
+  if (store.hasInk && !(await askConfirm('Mevcut içerik .calem dosyasıyla değişecek. Devam?'))) return
   const res = await store.importCalem(f)
   if ('error' in res) showPdfError(res.error)
   updateHud(true)
   refreshThumbs()
 }
 
-const askClosePdf = () => {
+const askClosePdf = async () => {
   showFile.value = false
   const hasInk = store.hasInk
-  if (hasInk && !confirm('PDF kapatılıp tek boş sayfaya dönülsün mü?')) return
+  if (hasInk && !(await askConfirm('PDF kapatılıp tek boş sayfaya dönülsün mü?'))) return
   store.closePdf()
   updateHud(true)
 }
@@ -2253,8 +2348,8 @@ const onDocPointerDown = (e: PointerEvent) => {
 }
 
 // Temizle yıkıcı bir op: diğer silmelerle aynı korumayı uygula.
-const askClearCanvas = () => {
-  if (store.hasInk && !confirm(`Sayfa ${store.activePageIndex + 1} temizlensin mi?`)) return
+const askClearCanvas = async () => {
+  if (store.hasInk && !(await askConfirm(`Sayfa ${store.activePageIndex + 1} temizlensin mi?`))) return
   clearCanvas()
 }
 
@@ -2354,13 +2449,13 @@ const addPage = () => {
   updateHud(true)
 }
 
-const askDeletePage = () => {
+const askDeletePage = async () => {
   if (store.pages.length <= 1) return
-  if (confirm(`Sayfa ${store.activePageIndex + 1} silinsin mi? (${store.drawingCount} çizgi kaybolur)`)) {
-    activePointerId = null
-    store.deletePage(store.activePageIndex)
-    updateHud(true)
-  }
+  const msg = `Sayfa ${store.activePageIndex + 1} silinsin mi?`
+  if (!(await askConfirm(msg, `${store.drawingCount} çizgi kaybolur`))) return
+  activePointerId = null
+  store.deletePage(store.activePageIndex)
+  updateHud(true)
 }
 
 const dupPage = () => {
@@ -2380,7 +2475,7 @@ const movePageR = () => {
 }
 
 const restoreSession = async () => {
-  if (store.hasInk && !confirm('Mevcut çalışma önceki oturumla değişecek. Devam?')) return
+  if (store.hasInk && !(await askConfirm('Mevcut çalışma önceki oturumla değişecek. Devam?'))) return
   const ok = await store.loadPersisted()
   if (!ok) showPdfError('Oturum yüklenemedi')
   updateHud(true)
