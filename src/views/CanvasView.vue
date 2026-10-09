@@ -257,38 +257,40 @@
           <input
             type="color"
             :value="store.color"
-            @input="store.setColor(($event.target as HTMLInputElement).value)"
+            @input="onCustomInput(($event.target as HTMLInputElement).value)"
             class="w-6 h-6 rounded-full bg-transparent border border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0 shrink-0"
-            title="Özel renk (damla)"
+            title="Özel renk (custom slot seçiliyse onu düzenler)"
           />
-          <button
-            @click="store.addCustomColor()"
-            class="w-6 h-6 rounded-full border border-dashed border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition font-mono shrink-0"
-            title="Mevcut rengi custom satıra ekle"
-          >
-            +
-          </button>
           <span
-            v-for="hex in store.customColors"
-            :key="'c' + hex"
+            v-for="i in CUSTOM_SLOT_COUNT"
+            :key="'c' + i"
             class="relative group shrink-0"
           >
             <button
-              @click="store.setColor(hex)"
-              :title="hex"
+              v-if="store.customColors[i - 1]"
+              @click="store.setColor(store.customColors[i - 1]!)"
+              :title="`${store.customColors[i - 1]} (damlayla düzenlenir)`"
               class="w-6 h-6 rounded-full border transition block"
-              :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
-              :style="{ background: hex }"
+              :class="store.color.toLowerCase() === store.customColors[i - 1] ? 'border-[var(--chrome-title)] scale-110' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
+              :style="{ background: store.customColors[i - 1] }"
             ></button>
             <button
-              @click="store.removeCustomColor(hex)"
+              v-else
+              @click="store.addCustomColor()"
+              title="Mevcut rengi buraya ekle"
+              class="w-6 h-6 rounded-full border border-dashed border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition font-mono block"
+            >
+              +
+            </button>
+            <button
+              v-if="store.customColors[i - 1]"
+              @click="store.removeCustomColor(store.customColors[i - 1]!)"
               title="Custom rengi kaldır"
               class="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 hidden group-hover:flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[9px] leading-none text-[var(--chrome-text)]"
             >
               ×
             </button>
           </span>
-          <span v-if="store.customColors.length === 0" class="text-[10px] text-[var(--chrome-faint)] font-mono">custom → +</span>
         </div>
       </div>
 
@@ -1091,7 +1093,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
-import { drawingPerf, PAGE_FORMATS, PAPER_THEMES, useDrawingStore } from '@/stores/drawing'
+import { drawingPerf, PAGE_FORMATS, PAPER_THEMES, CUSTOM_SLOT_COUNT, useDrawingStore } from '@/stores/drawing'
 import type { Tool } from '@/stores/drawing'
 import { selectionBBox, coalescedOf } from '@/lib/select'
 
@@ -1519,6 +1521,13 @@ const textUp = (e?: PointerEvent) => {
 const onTextInput = (e: Event) => {
   if (!store.activeTextId) return
   store.updateText(store.activeTextId, (e.target as HTMLTextAreaElement).value)
+}
+
+// Damla: custom slot seçiliyse onu yerinde düzenler, değilse rengi seçer.
+const onCustomInput = (hex: string) => {
+  const idx = store.customColors.indexOf(store.color)
+  if (idx !== -1) store.setCustomSlot(idx, hex)
+  else store.setColor(hex)
 }
 
 const onTextSizeInput = (n: number) => {
