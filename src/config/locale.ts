@@ -235,6 +235,11 @@ const TR = {
   clearPageAsk: 'Sayfa {n} temizlensin mi?',
   delPageAsk: 'Sayfa {n} silinsin mi?',
   strokesLost: '{n} çizgi kaybolur',
+  secAppearance: 'Görünüm',
+  secToolbar: 'Araç çubuğu ve paletler',
+  secPage: 'Sayfa',
+  secInput: 'Kalem ve dokunma',
+  secData: 'Yedek ve kısayollar',
 } as const
 
 export type UIKey = keyof typeof TR
@@ -426,6 +431,11 @@ const EN: UIDict = {
   clearPageAsk: 'Clear page {n}?',
   delPageAsk: 'Delete page {n}?',
   strokesLost: '{n} strokes will be lost',
+  secAppearance: 'Appearance',
+  secToolbar: 'Toolbar & palettes',
+  secPage: 'Page',
+  secInput: 'Pen & touch',
+  secData: 'Backup & shortcuts',
 }
 
 export const UI_STRINGS: Record<Locale, UIDict> = { tr: { ...TR }, en: EN }
