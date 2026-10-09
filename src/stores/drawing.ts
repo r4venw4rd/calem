@@ -1472,6 +1472,21 @@ export const useDrawingStore = defineStore('drawing', () => {
     void persistSettings()
     return true
   }
+  // Custom satırdakileri palete toplu ekler (eksikler, cap dahilinde). Yeni palet tersi yöndür.
+  const appendCustomsToPalette = (paletteId: string): number => {
+    const p = palettes.value.find((x) => x.id === paletteId)
+    if (!p || customColors.value.length === 0) return 0
+    let added = 0
+    for (const h of customColors.value) {
+      if (p.colors.includes(h)) continue
+      if (p.colors.length >= PALETTE_MAX_COLORS) break
+      p.colors.push(h)
+      added++
+    }
+    if (added === 0) return 0
+    void persistSettings()
+    return added
+  }
   const removeColorFromPalette = (hex: string): boolean => {
     const p = activePalette.value
     if (!p || p.colors.length <= 1) return false
@@ -3681,6 +3696,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     deletePalette,
     addColorToPalette,
     removeColorFromPalette,
+    appendCustomsToPalette,
     customColors,
     addCustomColor,
     setCustomSlot,
