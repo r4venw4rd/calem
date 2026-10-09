@@ -844,6 +844,11 @@ export const useDrawingStore = defineStore('drawing', () => {
     flushFileDeletes()
   }
 
+  // Sürekli op grubunu kapatır (örn. ok tuşu bırakılınca): sonraki op yeni undo kaydı olur.
+  const endHistoryGroup = () => {
+    lastPushKey = ''
+  }
+
   const clearHistory = () => {
     undoStack.value = []
     redoStack.value = []
@@ -3865,6 +3870,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     redoStack,
     undoStack,
     pushHistory,
+    pushHistoryKeyed,
+    endHistoryGroup,
     pdfBusy,
     pdfId,
     pdfName,
