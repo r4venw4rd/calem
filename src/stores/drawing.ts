@@ -137,6 +137,7 @@ export interface AppSettings {
   touchPan?: boolean
   palettes?: ColorPalette[]
   activePaletteId?: string
+  customColors?: string[]
   format: PageFormat
   orientation: PageOrientation
   customW: number
@@ -340,6 +341,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         touchPan: touchPan.value,
         palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors] })),
         activePaletteId: activePaletteId.value,
+        customColors: [...customColors.value],
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
@@ -364,6 +366,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       touchPan: touchPan.value,
       palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors] })),
       activePaletteId: activePaletteId.value,
+      customColors: [...customColors.value],
       format: pageFormat.value,
       orientation: pageOrientation.value,
       customW: customW.value,
@@ -404,6 +407,15 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     if (typeof r.touchPan === 'boolean') {
       touchPan.value = r.touchPan
+      applied = true
+    }
+    if (Array.isArray(r.customColors)) {
+      const clean: string[] = []
+      for (const c of r.customColors) {
+        const hex = cleanHexColor(c)
+        if (hex && !clean.includes(hex) && clean.length < PALETTE_MAX_COLORS) clean.push(hex)
+      }
+      customColors.value = clean
       applied = true
     }
     if ('palettes' in r && r.palettes !== undefined) {
@@ -470,6 +482,14 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       if (typeof raw.touchPan === 'boolean') {
         touchPan.value = raw.touchPan
+      }
+      if (Array.isArray(raw.customColors)) {
+        const clean: string[] = []
+        for (const c of raw.customColors) {
+          const hex = cleanHexColor(c)
+          if (hex && !clean.includes(hex) && clean.length < PALETTE_MAX_COLORS) clean.push(hex)
+        }
+        customColors.value = clean
       }
       if (raw.palettes !== undefined) {
         const clean = cleanPalettes(raw.palettes)
@@ -1416,10 +1436,12 @@ export const useDrawingStore = defineStore('drawing', () => {
   const addPalette = (name?: string): string | null => {
     if (palettes.value.length >= PALETTE_MAX_COUNT) return null
     const clean = typeof name === 'string' ? name.trim().slice(0, 24) : ''
+    // Tohum: custom satır doluysa hepsi birlikte kaydedilir, yoksa mevcut renk.
+    const seed = customColors.value.length > 0 ? [...customColors.value] : [color.value]
     const p: ColorPalette = {
       id: newStrokeId(),
       name: clean || `Palet ${palettes.value.length + 1}`,
-      colors: [color.value],
+      colors: seed,
     }
     palettes.value.push(p)
     activePaletteId.value = p.id
@@ -1465,6 +1487,29 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (!p.colors.includes(hex)) return false
     p.colors = p.colors.filter((c) => c !== hex)
     if (color.value === hex) color.value = p.colors[0]!
+    void persistSettings()
+    return true
+  }
+
+  // Bağımsız custom satırı (paletlerden ayrı, header'da ikinci satır).
+  const customColors = ref<string[]>([])
+  const addCustomColor = (hex?: string): boolean => {
+    const h = cleanHexColor(hex ?? color.value)
+    if (!h) return false
+    if (customColors.value.includes(h)) {
+      color.value = h
+      return true
+    }
+    if (customColors.value.length >= PALETTE_MAX_COLORS) return false
+    customColors.value.push(h)
+    color.value = h
+    void persistSettings()
+    return true
+  }
+  const removeCustomColor = (hex: string): boolean => {
+    if (!customColors.value.includes(hex)) return false
+    customColors.value = customColors.value.filter((c) => c !== hex)
+    if (color.value === hex && customColors.value.length > 0) color.value = customColors.value[0]!
     void persistSettings()
     return true
   }
@@ -2771,6 +2816,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         touchPan: touchPan.value,
         palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors] })),
         activePaletteId: activePaletteId.value,
+        customColors: [...customColors.value],
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
@@ -3621,6 +3667,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     deletePalette,
     addColorToPalette,
     removeColorFromPalette,
+    customColors,
+    addCustomColor,
+    removeCustomColor,
     setStrokeWidth,
     setRejectTouch,
     touchPan,
