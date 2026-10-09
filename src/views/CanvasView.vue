@@ -12,7 +12,7 @@
         <button
           @click="showFile = !showFile"
           class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
-          :class="{ 'bg-[var(--chrome-bg-soft)] text-white': showFile }"
+          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showFile }"
           title="Dosya işlemleri"
         >
           Dosya
@@ -96,7 +96,7 @@
         <button
           @click="showSettings = !showSettings; showLayers = false"
           class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
-          :class="{ 'bg-[var(--chrome-bg-soft)] text-white': showSettings }"
+          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showSettings }"
           title="Ayarlar"
         >
           Ayarlar
@@ -107,7 +107,7 @@
         <button
           @click="showLayers = !showLayers; showSettings = false"
           class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
-          :class="{ 'bg-[var(--chrome-bg-soft)] text-white': showLayers }"
+          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showLayers }"
           title="Katmanlar (üstte listelenir)"
         >
           Katman ({{ store.activePage.layers.length }})
@@ -286,14 +286,14 @@
           @click="store.setColor(hex)"
           :title="hex"
           class="w-6 h-6 rounded-full border transition"
-          :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110' : 'border-white/25 hover:border-white/60'"
+          :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
           :style="{ background: hex }"
         ></button>
         <input
           type="color"
           :value="store.color"
           @input="store.setColor(($event.target as HTMLInputElement).value)"
-          class="w-6 h-6 rounded-full bg-transparent border border-dashed border-white/30 cursor-pointer p-0"
+          class="w-6 h-6 rounded-full bg-transparent border border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0"
           title="Özel renk"
         />
       </div>
@@ -430,7 +430,7 @@
             @click="store.setPaper(hex)"
             :title="String(name)"
             class="w-8 h-8 rounded-full border-2 transition"
-            :class="store.paper === hex ? 'border-[var(--chrome-title)]' : 'border-white/20 hover:border-white/50'"
+            :class="store.paper === hex ? 'border-[var(--chrome-title)]' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
             :style="{ background: hex }"
           ></button>
         </div>
@@ -621,7 +621,7 @@
           <button
             @click="activateLayer(l.id)"
             class="flex-1 min-w-0 text-left truncate px-1 py-0.5 rounded"
-            :class="l.id === store.activePage.activeLayerId ? 'text-white font-medium' : 'text-[var(--chrome-text)]'"
+            :class="l.id === store.activePage.activeLayerId ? 'text-[var(--chrome-title)] font-medium' : 'text-[var(--chrome-text)]'"
             :title="`Aktif yap: ${l.name}`"
           >
             {{ l.name }}
@@ -747,7 +747,7 @@
           />
           <button
             @click="delActiveText"
-            class="px-2 py-1 rounded hover:bg-red-600/40 text-[var(--chrome-text)] hover:text-white transition"
+            class="px-2 py-1 rounded hover:bg-red-600/40 text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
             title="Metni sil"
           >
             Sil
@@ -790,7 +790,7 @@
         <div class="flex items-center gap-2 mt-2">
           <button
             @click="delActiveImage"
-            class="px-2 py-1 rounded hover:bg-red-600/40 text-[var(--chrome-text)] hover:text-white transition"
+            class="px-2 py-1 rounded hover:bg-red-600/40 text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
             title="Resmi sil"
           >
             Sil
