@@ -141,17 +141,6 @@
         </button>
       </div>
 
-      <label class="flex items-center gap-1 px-2 py-1 rounded text-xs text-[var(--chrome-text)]" :title="t('languageTitle')">
-        <span class="font-medium">🌐</span>
-        <select
-          :value="store.locale"
-          @change="store.setLocale(($event.target as HTMLSelectElement).value)"
-          class="px-1.5 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)]"
-        >
-          <option v-for="l in LOCALES" :key="l.id" :value="l.id">{{ l.label }}</option>
-        </select>
-      </label>
-
       <div class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]" role="toolbar" :aria-label="t('tools')">
         <button
           v-for="tool in visibleTools"
@@ -448,6 +437,16 @@
             {{ t('light') }}
           </button>
         </div>
+
+        <div class="mb-1 text-[var(--chrome-muted)]">{{ t('language') }}</div>
+        <select
+          :value="store.locale"
+          @change="store.setLocale(($event.target as HTMLSelectElement).value)"
+          :title="t('languageTitle')"
+          class="w-full mb-3 px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
+        >
+          <option v-for="l in LOCALES" :key="l.id" :value="l.id">{{ l.label }}</option>
+        </select>
 
         <div class="mb-1 text-[var(--chrome-muted)]">{{ t('paperTheme') }}</div>
         <div class="flex gap-2 mb-2">
