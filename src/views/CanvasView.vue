@@ -739,6 +739,7 @@
             <div>L/R/O/A çizgi/kare/elips/ok</div>
             <div>T/G metin/resim · F sunum · D çoğalt</div>
             <div>Space sürükle-kaydır</div>
+            <div>PageUp/Down sayfa · sunumda ←/→</div>
             <div>Ctrl+Z/Y geri/yinele</div>
             <div>Ctrl+A/C/X/V (seçimde)</div>
             <div>Del/Esc/oklar (seçimde)</div>
@@ -1955,8 +1956,28 @@ const onKeyDown = (e: KeyboardEvent) => {
   if (!mod && !e.altKey && e.key === 'Escape') {
     if (closeMenus()) return
   }
+  // Sunumda klavyeyle sayfa ilerlet/geri (uzaktan kumanda/klavye ile sunum).
+  if (presenting.value && !mod && !e.altKey) {
+    if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) {
+      e.preventDefault()
+      nextPage()
+      return
+    }
+    if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(e.key)) {
+      e.preventDefault()
+      prevPage()
+      return
+    }
+  }
   // Açık bir diyalog/panel varken araç kısayolları arkada tetiklenmesin (scrim altında state değişmesin).
   if (showFile.value || showSettings.value || showLayers.value) return
+  // Sayfa gezinme: PageDown/PageUp her araçta çalışır.
+  if (!mod && !e.altKey && (e.key === 'PageDown' || e.key === 'PageUp')) {
+    e.preventDefault()
+    if (e.key === 'PageDown') nextPage()
+    else prevPage()
+    return
+  }
   // Space basılı kaydırma (önce Space, sonra sürükle). Tekrarlanan keydown yoksayılır.
   if (!mod && !e.altKey && e.key === ' ' && !e.repeat) {
     if (t && t.tagName === 'BUTTON') return
