@@ -49,6 +49,7 @@ import {
   PALETTE_MAX_COLORS,
   PALETTE_MAX_COUNT,
 } from '../config/palettes'
+import { DEFAULT_LOCALE, isLocale, type Locale } from '../config/locale'
 
 export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text' | 'image' | 'hand'
 export type ShapeTool = 'line' | 'rect' | 'ellipse' | 'arrow'
@@ -123,11 +124,11 @@ export interface Page {
 }
 
 // Uygulama ayarları (çizimden ayrı anahtar; çizim silinse de durur).
-// v1: kâğıt rengi + biçim; v2: + kâğıt deseni; v3: + silgi modu; v4: + toolbar.
+// v1: kâğıt rengi + biçim; v2: + kâğıt deseni; v3: + silgi modu; v4: + toolbar; v5: + locale + el silginin sağında.
 export type UiTheme = 'koyu' | 'acik'
 export type EraserMode = 'standard' | 'stroke'
 export interface AppSettings {
-  v: 1 | 2 | 3 | 4
+  v: 1 | 2 | 3 | 4 | 5
   paper: string
   background?: PaperBackground
   eraserMode?: EraserMode
@@ -142,6 +143,7 @@ export interface AppSettings {
   customW: number
   customH: number
   uiTheme: UiTheme
+  locale?: Locale
 }
 
 // .calem aktarım dosyası: vektör belge + ayar + gömülü bytes (base64).
@@ -308,10 +310,35 @@ export const useDrawingStore = defineStore('drawing', () => {
     void persistSettings()
   }
 
+  // Arayüz dili (l10n). Varsayılan Türkçe; <html lang> üzerinden beslenir.
+  const locale = ref<Locale>(DEFAULT_LOCALE)
+  const applyLocale = () => {
+    if (typeof document === 'undefined' || !document.documentElement) return
+    document.documentElement.lang = locale.value
+  }
+  const setLocale = (l: string) => {
+    if (!isLocale(l)) return
+    if (locale.value === l) return
+    locale.value = l
+    applyLocale()
+    void persistSettings()
+  }
+
+  // Eski toolbar dizilimini yeni varsayılana göçürür: el silginin sağına.
+  // v5 öncesi kayıtlarda el en sondadır; kullanıcının gizlilik/sıra tercihini
+  // bozmadan sadece elin konumunu düzeltir.
+  const migrateToolbarHand = (order: Tool[]): Tool[] => {
+    const next = order.filter((t) => t !== 'hand')
+    const ei = next.indexOf('eraser')
+    const at = ei === -1 ? Math.min(2, next.length) : ei + 1
+    next.splice(at, 0, 'hand')
+    return next
+  }
+
   const persistSettings = async (): Promise<void> => {
     try {
       const doc: AppSettings = {
-        v: 4,
+        v: 5,
         paper: paper.value,
         background: { ...paperBackground.value },
         eraserMode: eraserMode.value,
@@ -325,6 +352,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         customW: customW.value,
         customH: customH.value,
         uiTheme: uiTheme.value,
+        locale: locale.value,
       }
       await storage.setKey(SETTINGS_KEY, doc)
     } catch {
@@ -335,7 +363,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Ayar yedeği: indirilen JSON'u başka cihaza/tarayıcıya taşımak için.
   const exportSettingsJSON = (): string => {
     const doc: AppSettings = {
-      v: 4,
+      v: 5,
       paper: paper.value,
       background: { ...paperBackground.value },
       eraserMode: eraserMode.value,
@@ -349,6 +377,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       customW: customW.value,
       customH: customH.value,
       uiTheme: uiTheme.value,
+      locale: locale.value,
     }
     return JSON.stringify(doc)
   }
@@ -412,7 +441,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     if ('toolbar' in r && r.toolbar !== undefined) {
       const tb = cleanToolbar(r.toolbar)
-      toolbarOrder.value = tb.order
+      // v5 öncesi yedekte el en sondadır → silginin sağına göçür.
+      const needsHandFix = typeof r.v !== 'number' || (r.v as number) < 5
+      toolbarOrder.value = needsHandFix ? migrateToolbarHand(tb.order) : tb.order
       hiddenTools.value = tb.hidden
       applied = true
     }
@@ -434,8 +465,13 @@ export const useDrawingStore = defineStore('drawing', () => {
       uiTheme.value = r.uiTheme
       applied = true
     }
+    if (isLocale(r.locale)) {
+      locale.value = r.locale
+      applied = true
+    }
     if (!applied) return false
     applyUiTheme()
+    applyLocale()
     await persistSettings()
     if (canvasRef.value) {
       repaintBase()
@@ -446,18 +482,19 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   const loadSettings = async (): Promise<void> => {    try {
       const raw = await storage.getKey<AppSettings>(SETTINGS_KEY)
-      // Kayıt yoksa bile temayı uygula: data-theme hep yazılır (seçiciler + color-scheme deterministik).
-      if (!raw || (raw.v !== 1 && raw.v !== 2 && raw.v !== 3 && raw.v !== 4)) {
+      // Kayıt yoksa bile temayı/dili uygula: data-theme + lang hep yazılır.
+      if (!raw || (raw.v !== 1 && raw.v !== 2 && raw.v !== 3 && raw.v !== 4 && raw.v !== 5)) {
         applyUiTheme()
+        applyLocale()
         return
       }
       if (typeof raw.paper === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw.paper)) {
         paper.value = raw.paper
       }
-      if ((raw.v === 2 || raw.v === 3) && raw.background !== undefined) {
+      if ((raw.v === 2 || raw.v === 3 || raw.v === 4 || raw.v === 5) && raw.background !== undefined) {
         paperBackground.value = cleanPaperBackground(raw.background)
       }
-      if ((raw.v === 3 || raw.v === 4) && (raw.eraserMode === 'standard' || raw.eraserMode === 'stroke')) {
+      if ((raw.v === 3 || raw.v === 4 || raw.v === 5) && (raw.eraserMode === 'standard' || raw.eraserMode === 'stroke')) {
         eraserMode.value = raw.eraserMode
       }
       if (typeof raw.smoothing === 'number' && Number.isFinite(raw.smoothing)) {
@@ -488,7 +525,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       if (raw.toolbar !== undefined) {
         const tb = cleanToolbar(raw.toolbar)
-        toolbarOrder.value = tb.order
+        // v5 öncesi kayıtta el en sondadır → silginin sağına göçür.
+        toolbarOrder.value = raw.v < 5 ? migrateToolbarHand(tb.order) : tb.order
         hiddenTools.value = tb.hidden
       }
       if (raw.format === 'custom' || (typeof raw.format === 'string' && raw.format in PAGE_FORMATS)) {
@@ -504,7 +542,11 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (raw.uiTheme === 'koyu' || raw.uiTheme === 'acik') {
         uiTheme.value = raw.uiTheme
       }
+      if (isLocale(raw.locale)) {
+        locale.value = raw.locale
+      }
       applyUiTheme()
+      applyLocale()
     } catch {
       /* varsayılanlar */
     }
@@ -2826,7 +2868,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         }
       }
       const settings: AppSettings = {
-        v: 4,
+        v: 5,
         paper: paper.value,
         background: { ...paperBackground.value },
         eraserMode: eraserMode.value,
@@ -2840,6 +2882,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         customW: customW.value,
         customH: customH.value,
         uiTheme: uiTheme.value,
+        locale: locale.value,
       }
       const out: CalemFile = {
         app: 'calem',
@@ -3640,6 +3683,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     setCustomSize,
     uiTheme,
     setUiTheme,
+    locale,
+    setLocale,
     exportSettingsJSON,
     importSettingsJSON,
     strokeWidth,

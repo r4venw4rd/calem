@@ -13,22 +13,22 @@
           @click="showFile = !showFile"
           class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
           :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showFile }"
-          title="Dosya işlemleri"
+          :title="t('fileOps')"
         >
-          Dosya
+          {{ t('file') }}
         </button>
         <div
           v-if="showFile"
           class="absolute left-0 top-full mt-1 z-20 w-56 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-1.5 text-xs shadow-xl"
           role="menu"
-          aria-label="Dosya"
+          :aria-label="t('file')"
         >
           <label
             class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer"
             :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
-            title="Calem belgesi aç — sayfalar + ayarlar değişir"
+            :title="t('openCalemTitle')"
           >
-            Calem Aç…
+            {{ t('openCalem') }}
             <input
               type="file"
               :accept="CALEM_ACCEPT"
@@ -41,17 +41,17 @@
             @click="exportCalemDoc"
             :disabled="store.pdfBusy"
             class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Vektör belge olarak kaydet (sayfalar + ayarlar + resimler)"
+            :title="t('saveCalemTitle')"
           >
-            Calem Kaydet…
+            {{ t('saveCalem') }}
           </button>
           <div class="my-1 border-t border-[var(--chrome-border)]"></div>
           <label
             class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer"
             :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
-            title="PDF aç — sayfalar PDF sayfalarıyla değişir"
+            :title="t('openPdfTitle')"
           >
-            PDF Aç…
+            {{ t('openPdf') }}
             <input
               type="file"
               :accept="PDF_ACCEPT"
@@ -64,32 +64,32 @@
             @click="exportPdfDoc"
             :disabled="store.pdfBusy"
             class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Konum + isim seçerek PDF olarak indir"
+            :title="t('writePdfTitle')"
           >
-            PDF Yaz…
+            {{ t('writePdf') }}
           </button>
           <button
             @click="exportPng"
             class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
-            title="Aktif sayfayı PNG indir"
+            :title="t('downloadPngTitle')"
           >
-            PNG İndir
+            {{ t('downloadPng') }}
           </button>
           <div class="my-1 border-t border-[var(--chrome-border)]"></div>
-          <div class="px-3 pt-1 text-[10px] text-[var(--chrome-faint)] font-mono">Sayfa</div>
+          <div class="px-3 pt-1 text-[10px] text-[var(--chrome-faint)] font-mono">{{ t('page') }}</div>
           <button
             @click="dupPage"
             class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
-            title="Aktif sayfayı arkaya kopyala (D)"
+            :title="t('dupPageTitle')"
           >
-            Sayfayı Çoğalt
+            {{ t('dupPage') }}
           </button>
           <div class="flex gap-1 px-3 pb-1">
             <button
               @click="movePageL"
               :disabled="store.activePageIndex === 0"
               class="flex-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed font-mono"
-              title="Sayfayı sola taşı"
+              :title="t('moveLeft')"
             >
               ←
             </button>
@@ -97,7 +97,7 @@
               @click="movePageR"
               :disabled="store.activePageIndex >= store.pages.length - 1"
               class="flex-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed font-mono"
-              title="Sayfayı sağa taşı"
+              :title="t('moveRight')"
             >
               →
             </button>
@@ -108,12 +108,12 @@
           >
             <span v-if="store.pdfName" :title="store.pdfName">
               {{ store.pdfName }}
-              <button @click="askClosePdf" class="text-[var(--chrome-muted)] hover:text-[var(--chrome-title)] underline" title="PDF'i kapat">
-                Kapat
+              <button @click="askClosePdf" class="text-[var(--chrome-muted)] hover:text-[var(--chrome-title)] underline" :title="t('closePdf')">
+                {{ t('close') }}
               </button>
             </span>
-            <span v-if="store.lastSavedAt" :title="`Otomatik kayıt (IndexedDB)`">
-              {{ store.pdfName ? ' · ' : '' }}kayıtlı {{ store.lastSavedAt }}
+            <span v-if="store.lastSavedAt" :title="t('autosave')">
+              {{ store.pdfName ? ' · ' : '' }}{{ t('saved') }} {{ store.lastSavedAt }}
             </span>
           </div>
         </div>
@@ -124,9 +124,9 @@
           @click="showSettings = !showSettings; showLayers = false"
           class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
           :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showSettings }"
-          title="Ayarlar"
+          :title="t('settings')"
         >
-          Ayarlar
+          {{ t('settings') }}
         </button>
       </div>
 
@@ -135,34 +135,45 @@
           @click="showLayers = !showLayers; showSettings = false"
           class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
           :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showLayers }"
-          title="Katmanlar (üstte listelenir)"
+          :title="t('layersTitle')"
         >
-          Katman ({{ store.activePage.layers.length }})
+          {{ t('layers') }} ({{ store.activePage.layers.length }})
         </button>
       </div>
 
-      <div class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]" role="toolbar" aria-label="Araçlar">
-        <button
-          v-for="t in visibleTools"
-          :key="t"
-          @click="store.setTool(t)"
-          :class="store.currentTool === t ? TOOL_META[t].active : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="px-2 py-1 rounded text-xs font-medium transition flex items-center gap-1"
-          :title="TOOL_META[t].title"
+      <label class="flex items-center gap-1 px-2 py-1 rounded text-xs text-[var(--chrome-text)]" :title="t('languageTitle')">
+        <span class="font-medium">🌐</span>
+        <select
+          :value="store.locale"
+          @change="store.setLocale(($event.target as HTMLSelectElement).value)"
+          class="px-1.5 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)]"
         >
-          <svg v-if="TOOL_META[t].icon === 'pen'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <option v-for="l in LOCALES" :key="l.id" :value="l.id">{{ l.label }}</option>
+        </select>
+      </label>
+
+      <div class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]" role="toolbar" :aria-label="t('tools')">
+        <button
+          v-for="tool in visibleTools"
+          :key="tool"
+          @click="store.setTool(tool)"
+          :class="store.currentTool === tool ? TOOL_META[tool].active : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="px-2 py-1 rounded text-xs font-medium transition flex items-center gap-1"
+          :title="locTools[tool].title"
+        >
+          <svg v-if="TOOL_META[tool].icon === 'pen'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7l7 9z" />
           </svg>
-          <svg v-else-if="TOOL_META[t].icon === 'hl'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg v-else-if="TOOL_META[tool].icon === 'hl'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 11l3 3m-2.5-2.5L4 17l5-1.5L19.5 5 15 3.5 9.5 8.5z" />
           </svg>
-          <svg v-else-if="TOOL_META[t].icon === 'eraser'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg v-else-if="TOOL_META[tool].icon === 'eraser'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m12 4h4m4-4v4m-4-6h4m-5.303-5.303L16 16" />
           </svg>
-          <svg v-else-if="TOOL_META[t].icon === 'select'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg v-else-if="TOOL_META[tool].icon === 'select'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 7-6 2-2 6-6-15z" />
           </svg>
-          {{ TOOL_META[t].label }}
+          {{ locTools[tool].label }}
         </button>
       </div>
 
@@ -170,59 +181,59 @@
         v-if="store.currentTool === 'select'"
         class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]"
         role="toolbar"
-        aria-label="Seçim işlemleri"
+        :aria-label="t('selOps')"
       >
         <button
           @click="store.setSelectMode('rect')"
           :class="store.selectMode === 'rect' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
           class="px-2 py-1 rounded text-xs font-medium transition"
-          title="Kare seçim"
+          :title="t('rectSelTitle')"
         >
-          Kare
+          {{ t('rectSel') }}
         </button>
         <button
           @click="store.setSelectMode('lasso')"
           :class="store.selectMode === 'lasso' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
           class="px-2 py-1 rounded text-xs font-medium transition"
-          title="Kement seçim"
+          :title="t('lassoSelTitle')"
         >
-          Kement
+          {{ t('lassoSel') }}
         </button>
         <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
         <button
           @click="selAll"
           class="px-2 py-1 rounded text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
-          title="Tümünü seç (Ctrl+A)"
+          :title="t('selectAllTitle')"
         >
-          Tümü
+          {{ t('selectAll') }}
         </button>
         <button
           @click="selCopy"
           :disabled="store.selectionCount === 0"
           class="px-2 py-1 rounded text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Kopyala (Ctrl+C)"
+          :title="t('copyTitle')"
         >
-          Kopyala
+          {{ t('copy') }}
         </button>
         <button
           @click="selPaste"
           :disabled="store.clipboardCount === 0"
           class="px-2 py-1 rounded text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Yapıştır (Ctrl+V)"
+          :title="t('pasteTitle')"
         >
-          Yapıştır
+          {{ t('paste') }}
         </button>
         <button
           @click="selDelete"
           :disabled="store.selectionCount === 0"
           class="px-2 py-1 rounded text-xs text-[var(--chrome-text)] hover:text-red-400 transition disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Seçiliyi sil (Del)"
+          :title="t('delSelTitle')"
         >
-          Sil<span v-if="store.selectionCount > 0" class="font-mono"> ({{ store.selectionCount }})</span>
+          {{ t('delSel') }}<span v-if="store.selectionCount > 0" class="font-mono"> ({{ store.selectionCount }})</span>
         </button>
       </div>
 
-      <div v-if="store.currentTool !== 'select'" class="flex flex-col gap-1" role="toolbar" aria-label="Renk paleti">
+      <div v-if="store.currentTool !== 'select'" class="flex flex-col gap-1" role="toolbar" :aria-label="t('palette')">
         <div class="flex items-center gap-1.5">
           <select
             :value="store.activePaletteId"
@@ -496,37 +507,37 @@
           Marjin çizgisi
         </label>
 
-        <div class="mb-1 text-[var(--chrome-muted)]">Araç çubuğu</div>
+        <div class="mb-1 text-[var(--chrome-muted)]">{{ t('toolbar') }}</div>
         <div class="flex flex-col gap-0.5 mb-3">
           <div
-            v-for="(t, i) in store.toolbarOrder"
-            :key="t"
+            v-for="(tool, i) in store.toolbarOrder"
+            :key="tool"
             class="flex items-center gap-1 px-1 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)]"
           >
             <input
               type="checkbox"
-              :checked="!store.hiddenTools.includes(t)"
-              :disabled="!store.hiddenTools.includes(t) && store.toolbarOrder.length - store.hiddenTools.length <= 1"
-              @change="store.setToolVisible(t, ($event.target as HTMLInputElement).checked)"
+              :checked="!store.hiddenTools.includes(tool)"
+              :disabled="!store.hiddenTools.includes(tool) && store.toolbarOrder.length - store.hiddenTools.length <= 1"
+              @change="store.setToolVisible(tool, ($event.target as HTMLInputElement).checked)"
               class="accent-indigo-600"
-              :title="`${TOOL_META[t].label} görünürlüğü`"
+              :title="`${locTools[tool].label} ${t('toolVisibilitySuffix')}`"
             />
-            <span class="flex-1 truncate" :class="store.hiddenTools.includes(t) ? 'opacity-40' : ''">
-              {{ TOOL_META[t].label }}
+            <span class="flex-1 truncate" :class="store.hiddenTools.includes(tool) ? 'opacity-40' : ''">
+              {{ locTools[tool].label }}
             </span>
             <button
-              @click="store.moveTool(t, -1)"
+              @click="store.moveTool(tool, -1)"
               :disabled="i === 0"
               class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
-              title="Öne al"
+              :title="t('moveFront')"
             >
               ↑
             </button>
             <button
-              @click="store.moveTool(t, 1)"
+              @click="store.moveTool(tool, 1)"
               :disabled="i === store.toolbarOrder.length - 1"
               class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
-              title="Arkala"
+              :title="t('moveBack')"
             >
               ↓
             </button>
@@ -534,9 +545,9 @@
           <button
             @click="store.resetToolbar()"
             class="mt-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition font-mono"
-            title="Sıra + görünürlük sıfırla"
+            :title="t('resetToolbarTitle')"
           >
-            Sıfırla
+            {{ t('reset') }}
           </button>
         </div>
 
@@ -1125,6 +1136,7 @@ import { drawingPerf, useDrawingStore } from '@/stores/drawing'
 import { PAGE_FORMATS, PAPER_THEMES } from '@/config/paper'
 import { CUSTOM_SLOT_COUNT } from '@/config/palettes'
 import { TOOL_META } from '@/config/tools'
+import { LOCALES, TOOL_LABELS, tr as trFn, type UIKey } from '@/config/locale'
 import { SLIDERS } from '@/config/ui'
 import { PAGE_MIN, PAGE_MAX } from '@/config/engine'
 import {
@@ -1161,6 +1173,10 @@ const settingsPanel = ref<HTMLElement | null>(null)
 const layersBtn = ref<HTMLElement | null>(null)
 const layersPanel = ref<HTMLElement | null>(null)
 const store = useDrawingStore()
+
+// l10n: arayüz dili store.locale'dan beslenir, eksik anahtar Türkçe'ye düşer.
+const t = (k: UIKey): string => trFn(store.locale, k)
+const locTools = computed(() => TOOL_LABELS[store.locale] ?? TOOL_LABELS.tr)
 
 // Katman listesi üstte-ilk (dizi 0 = en alt).
 const layersTopFirst = computed(() => [...store.activePage.layers].reverse())
