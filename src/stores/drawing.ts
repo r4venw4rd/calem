@@ -44,6 +44,31 @@ export interface ToolbarConfig {
   hidden: Tool[]
 }
 export type SelectMode = 'rect' | 'lasso'
+// Renk paletleri: kayıtlı setler, aktif olanı toolbar'da dizilir.
+export interface ColorPalette {
+  id: string
+  name: string
+  colors: string[]
+}
+export const PALETTE_MAX_COLORS = 12
+export const PALETTE_MAX_COUNT = 8
+export const DEFAULT_PALETTES: ColorPalette[] = [
+  {
+    id: 'varsayilan',
+    name: 'Varsayılan',
+    colors: ['#ffffff', '#000000', '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7'],
+  },
+  {
+    id: 'pastel',
+    name: 'Pastel',
+    colors: ['#fecaca', '#fed7aa', '#fef08a', '#bbf7d0', '#bfdbfe', '#ddd6fe', '#fbcfe8', '#ffffff'],
+  },
+  {
+    id: 'neon',
+    name: 'Neon',
+    colors: ['#ff0000', '#ff8000', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#ff00ff', '#ffffff'],
+  },
+]
 export interface Point { x: number; y: number; pressure?: number }
 // Çizgi stili: kalem + şekillerde kesikli/noktalı ve opaklık. Vurgu/silgi sabit stillidir.
 export type DashStyle = 'solid' | 'dash' | 'dot'
@@ -110,6 +135,8 @@ export interface AppSettings {
   toolbar?: ToolbarConfig
   smoothing?: number
   touchPan?: boolean
+  palettes?: ColorPalette[]
+  activePaletteId?: string
   format: PageFormat
   orientation: PageOrientation
   customW: number
@@ -311,6 +338,8 @@ export const useDrawingStore = defineStore('drawing', () => {
         toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
         smoothing: smoothing.value,
         touchPan: touchPan.value,
+        palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors] })),
+        activePaletteId: activePaletteId.value,
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
@@ -333,6 +362,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
       smoothing: smoothing.value,
       touchPan: touchPan.value,
+      palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors] })),
+      activePaletteId: activePaletteId.value,
       format: pageFormat.value,
       orientation: pageOrientation.value,
       customW: customW.value,
@@ -374,6 +405,15 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (typeof r.touchPan === 'boolean') {
       touchPan.value = r.touchPan
       applied = true
+    }
+    if ('palettes' in r && r.palettes !== undefined) {
+      const clean = cleanPalettes(r.palettes)
+      if (clean.length > 0) {
+        palettes.value = clean
+        const aid = typeof r.activePaletteId === 'string' ? r.activePaletteId : ''
+        activePaletteId.value = clean.some((x) => x.id === aid) ? aid : clean[0]!.id
+        applied = true
+      }
     }
     if ('toolbar' in r && r.toolbar !== undefined) {
       const tb = cleanToolbar(r.toolbar)
@@ -431,6 +471,14 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (typeof raw.touchPan === 'boolean') {
         touchPan.value = raw.touchPan
       }
+      if (raw.palettes !== undefined) {
+        const clean = cleanPalettes(raw.palettes)
+        if (clean.length > 0) {
+          palettes.value = clean
+          const aid = typeof raw.activePaletteId === 'string' ? raw.activePaletteId : ''
+          activePaletteId.value = clean.some((x) => x.id === aid) ? aid : clean[0]!.id
+        }
+      }
       if (raw.toolbar !== undefined) {
         const tb = cleanToolbar(raw.toolbar)
         toolbarOrder.value = tb.order
@@ -455,6 +503,29 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
   const color = ref('#ffffff')
+  const cleanHexColor = (v: unknown): string | null =>
+    typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : null
+  const cleanPalettes = (input: unknown): ColorPalette[] => {
+    if (!Array.isArray(input)) return []
+    const out: ColorPalette[] = []
+    for (const p of input) {
+      if (!p || typeof p !== 'object' || out.length >= PALETTE_MAX_COUNT) continue
+      const r = p as Record<string, unknown>
+      if (!Array.isArray(r.colors)) continue
+      const colors: string[] = []
+      for (const c of r.colors) {
+        const hex = cleanHexColor(c)
+        if (hex && !colors.includes(hex) && colors.length < PALETTE_MAX_COLORS) colors.push(hex)
+      }
+      if (colors.length === 0) continue
+      out.push({
+        id: typeof r.id === 'string' && r.id ? r.id : newStrokeId(),
+        name: typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 24) : `Palet ${out.length + 1}`,
+        colors,
+      })
+    }
+    return out
+  }
   // Araç başına kalınlık hafızası: kalem ince, silgi kocaman olabilir; araç değişince geri gelir.
   // select/şekil mürekkep değil ya da kalem-aralığı kullanır (kayıtlı dursun yeter).
   const WIDTH_MIN: Record<Tool, number> = { pen: 1, highlighter: 1, eraser: 5, select: 1, line: 1, rect: 1, ellipse: 1, arrow: 1, text: 1, image: 1, hand: 1 }
@@ -1326,6 +1397,76 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Color change
   const setColor = (col: string) => {
     color.value = col
+  }
+
+  // --- Renk paletleri: kayıtlı setler, switchlenebilir ---
+  const palettes = ref<ColorPalette[]>(
+    DEFAULT_PALETTES.map((p) => ({ ...p, colors: [...p.colors] })),
+  )
+  const activePaletteId = ref<string>(DEFAULT_PALETTES[0]!.id)
+  const activePalette = computed(
+    () => palettes.value.find((p) => p.id === activePaletteId.value) ?? palettes.value[0]!,
+  )
+  const setActivePalette = (id: string) => {
+    if (activePaletteId.value === id) return
+    if (!palettes.value.some((p) => p.id === id)) return
+    activePaletteId.value = id
+    void persistSettings()
+  }
+  const addPalette = (name?: string): string | null => {
+    if (palettes.value.length >= PALETTE_MAX_COUNT) return null
+    const clean = typeof name === 'string' ? name.trim().slice(0, 24) : ''
+    const p: ColorPalette = {
+      id: newStrokeId(),
+      name: clean || `Palet ${palettes.value.length + 1}`,
+      colors: [color.value],
+    }
+    palettes.value.push(p)
+    activePaletteId.value = p.id
+    void persistSettings()
+    return p.id
+  }
+  const renamePalette = (id: string, name: string): boolean => {
+    const p = palettes.value.find((x) => x.id === id)
+    if (!p) return false
+    const clean = typeof name === 'string' ? name.trim().slice(0, 24) : ''
+    if (!clean || clean === p.name) return false
+    p.name = clean
+    void persistSettings()
+    return true
+  }
+  const deletePalette = (id: string): boolean => {
+    if (palettes.value.length <= 1) return false
+    if (!palettes.value.some((p) => p.id === id)) return false
+    palettes.value = palettes.value.filter((p) => p.id !== id)
+    if (activePaletteId.value === id) activePaletteId.value = palettes.value[0]!.id
+    void persistSettings()
+    return true
+  }
+  // Mevcut rengi aktif palete ekler (yoksa; varsa sadece seçer).
+  const addColorToPalette = (hex?: string): boolean => {
+    const p = activePalette.value
+    if (!p) return false
+    const h = cleanHexColor(hex ?? color.value)
+    if (!h) return false
+    if (p.colors.includes(h)) {
+      color.value = h
+      return true
+    }
+    if (p.colors.length >= PALETTE_MAX_COLORS) return false
+    p.colors.push(h)
+    color.value = h
+    void persistSettings()
+    return true
+  }
+  const removeColorFromPalette = (hex: string): boolean => {
+    const p = activePalette.value
+    if (!p || p.colors.length <= 1) return false
+    if (!p.colors.includes(hex)) return false
+    p.colors = p.colors.filter((c) => c !== hex)
+    if (color.value === hex) color.value = p.colors[0]!
+    void persistSettings()
+    return true
   }
 
   // Stroke width change — ilgili araca yazılır, aralığına kelepçelenir.
@@ -2628,6 +2769,8 @@ export const useDrawingStore = defineStore('drawing', () => {
         toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
         smoothing: smoothing.value,
         touchPan: touchPan.value,
+        palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors] })),
+        activePaletteId: activePaletteId.value,
         format: pageFormat.value,
         orientation: pageOrientation.value,
         customW: customW.value,
@@ -3469,6 +3612,15 @@ export const useDrawingStore = defineStore('drawing', () => {
     dpr,
     setTool,
     setColor,
+    palettes,
+    activePaletteId,
+    activePalette,
+    setActivePalette,
+    addPalette,
+    renamePalette,
+    deletePalette,
+    addColorToPalette,
+    removeColorFromPalette,
     setStrokeWidth,
     setRejectTouch,
     touchPan,

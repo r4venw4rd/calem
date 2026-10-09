@@ -223,22 +223,48 @@
       </div>
 
       <div v-if="store.currentTool !== 'select'" class="flex items-center gap-1.5" role="toolbar" aria-label="Renk paleti">
-        <button
-          v-for="hex in PALETTE"
+        <select
+          :value="store.activePaletteId"
+          @change="store.setActivePalette(($event.target as HTMLSelectElement).value)"
+          class="max-w-24 px-1.5 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)]"
+          title="Renk paleti seç"
+        >
+          <option v-for="p in store.palettes" :key="p.id" :value="p.id">{{ p.name }}</option>
+        </select>
+        <span
+          v-for="hex in store.activePalette.colors"
           :key="hex"
-          @click="store.setColor(hex)"
-          :title="hex"
-          class="w-6 h-6 rounded-full border transition"
-          :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
-          :style="{ background: hex }"
-        ></button>
+          class="relative group shrink-0"
+        >
+          <button
+            @click="store.setColor(hex)"
+            :title="hex"
+            class="w-6 h-6 rounded-full border transition block"
+            :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
+            :style="{ background: hex }"
+          ></button>
+          <button
+            @click="store.removeColorFromPalette(hex)"
+            title="Rengi paletten kaldır"
+            class="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 hidden group-hover:flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[9px] leading-none text-[var(--chrome-text)]"
+          >
+            ×
+          </button>
+        </span>
         <input
           type="color"
           :value="store.color"
           @input="store.setColor(($event.target as HTMLInputElement).value)"
-          class="w-6 h-6 rounded-full bg-transparent border border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0"
+          class="w-6 h-6 rounded-full bg-transparent border border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0 shrink-0"
           title="Özel renk"
         />
+        <button
+          @click="store.addColorToPalette()"
+          class="w-6 h-6 rounded-full border border-dashed border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition font-mono shrink-0"
+          title="Mevcut rengi palete ekle"
+        >
+          +
+        </button>
       </div>
 
       <div v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'" class="flex items-center gap-2">
@@ -471,6 +497,56 @@
             title="Sıra + görünürlük sıfırla"
           >
             Sıfırla
+          </button>
+        </div>
+
+        <div class="mb-1 text-[var(--chrome-muted)]">Renk paletleri</div>
+        <div class="flex flex-col gap-0.5 mb-3">
+          <div
+            v-for="p in store.palettes"
+            :key="p.id"
+            class="flex items-center gap-1 px-1 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)]"
+            :class="{ 'bg-indigo-600/20': p.id === store.activePaletteId }"
+          >
+            <button
+              @click="store.setActivePalette(p.id)"
+              class="flex-1 min-w-0 text-left truncate px-1 py-0.5 rounded"
+              :class="p.id === store.activePaletteId ? 'text-[var(--chrome-title)] font-medium' : 'text-[var(--chrome-text)]'"
+              :title="`Aktif yap: ${p.name} (${p.colors.length} renk)`"
+            >
+              {{ p.name }}
+              <span class="font-mono text-[10px] text-[var(--chrome-faint)]">{{ p.colors.length }}</span>
+            </button>
+            <span class="flex -space-x-1">
+              <span
+                v-for="hex in p.colors.slice(0, 6)"
+                :key="hex"
+                class="w-3.5 h-3.5 rounded-full border border-[var(--chrome-border-strong)]"
+                :style="{ background: hex }"
+              ></span>
+            </span>
+            <button
+              @click="renamePaletteBtn(p.id)"
+              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)]"
+              title="Adlandır"
+            >
+              Ad
+            </button>
+            <button
+              @click="askDeletePalette(p.id)"
+              :disabled="store.palettes.length <= 1"
+              class="px-1 rounded hover:bg-red-600/40 disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Paleti sil"
+            >
+              Sil
+            </button>
+          </div>
+          <button
+            @click="addPaletteBtn"
+            class="mt-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition font-mono"
+            title="Yeni palet (mevcut renkle başlar)"
+          >
+            + Yeni palet
           </button>
         </div>
 
@@ -1053,8 +1129,28 @@ const renameLayer = (id: string) => {
   store.renameLayer(id, name)
 }
 
-// Hızlı erişim paleti (yanındaki damlalık özel renk için)
-const PALETTE = ['#ffffff', '#000000', '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7']
+const addPaletteBtn = () => {
+  const name = prompt('Palet adı', `Palet ${store.palettes.length + 1}`)
+  if (name === null) return
+  store.addPalette(name)
+  updateHud(true)
+}
+
+const askDeletePalette = (id: string) => {
+  const p = store.palettes.find((x) => x.id === id)
+  if (!p || store.palettes.length <= 1) return
+  if (!confirm(`"${p.name}" paleti silinsin mi?`)) return
+  store.deletePalette(id)
+  updateHud(true)
+}
+
+const renamePaletteBtn = (id: string) => {
+  const p = store.palettes.find((x) => x.id === id)
+  if (!p) return
+  const name = prompt('Palet adı', p.name)
+  if (name === null) return
+  store.renamePalette(id, name)
+}
 
 // Araç düğme metadatası (sıra/görünürlük store.toolbarOrder/hiddenTools'tan gelir).
 const TOOL_META: Record<Tool, { label: string; title: string; active: string; icon?: 'pen' | 'hl' | 'eraser' | 'select' }> = {
