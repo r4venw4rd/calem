@@ -146,3 +146,35 @@ export function idbSetImage(rec: ImageFileRecord): Promise<void> {
 export function idbDeleteFile(id: string): Promise<void> {
   return tx(FILES_STORE, 'readwrite', (s) => s.delete(id)).then(() => undefined)
 }
+
+// Depo arayüzü: bugün IDB, yarın sync adaptörü aynı imzayla takılır.
+// Store'lar bu interface'e konuşur (idb* fonksiyonlarına değil).
+export interface DocStorage {
+  getDoc(): Promise<PersistedDoc | null>
+  setDoc(doc: PersistedDoc): Promise<void>
+  getKey<T>(key: string): Promise<T | null>
+  setKey<T>(key: string, value: T): Promise<void>
+  getFile(id: string): Promise<PdfFileRecord | null>
+  setFile(rec: PdfFileRecord): Promise<void>
+  getImage(id: string): Promise<ImageFileRecord | null>
+  setImage(rec: ImageFileRecord): Promise<void>
+  deleteFile(id: string): Promise<void>
+}
+
+export const idbStorage: DocStorage = {
+  getDoc: () => idbGet(),
+  setDoc: (doc) => idbSet(doc),
+  getKey: (key) => idbGetKey(key),
+  setKey: (key, value) => idbSetKey(key, value),
+  getFile: (id) => idbGetFile(id),
+  setFile: (rec) => idbSetFile(rec),
+  getImage: (id) => idbGetImage(id),
+  setImage: (rec) => idbSetImage(rec),
+  deleteFile: (id) => idbDeleteFile(id),
+}
+
+// Aktif depo (canlı binding — setStorage ile değişir).
+export let storage: DocStorage = idbStorage
+export const setStorage = (s: DocStorage) => {
+  storage = s
+}
