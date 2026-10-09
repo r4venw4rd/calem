@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
-import { idbDeleteFile, idbGet, idbGetFile, idbGetImage, idbGetKey, idbSet, idbSetFile, idbSetImage, idbSetKey, SETTINGS_KEY, type ImageFileRecord, type PersistedDoc } from '../lib/idb'
+import { storage, SETTINGS_KEY, type ImageFileRecord, type PersistedDoc } from '../lib/idb'
 import {
   cleanPaperBackground,
   dottedPoints,
@@ -325,7 +325,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         customH: customH.value,
         uiTheme: uiTheme.value,
       }
-      await idbSetKey(SETTINGS_KEY, doc)
+      await storage.setKey(SETTINGS_KEY, doc)
     } catch {
       /* sessiz */
     }
@@ -444,7 +444,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   const loadSettings = async (): Promise<void> => {    try {
-      const raw = await idbGetKey<AppSettings>(SETTINGS_KEY)
+      const raw = await storage.getKey<AppSettings>(SETTINGS_KEY)
       // Kayıt yoksa bile temayı uygula: data-theme hep yazılır (seçiciler + color-scheme deterministik).
       if (!raw || (raw.v !== 1 && raw.v !== 2 && raw.v !== 3 && raw.v !== 4)) {
         applyUiTheme()
@@ -1205,7 +1205,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         h,
         bytes: buf,
       }
-      await idbSetImage(rec)
+      await storage.setImage(rec)
       imgBitmaps.set(fileId, canvas)
       pushHistory()
       const item: ImageItem = {
@@ -1242,7 +1242,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       for (const fid of ids) {
         if (imgBitmaps.has(fid)) continue
-        const rec = await idbGetImage(fid)
+        const rec = await storage.getImage(fid)
         if (!rec) continue
         const canvas = await bytesToCanvas(rec.bytes)
         if (canvas) imgBitmaps.set(fid, canvas)
@@ -1257,7 +1257,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     for (const p of pages) {
       for (const img of p.images ?? []) {
         imgBitmaps.delete(img.fileId)
-        void idbDeleteFile(img.fileId).catch(() => {})
+        void storage.deleteFile(img.fileId).catch(() => {})
       }
     }
   }
@@ -2480,7 +2480,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (rendered.length === 0) return { error: 'sayfa yok' }
       const id = `${file.name}::${file.size}::${file.lastModified}`
       // Önce dosyayı persist et: başarısızsa mevcut sahne korunur.
-      await idbSetFile({
+      await storage.setFile({
         id,
         name: file.name,
         size: file.size,
@@ -2489,7 +2489,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         bytes: stored,
       })
       if (pdfId.value && pdfId.value !== id) {
-        void idbDeleteFile(pdfId.value).catch(() => {})
+        void storage.deleteFile(pdfId.value).catch(() => {})
       }
       bgCanvases.clear()
       pdfRenderScales.clear()
@@ -2815,11 +2815,11 @@ export const useDrawingStore = defineStore('drawing', () => {
         for (const img of p.images ?? []) imgIds.add(img.fileId)
       }
       for (const fid of imgIds) {
-        const rec = await idbGetImage(fid)
+        const rec = await storage.getImage(fid)
         if (rec) files[fid] = { kind: 'image', name: rec.name, w: rec.w, h: rec.h, b64: bufToB64(rec.bytes) }
       }
       if (pdfId.value) {
-        const prec = await idbGetFile(pdfId.value)
+        const prec = await storage.getFile(pdfId.value)
         if (prec) {
           files[prec.id] = { kind: 'pdf', name: prec.name, pageCount: prec.pageCount, b64: bufToB64(prec.bytes) }
         }
@@ -2962,7 +2962,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         }
         if (buf.byteLength === 0) continue
         if (f.kind === 'pdf') {
-          await idbSetFile({
+          await storage.setFile({
             id: fid,
             name: typeof f.name === 'string' ? f.name : 'belge.pdf',
             size: buf.byteLength,
@@ -2972,7 +2972,7 @@ export const useDrawingStore = defineStore('drawing', () => {
           })
           written.add(fid)
         } else if (f.kind === 'image') {
-          await idbSetImage({
+          await storage.setImage({
             id: fid,
             name: typeof f.name === 'string' ? f.name : 'resim',
             size: buf.byteLength,
@@ -2995,7 +2995,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       // Eski sahnenin yetim bytes'larını temizle, sonra değiştir.
       deleteImageFilesOf(pages.value)
-      if (pdfId.value) void idbDeleteFile(pdfId.value).catch(() => {})
+      if (pdfId.value) void storage.deleteFile(pdfId.value).catch(() => {})
       bgCanvases.clear()
       pdfRenderScales.clear()
       imgBitmaps.clear()
@@ -3038,7 +3038,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   // PDF'i kapat: arkaplanlar gider, tek boş sayfaya dönülür, dosya kaydı silinir.
   const closePdf = () => {
-    if (pdfId.value) void idbDeleteFile(pdfId.value).catch(() => {})
+    if (pdfId.value) void storage.deleteFile(pdfId.value).catch(() => {})
     bgCanvases.clear()
     pdfRenderScales.clear()
     pdfBytesCache = null
@@ -3064,7 +3064,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Açılışta arkaplanları PDF bytes'larından yeniden üretir (sessiz başarısızlık: mürekkep durur).
   const restorePdfBackgrounds = async (id: string): Promise<void> => {
     try {
-      const rec = await idbGetFile(id)
+      const rec = await storage.getFile(id)
       if (!rec) return
       pdfBytesCache = new Uint8Array(rec.bytes)
       const { rendered, scale } = await renderPdfPages(pdfBytesCache)
@@ -3175,7 +3175,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         activePageIndex: activePageIndex.value,
         ...(pdfId.value ? { pdfId: pdfId.value, pdfName: pdfName.value } : {}),
       }
-      await idbSet(doc)
+      await storage.setDoc(doc)
       lastSavedAt.value = fmtTime(now)
     } catch {
       // Özel mod / IDB kapalı: sessizce vazgeç (çizim bellekte sürer).
@@ -3355,7 +3355,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const checkSavedSession = async (): Promise<boolean> => {
     let doc: PersistedDoc | null = null
     try {
-      doc = await idbGet()
+      doc = await storage.getDoc()
     } catch {
       savedSession.value = null
       return false
@@ -3404,7 +3404,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const loadPersisted = async (): Promise<boolean> => {
     let doc: PersistedDoc | null = null
     try {
-      doc = await idbGet()
+      doc = await storage.getDoc()
     } catch {
       return false
     }
