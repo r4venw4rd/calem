@@ -224,6 +224,17 @@ const TR = {
   sc6: 'Ctrl+Z/Y geri/yinele',
   sc7: 'Ctrl+A/C/X/V (seçimde)',
   sc8: 'Del/Esc/oklar (seçimde)',
+  invalidSettings: 'Ayar dosyası geçersiz',
+  loadFailed: 'Oturum yüklenemedi',
+  pdfReplace: 'Mevcut çizimler PDF sayfalarıyla değişecek. Devam?',
+  calemReplace: 'Mevcut içerik .calem dosyasıyla değişecek. Devam?',
+  pdfClose: 'PDF kapatılıp tek boş sayfaya dönülsün mü?',
+  restoreReplace: 'Mevcut çalışma önceki oturumla değişecek. Devam?',
+  confirmDelete: 'Silinsin mi?',
+  paletteDeleteAsk: 'Palet silinsin mi?',
+  clearPageAsk: 'Sayfa {n} temizlensin mi?',
+  delPageAsk: 'Sayfa {n} silinsin mi?',
+  strokesLost: '{n} çizgi kaybolur',
 } as const
 
 export type UIKey = keyof typeof TR
@@ -404,6 +415,17 @@ const EN: UIDict = {
   sc6: 'Ctrl+Z/Y undo/redo',
   sc7: 'Ctrl+A/C/X/V (selection)',
   sc8: 'Del/Esc/arrows (selection)',
+  invalidSettings: 'Invalid settings file',
+  loadFailed: 'Session could not be loaded',
+  pdfReplace: 'Current drawings will be replaced by the PDF pages. Continue?',
+  calemReplace: 'Current content will be replaced by the .calem file. Continue?',
+  pdfClose: 'Close the PDF and return to a single blank page?',
+  restoreReplace: 'Current work will be replaced by the previous session. Continue?',
+  confirmDelete: 'Delete?',
+  paletteDeleteAsk: 'Delete palette?',
+  clearPageAsk: 'Clear page {n}?',
+  delPageAsk: 'Delete page {n}?',
+  strokesLost: '{n} strokes will be lost',
 }
 
 export const UI_STRINGS: Record<Locale, UIDict> = { tr: { ...TR }, en: EN }

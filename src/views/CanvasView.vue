@@ -1030,7 +1030,7 @@
           class="px-2 py-0.5 rounded hover:bg-red-600/40 disabled:opacity-30 disabled:cursor-not-allowed"
           :title="t('delPage')"
         >
-          Sil
+          {{ t('delete') }}
         </button>
         <button
           @click="toggleScroll"
@@ -1267,6 +1267,8 @@ const dialogCancel = () => {
 
 // l10n: arayüz dili store.locale'dan beslenir, eksik anahtar Türkçe'ye düşer.
 const t = (k: UIKey): string => trFn(store.locale, k)
+// Şablon anahtarları: {n} yer tutucusunu doldurur (örn. 'Sayfa {n} temizlensin mi?').
+const tf = (k: UIKey, n: number): string => t(k).replace('{n}', String(n))
 const locTools = computed(() => TOOL_LABELS[store.locale] ?? TOOL_LABELS.tr)
 
 // Katman listesi üstte-ilk (dizi 0 = en alt).
@@ -1288,7 +1290,8 @@ const askDeleteLayer = async (id: string) => {
   const l = store.activePage.layers.find((x) => x.id === id)
   if (!l) return
   if (store.activePage.layers.length > 1 && l.strokes.length > 0) {
-    if (!(await askConfirm(`"${l.name}" silinsin mi?`, `${l.strokes.length} çizgi kaybolur`))) return
+    if (!(await askConfirm(`"${l.name}" — ${t('confirmDelete')}`, tf('strokesLost', l.strokes.length))))
+      return
   }
   store.deleteLayer(id)
   drawSelectionOverlay()
@@ -1313,7 +1316,7 @@ const addPaletteBtn = async () => {
 const askDeletePalette = async (id: string) => {
   const p = store.palettes.find((x) => x.id === id)
   if (!p || store.palettes.length <= 1) return
-  if (!(await askConfirm(`"${p.name}" paleti silinsin mi?`))) return
+  if (!(await askConfirm(`"${p.name}" — ${t('paletteDeleteAsk')}`))) return
   store.deletePalette(id)
   updateHud(true)
 }
@@ -1348,7 +1351,7 @@ const updateHud = (force = false) => {
   lastHudAt = now
   el.textContent =
     `${drawingPerf.emaMs.toFixed(1)}/${drawingPerf.frameMs.toFixed(0)}ms` +
-    ` · ${store.drawingCount} çizgi` +
+    ` · ${store.drawingCount} ${t('lines')}` +
     ` · ${fmtPts(store.activePoints())}+${fmtPts(drawingPerf.totalPoints)}`
 }
 
@@ -2266,7 +2269,7 @@ const onSettingsFile = async (e: Event) => {
   input.value = ''
   if (!f) return
   const ok = await store.importSettingsJSON(await f.text())
-  if (!ok) showPdfError('Ayar dosyası geçersiz')
+  if (!ok) showPdfError(t('invalidSettings'))
 }
 
 const onPdfFile = async (e: Event) => {
@@ -2276,7 +2279,7 @@ const onPdfFile = async (e: Event) => {
   input.value = ''
   if (!f) return
   const hasInk = store.hasInk
-  if (hasInk && !(await askConfirm('Mevcut çizimler PDF sayfalarıyla değişecek. Devam?'))) return
+  if (hasInk && !(await askConfirm(t('pdfReplace')))) return
   const res = await store.importPdf(f)
   if ('error' in res) showPdfError(res.error)
   updateHud(true)
@@ -2301,7 +2304,7 @@ const onCalemFile = async (e: Event) => {
   const f = input.files?.[0]
   input.value = ''
   if (!f) return
-  if (store.hasInk && !(await askConfirm('Mevcut içerik .calem dosyasıyla değişecek. Devam?'))) return
+  if (store.hasInk && !(await askConfirm(t('calemReplace')))) return
   const res = await store.importCalem(f)
   if ('error' in res) showPdfError(res.error)
   updateHud(true)
@@ -2311,7 +2314,7 @@ const onCalemFile = async (e: Event) => {
 const askClosePdf = async () => {
   showFile.value = false
   const hasInk = store.hasInk
-  if (hasInk && !(await askConfirm('PDF kapatılıp tek boş sayfaya dönülsün mü?'))) return
+  if (hasInk && !(await askConfirm(t('pdfClose')))) return
   store.closePdf()
   updateHud(true)
 }
@@ -2349,7 +2352,7 @@ const onDocPointerDown = (e: PointerEvent) => {
 
 // Temizle yıkıcı bir op: diğer silmelerle aynı korumayı uygula.
 const askClearCanvas = async () => {
-  if (store.hasInk && !(await askConfirm(`Sayfa ${store.activePageIndex + 1} temizlensin mi?`))) return
+  if (store.hasInk && !(await askConfirm(tf('clearPageAsk', store.activePageIndex + 1)))) return
   clearCanvas()
 }
 
@@ -2451,8 +2454,8 @@ const addPage = () => {
 
 const askDeletePage = async () => {
   if (store.pages.length <= 1) return
-  const msg = `Sayfa ${store.activePageIndex + 1} silinsin mi?`
-  if (!(await askConfirm(msg, `${store.drawingCount} çizgi kaybolur`))) return
+  const msg = tf('delPageAsk', store.activePageIndex + 1)
+  if (!(await askConfirm(msg, tf('strokesLost', store.drawingCount)))) return
   activePointerId = null
   store.deletePage(store.activePageIndex)
   updateHud(true)
@@ -2475,9 +2478,9 @@ const movePageR = () => {
 }
 
 const restoreSession = async () => {
-  if (store.hasInk && !(await askConfirm('Mevcut çalışma önceki oturumla değişecek. Devam?'))) return
+  if (store.hasInk && !(await askConfirm(t('restoreReplace')))) return
   const ok = await store.loadPersisted()
-  if (!ok) showPdfError('Oturum yüklenemedi')
+  if (!ok) showPdfError(t('loadFailed'))
   updateHud(true)
   refreshThumbs()
 }
