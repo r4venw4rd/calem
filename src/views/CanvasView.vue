@@ -1985,7 +1985,8 @@ const onKeyDown = (e: KeyboardEvent) => {
       const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
       const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
       if (dx || dy) {
-        store.pushHistory()
+        // Aynı ok grubu tek undo: basılı tutunca onlarca kayıt açmasın.
+        store.pushHistoryKeyed('nudge')
         store.moveSelected(dx, dy)
         drawSelectionOverlay()
         updateHud(true)
@@ -2113,6 +2114,8 @@ const onKeyDown = (e: KeyboardEvent) => {
 
 const onKeyUp = (e: KeyboardEvent) => {
   if (e.key === ' ') spacePan = false
+  // Ok bırakılınca dürtme grubunu kapat — sonraki dürtme ayrı undo olsun.
+  if (e.key.startsWith('Arrow')) store.endHistoryGroup()
 }
 
 const exportPng = () => {
