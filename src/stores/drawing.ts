@@ -52,6 +52,7 @@ export interface ColorPalette {
 }
 export const PALETTE_MAX_COLORS = 12
 export const PALETTE_MAX_COUNT = 8
+export const CUSTOM_SLOT_COUNT = 8
 export const DEFAULT_PALETTES: ColorPalette[] = [
   {
     id: 'varsayilan',
@@ -410,12 +411,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       applied = true
     }
     if (Array.isArray(r.customColors)) {
-      const clean: string[] = []
-      for (const c of r.customColors) {
-        const hex = cleanHexColor(c)
-        if (hex && !clean.includes(hex) && clean.length < PALETTE_MAX_COLORS) clean.push(hex)
-      }
-      customColors.value = clean
+      customColors.value = cleanCustomList(r.customColors)
       applied = true
     }
     if ('palettes' in r && r.palettes !== undefined) {
@@ -484,12 +480,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         touchPan.value = raw.touchPan
       }
       if (Array.isArray(raw.customColors)) {
-        const clean: string[] = []
-        for (const c of raw.customColors) {
-          const hex = cleanHexColor(c)
-          if (hex && !clean.includes(hex) && clean.length < PALETTE_MAX_COLORS) clean.push(hex)
-        }
-        customColors.value = clean
+        customColors.value = cleanCustomList(raw.customColors)
       }
       if (raw.palettes !== undefined) {
         const clean = cleanPalettes(raw.palettes)
@@ -1492,7 +1483,30 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // Bağımsız custom satırı (paletlerden ayrı, header'da ikinci satır).
+  // Sabit 8 slot: dolular önden dizilir, boşlar "+" gösterir. Boş tık ekler,
+  // doluya tek tık seçer, çift tık mevcut renkle günceller.
   const customColors = ref<string[]>([])
+  const cleanCustomList = (input: unknown): string[] => {
+    if (!Array.isArray(input)) return []
+    const clean: string[] = []
+    for (const c of input) {
+      const hex = cleanHexColor(c)
+      if (hex && !clean.includes(hex) && clean.length < CUSTOM_SLOT_COUNT) clean.push(hex)
+    }
+    return clean
+  }
+  // Slotu mevcut renkle güncelle (sadece dolu slot).
+  const setCustomSlot = (i: number, hex?: string): boolean => {
+    const h = cleanHexColor(hex ?? color.value)
+    if (!h) return false
+    if (!Number.isInteger(i) || i < 0 || i >= customColors.value.length) return false
+    const next = [...customColors.value]
+    next[i] = h
+    customColors.value = next
+    color.value = h
+    void persistSettings()
+    return true
+  }
   const addCustomColor = (hex?: string): boolean => {
     const h = cleanHexColor(hex ?? color.value)
     if (!h) return false
@@ -1500,7 +1514,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       color.value = h
       return true
     }
-    if (customColors.value.length >= PALETTE_MAX_COLORS) return false
+    if (customColors.value.length >= CUSTOM_SLOT_COUNT) return false
     customColors.value.push(h)
     color.value = h
     void persistSettings()
@@ -3669,6 +3683,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     removeColorFromPalette,
     customColors,
     addCustomColor,
+    setCustomSlot,
     removeCustomColor,
     setStrokeWidth,
     setRejectTouch,
