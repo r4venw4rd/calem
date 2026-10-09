@@ -826,6 +826,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
     redoStack.value = []
     lastPushKey = ''
+    flushFileDeletes()
   }
 
   // Sürekli op'lar (yazı, boyut sürgüsü) için: aynı anahtar art arda tek kayıt olur.
@@ -836,12 +837,14 @@ export const useDrawingStore = defineStore('drawing', () => {
     undoStack.value.push(snapshotDoc())
     if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
     redoStack.value = []
+    flushFileDeletes()
   }
 
   const clearHistory = () => {
     undoStack.value = []
     redoStack.value = []
     lastPushKey = ''
+    flushFileDeletes()
   }
   // Son başarılı autosave saati (HH:MM) — header göstergesi, nadiren yazılır.
   const lastSavedAt = ref('')
@@ -1296,6 +1299,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // Sayfa(lar) çöpe giderken yetim bytes bırakma (yükleme yolu hariç — orada referans yeni doc'ta).
+  // SADECE geri alınamaz bağlamlarda (import/kapat) çağrılır; undo kapsamındakiler queueFileDeletes.
   const deleteImageFilesOf = (pages: Page[]) => {
     for (const p of pages) {
       for (const img of p.images ?? []) {
@@ -1303,6 +1307,39 @@ export const useDrawingStore = defineStore('drawing', () => {
         void storage.deleteFile(img.fileId).catch(() => {})
       }
     }
+  }
+
+  // Undo kapsamındaki resim bytes'ları hemen atılmaz: snapshot'lar hâlâ o dosyaya
+  // referans verebilir. Referans kalmayınca (history'den düşünce) süpürülür —
+  // böylece Temizle/sayfa-sil sonrası Undo resmi bozuk getirmez.
+  const pendingFileDeletes = new Set<string>()
+
+  const referencedImageFileIds = (): Set<string> => {
+    const ids = new Set<string>()
+    const add = (list: Page[]) => {
+      for (const p of list) for (const img of p.images ?? []) ids.add(img.fileId)
+    }
+    add(pages.value)
+    for (const s of undoStack.value) add(s.pages)
+    for (const s of redoStack.value) add(s.pages)
+    return ids
+  }
+
+  // Gerçek silme: canlı doküman ve hiçbir snapshot referans etmiyorsa bytes'ı at.
+  const flushFileDeletes = () => {
+    if (pendingFileDeletes.size === 0) return
+    const live = referencedImageFileIds()
+    for (const id of [...pendingFileDeletes]) {
+      if (live.has(id)) continue
+      pendingFileDeletes.delete(id)
+      imgBitmaps.delete(id)
+      void storage.deleteFile(id).catch(() => {})
+    }
+  }
+
+  const queueFileDeletes = (fileIds: string[]) => {
+    for (const id of fileIds) pendingFileDeletes.add(id)
+    flushFileDeletes()
   }
 
   // --- Katman op'ları (aktif sayfa kapsamlı) ---
@@ -2387,11 +2424,12 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // ✅ Canvası temizle — sadece AKTİF sayfa (sayfalar varken global silme yok).
   const clearCanvas = () => {
-    deleteImageFilesOf([activePage.value])
+    const goneImageIds = activePage.value.images.map((i) => i.fileId)
     pushHistory()
     activeLayer.value.strokes = []
     activePage.value.texts = []
     activePage.value.images = []
+    queueFileDeletes(goneImageIds)
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -3514,6 +3552,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     redoStack.value.push(snapshotDoc())
     if (redoStack.value.length > HISTORY_CAP) redoStack.value.shift()
     restoreDoc(prev)
+    flushFileDeletes()
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -3533,6 +3572,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     undoStack.value.push(snapshotDoc())
     if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
     restoreDoc(next)
+    flushFileDeletes()
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -3628,7 +3668,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (removed) {
       bgCanvases.delete(removed.id)
       pdfRenderScales.delete(removed.id)
-      deleteImageFilesOf([removed])
+      queueFileDeletes(removed.images.map((i) => i.fileId))
     }
     selectedIds.value = []
     activeTextId.value = null
