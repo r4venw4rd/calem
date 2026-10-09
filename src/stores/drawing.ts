@@ -1488,8 +1488,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   // Araç değişimi seçimi ve metin editörünü temizler (gizli durumla mürekkep karışmasın).
   const setTool = (tool: Tool) => {
-    if (currentTool.value === tool) return
-    currentTool.value = tool
+    if (currentTool.value !== tool) currentTool.value = tool
+    // Aynı araç tekrar seçilirse de geçici durum temizlenir: aktif metin/resim
+    // editörünü veya seçimi kapatmanın bir yolu olur (eskiden erken dönüyordu).
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
