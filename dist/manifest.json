@@ -6,8 +6,15 @@
   "display": "standalone",
   "theme_color": "#1e1e2e",
   "background_color": "#1e1e2e",
-  "orientation": "portrait-primary",
   "display_override": "window-controls-overlay",
+  "file_handlers": [
+    {
+      "action": "/",
+      "accept": {
+        "application/json": [".calem"]
+      }
+    }
+  ],
   "icons": [
     {
       "src": "icon-192.png",
