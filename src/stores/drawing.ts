@@ -127,11 +127,11 @@ export interface Page {
 }
 
 // Uygulama ayarları (çizimden ayrı anahtar; çizim silinse de durur).
-// v1: kâğıt rengi + biçim; v2: + kâğıt deseni; v3: + silgi modu; v4: + toolbar; v5: + locale + el silginin sağında.
+// v1: kâğıt rengi + biçim; v2: + kâğıt deseni; v3: + silgi modu; v4: + toolbar; v5: + locale + el silginin sağında; v6: + silgi vurgunun solunda.
 export type UiTheme = 'koyu' | 'acik'
 export type EraserMode = 'standard' | 'stroke'
 export interface AppSettings {
-  v: 1 | 2 | 3 | 4 | 5
+  v: 1 | 2 | 3 | 4 | 5 | 6
   paper: string
   background?: PaperBackground
   eraserMode?: EraserMode
@@ -338,10 +338,18 @@ export const useDrawingStore = defineStore('drawing', () => {
     return next
   }
 
+  // v6: silgi vurgunun soluna. Çiftin yerini değiştirir, geri kalan sıra korunur.
+  const migrateEraserFirst = (order: Tool[]): Tool[] =>
+    order.map((t) => {
+      if (t === 'eraser') return 'highlighter'
+      if (t === 'highlighter') return 'eraser'
+      return t
+    })
+
   const persistSettings = async (): Promise<void> => {
     try {
       const doc: AppSettings = {
-        v: 5,
+        v: 6,
         paper: paper.value,
         background: { ...paperBackground.value },
         eraserMode: eraserMode.value,
@@ -366,7 +374,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Ayar yedeği: indirilen JSON'u başka cihaza/tarayıcıya taşımak için.
   const exportSettingsJSON = (): string => {
     const doc: AppSettings = {
-      v: 5,
+      v: 6,
       paper: paper.value,
       background: { ...paperBackground.value },
       eraserMode: eraserMode.value,
@@ -446,7 +454,10 @@ export const useDrawingStore = defineStore('drawing', () => {
       const tb = cleanToolbar(r.toolbar)
       // v5 öncesi yedekte el en sondadır → silginin sağına göçür.
       const needsHandFix = typeof r.v !== 'number' || (r.v as number) < 5
-      toolbarOrder.value = needsHandFix ? migrateToolbarHand(tb.order) : tb.order
+      // v6 öncesi dizilimde vurgu silginin solundadır → çifti değiştir.
+      const needsEraserFix = typeof r.v !== 'number' || (r.v as number) < 6
+      const handFixed = needsHandFix ? migrateToolbarHand(tb.order) : tb.order
+      toolbarOrder.value = needsEraserFix ? migrateEraserFirst(handFixed) : handFixed
       hiddenTools.value = tb.hidden
       applied = true
     }
@@ -486,7 +497,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const loadSettings = async (): Promise<void> => {    try {
       const raw = await storage.getKey<AppSettings>(SETTINGS_KEY)
       // Kayıt yoksa bile temayı/dili uygula: data-theme + lang hep yazılır.
-      if (!raw || (raw.v !== 1 && raw.v !== 2 && raw.v !== 3 && raw.v !== 4 && raw.v !== 5)) {
+      if (!raw || (raw.v !== 1 && raw.v !== 2 && raw.v !== 3 && raw.v !== 4 && raw.v !== 5 && raw.v !== 6)) {
         applyUiTheme()
         applyLocale()
         return
@@ -494,10 +505,10 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (typeof raw.paper === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw.paper)) {
         paper.value = raw.paper
       }
-      if ((raw.v === 2 || raw.v === 3 || raw.v === 4 || raw.v === 5) && raw.background !== undefined) {
+      if ((raw.v === 2 || raw.v === 3 || raw.v === 4 || raw.v === 5 || raw.v === 6) && raw.background !== undefined) {
         paperBackground.value = cleanPaperBackground(raw.background)
       }
-      if ((raw.v === 3 || raw.v === 4 || raw.v === 5) && (raw.eraserMode === 'standard' || raw.eraserMode === 'stroke')) {
+      if ((raw.v === 3 || raw.v === 4 || raw.v === 5 || raw.v === 6) && (raw.eraserMode === 'standard' || raw.eraserMode === 'stroke')) {
         eraserMode.value = raw.eraserMode
       }
       if (typeof raw.smoothing === 'number' && Number.isFinite(raw.smoothing)) {
@@ -529,7 +540,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (raw.toolbar !== undefined) {
         const tb = cleanToolbar(raw.toolbar)
         // v5 öncesi kayıtta el en sondadır → silginin sağına göçür.
-        toolbarOrder.value = raw.v < 5 ? migrateToolbarHand(tb.order) : tb.order
+        const handFixed = raw.v < 5 ? migrateToolbarHand(tb.order) : tb.order
+        // v6 öncesi dizilimde vurgu silginin solundadır → çifti değiştir.
+        toolbarOrder.value = raw.v < 6 ? migrateEraserFirst(handFixed) : handFixed
         hiddenTools.value = tb.hidden
       }
       if (raw.format === 'custom' || (typeof raw.format === 'string' && raw.format in PAGE_FORMATS)) {
@@ -2931,7 +2944,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         }
       }
       const settings: AppSettings = {
-        v: 5,
+        v: 6,
         paper: paper.value,
         background: { ...paperBackground.value },
         eraserMode: eraserMode.value,
