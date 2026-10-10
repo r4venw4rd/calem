@@ -3469,6 +3469,8 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // --- Autosave (IndexedDB, debounce'lu) ---
   let saveTimer: ReturnType<typeof setTimeout> | undefined
+  // IDB'ye henüz flush'lanmamış iş var mı (kapatma onayının kapısı).
+  const pendingSave = ref(false)
 
   const fmtTime = (t: number) =>
     new Date(t).toLocaleTimeString(locale.value === 'tr' ? 'tr-TR' : 'en-US', {
@@ -3536,11 +3538,14 @@ export const useDrawingStore = defineStore('drawing', () => {
       lastSavedAt.value = fmtTime(now)
     } catch {
       // Özel mod / IDB kapalı: sessizce vazgeç (çizim bellekte sürer).
+    } finally {
+      pendingSave.value = false
     }
   }
 
   const scheduleSave = () => {
     if (saveTimer) clearTimeout(saveTimer)
+    pendingSave.value = true
     saveTimer = setTimeout(() => {
       saveTimer = undefined
       void persistNow()
@@ -4149,6 +4154,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     getImageData,
     setPressureSensitivity,
     persistNow,
+    pendingSave,
     loadPersisted,
     checkSavedSession,
     dismissSavedSession,

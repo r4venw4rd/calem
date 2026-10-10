@@ -3071,6 +3071,16 @@ const onFullscreenChange = () => {
   }
 }
 
+// Sekme/app kapanırken IDB'ye flush'lanmamış iş varsa tarayıcı "emin misin"
+// sorar (flush'lanmış iş IDB'de güvende, banner'dan geri gelir — boşuna sormayız).
+const onBeforeUnload = (e: BeforeUnloadEvent) => {
+  if (store.hasInk && store.pendingSave) e.preventDefault()
+}
+// Kapanışta son yazımı IDB'ye itmeyi dene (async garantisi yok, best-effort).
+const onPageHide = () => {
+  if (store.pendingSave) void store.persistNow()
+}
+
 // Trackpad/mause tekeri: yalın = pan, ctrl/cmd = imleç sabitli zoom.
 // passive:false ŞART (sayfa-zoom'u engellemek için preventDefault).
 // Kaydırmalı modda yalın tekerlek native kayar (dokunulmaz), ctrl/cmd zoom'lar.
@@ -3408,6 +3418,10 @@ onMounted(() => {
   window.visualViewport?.addEventListener('resize', syncAppHeight)
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
+  // Kapanışta yazılmamış iş varsa tarayıcı onayı (metni tarayıcı yazar,
+  // özelleştirilemez); pagehide'da son flush denenir (best-effort).
+  window.addEventListener('beforeunload', onBeforeUnload)
+  window.addEventListener('pagehide', onPageHide)
   document.addEventListener('fullscreenchange', onFullscreenChange)
   document.addEventListener('pointerdown', onDocPointerDown)
   stopSelWatch = watch(
@@ -3532,6 +3546,8 @@ onUnmounted(() => {
   window.visualViewport?.removeEventListener('resize', syncAppHeight)
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
+  window.removeEventListener('beforeunload', onBeforeUnload)
+  window.removeEventListener('pagehide', onPageHide)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   document.removeEventListener('pointerdown', onDocPointerDown)
   overlayCanvas.value?.removeEventListener('wheel', onWheel)
