@@ -1,17 +1,17 @@
 ---
-name: Özellik
-about: Yeni bir şey öner
+name: Feature
+about: Suggest something new
 labels: enhancement
 ---
 
-## Sorun
+## Problem
 
-<!-- bu özellik hangi derdi çözüyor? -->
+<!-- which pain does this feature solve? -->
 
-## Öneri
+## Proposal
 
-<!-- ne olsun? -->
+<!-- what should it do? -->
 
-## Kapsam Dışı
+## Out of Scope
 
-<!-- bilerek yapılmayacaklar varsa -->
+<!-- anything deliberately left out -->

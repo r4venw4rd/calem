@@ -1,34 +1,34 @@
-# Katkı Rehberi
+# Contributing Guide
 
-Calem'e hoş geldin. Offline-first, sıfır-gecikme çizim uygulaması — hız ve sadelik her şeyden önce gelir.
+Welcome to Calem. An offline-first, zero-latency drawing app — speed and simplicity come before everything else.
 
-## Hızlı Başlangıç
+## Quick Start
 
 ```sh
 npm install
 npm run dev        # http://localhost:5173
-npm test           # vitest, hepsi yeşil olmalı
-npm run type-check # PR öncesi zorunlu
+npm test           # vitest, everything must be green
+npm run type-check # required before a PR
 ```
 
-## Kurallar
+## Rules
 
-1. **Davranış değişikliği yoksa test kırma:** `npm test` (94 test) ve `npm run type-check` her committe yeşil.
-2. **Yeni mantık = yeni test:** saf fonksiyonlar (`src/lib/`) `tests/`'e unit testle gelir. UI davranışı `TEST.md`'deki manuel şemaya satır olarak eklenir.
-3. **Config tek kaynaktır:** limit/sabit/UI aralığı değişiyorsa `src/config/`'e dokun, `tests/config.test.ts` kilitler.
-4. **Küçük PR:** bir PR bir iş. God-file'lara (`stores/drawing.ts`, `views/CanvasView.vue`) ekleme yapmadan önce `ARCHITECTURE.md`'ye bak — nereye ait olduğunu bul.
-5. **Performans:** çizim yoluna (`pointermove` → boya) senkron boya ekleme; rAF desenini koru. Şüphede HUD'daki `emaMs/frameMs`'e bak.
+1. **Never break tests for free:** `npm test` (117 tests) and `npm run type-check` are green on every commit.
+2. **New logic = new test:** pure functions (`src/lib/`) come with a unit test in `tests/`. UI behaviour is added as a row in the manual checklist in `TEST.md`.
+3. **Config is the single source of truth:** if a limit, constant or UI range changes, touch `src/config/`; `tests/config.test.ts` locks it down.
+4. **Small PRs:** one PR, one job. Before adding to a god file (`stores/drawing.ts`, `views/CanvasView.vue`) read `ARCHITECTURE.md` — find out where your change belongs.
+5. **Performance:** never add synchronous painting to the draw path (`pointermove` → paint); keep the rAF pattern. When in doubt, check `emaMs/frameMs` in the HUD.
 
 ## Branch + Commit
 
-- Branch: `feature/kisa-isim`, `fix/kisa-isim`
-- Commit (Türkçe, kısa): `fix(silgi): ...`, `feat(pan): ...`, `perf(cizim): ...`, `test: ...`, `docs: ...`
+- Branch: `feature/short-name`, `fix/short-name`
+- Commit: `type(scope): short description` — e.g. `fix(eraser): ...`, `feat(pan): ...`, `perf(draw): ...`, `test: ...`, `docs: ...`
 
-## PR Kontrol Listesi
+## PR Checklist
 
-- [ ] `npm test` yeşil
-- [ ] `npm run type-check` temiz
-- [ ] Yeni mantık testli / manuel şema güncelli
-- [ ] Milisaniye kritik yolda senkron boya yok
+- [ ] `npm test` green
+- [ ] `npm run type-check` clean
+- [ ] New logic tested / manual checklist updated
+- [ ] No synchronous painting on a millisecond-critical path
 
-Sorun mu var? Issue aç — cihaz + tarayıcı + adım adım tekrar yazman yeterli.
+Something wrong? Open an issue — device + browser + a step-by-step reproduction is enough.
