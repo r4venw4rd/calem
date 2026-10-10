@@ -35,22 +35,23 @@
           role="menu"
           :aria-label="t('file')"
         >
-          <label
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer"
-            :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
+          <button
+            @click="openCalemDoc"
+            :disabled="store.pdfBusy"
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
             :title="t('openCalemTitle')"
           >
             {{ t('openCalem') }}
-            <input
-              type="file"
-              :accept="CALEM_ACCEPT"
-              class="hidden"
-              :disabled="store.pdfBusy"
-              @change="onCalemFile"
-            />
-          </label>
+          </button>
+          <input
+            ref="calemInput"
+            type="file"
+            :accept="CALEM_ACCEPT"
+            class="hidden"
+            @change="onCalemFile"
+          />
           <button
-            @click="exportCalemDoc"
+            @click="quickSaveDoc"
             :disabled="store.pdfBusy"
             class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
             :title="t('saveCalemTitle')"
@@ -1081,6 +1082,7 @@
             <div>{{ t('sc6') }}</div>
             <div>{{ t('sc7') }}</div>
             <div>{{ t('sc8') }}</div>
+            <div>{{ t('sc9') }}</div>
           </div>
         </div>
           </div>
@@ -2535,6 +2537,13 @@ const redo = () => {
 
 // Input'ta yazarken tetiklenmez; çizim sırasında el klavyedeyse çalışır.
 const onKeyDown = (e: KeyboardEvent) => {
+  // Ctrl/Cmd+S: hızlı kayıt (.calem). Kayıtlı dosya varsa üstüne yazar,
+  // yoksa konum sorar. Metin alanı dahil her yerde çalışır.
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 's') {
+    e.preventDefault()
+    if (!e.repeat) void quickSaveDoc()
+    return
+  }
   const t = e.target as HTMLElement | null
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
   const mod = e.ctrlKey || e.metaKey
@@ -2790,10 +2799,51 @@ const exportPdfDoc = async () => {
   if ('error' in res) showPdfError(res.error)
 }
 
-const exportCalemDoc = async () => {
+const quickSaveDoc = async () => {
   showFile.value = false
-  const res = await store.exportCalem()
+  const res = await store.quickSaveCalem()
   if ('error' in res) showPdfError(res.error)
+}
+
+const calemInput = ref<HTMLInputElement | null>(null)
+const openCalemDoc = async () => {
+  showFile.value = false
+  if (store.hasInk && !(await askConfirm(t('calemReplace')))) return
+  const w = window as unknown as {
+    showOpenFilePicker?: (opts: {
+      types?: { description?: string; accept: Record<string, string[]> }[]
+      multiple?: boolean
+    }) => Promise<
+      {
+        getFile: () => Promise<File>
+        createWritable: () => Promise<{ write: (d: Blob) => Promise<void>; close: () => Promise<void> }>
+      }[]
+    >
+  }
+  if (typeof w.showOpenFilePicker === 'function') {
+    try {
+      const [handle] = await w.showOpenFilePicker({
+        types: [{ description: 'Calem belgesi', accept: { 'application/json': ['.calem'] } }],
+        multiple: false,
+      })
+      if (!handle) return
+      const res = await store.importCalem(await handle.getFile())
+      if ('error' in res) {
+        showPdfError(res.error)
+        return
+      }
+      await store.setCalemHandle(handle)
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      showPdfError(`açılamadı (${err instanceof Error ? err.message : 'bilinmiyor'})`)
+      return
+    }
+  } else {
+    calemInput.value?.click()
+    return
+  }
+  updateHud(true)
+  refreshThumbs()
 }
 
 const onCalemFile = async (e: Event) => {
@@ -2805,6 +2855,7 @@ const onCalemFile = async (e: Event) => {
   if (store.hasInk && !(await askConfirm(t('calemReplace')))) return
   const res = await store.importCalem(f)
   if ('error' in res) showPdfError(res.error)
+  else await store.setCalemHandle(null)
   updateHud(true)
   refreshThumbs()
 }

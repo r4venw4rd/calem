@@ -2990,13 +2990,107 @@ export const useDrawingStore = defineStore('drawing', () => {
         suggestedName: fileName,
         types: [{ description: 'Calem belgesi', accept: { 'application/json': ['.calem'] } }],
       })
+      await setCalemHandle(handle as unknown as CalemFileHandle)
       const writable = await handle.createWritable()
       await writable.write(blob)
       await writable.close()
+      lastSavedAt.value = fmtTime(Date.now())
       return 'saved'
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return 'cancelled'
       throw e
+    }
+  }
+
+  // --- .calem hızlı kayıt (Ctrl+S): açık dosyanın handle'ı IDB'de saklanır,
+  // varsa picker sormadan direkt yazılır. Handle'lar structured-clone ile IDB'ye girer.
+  interface CalemWritable {
+    write: (d: Blob) => Promise<void>
+    close: () => Promise<void>
+  }
+  interface CalemFileHandle {
+    createWritable: () => Promise<CalemWritable>
+    queryPermission?: (desc?: { mode?: string }) => Promise<PermissionState>
+    requestPermission?: (desc?: { mode?: string }) => Promise<PermissionState>
+  }
+  const CALEM_HANDLE_KEY = 'calem-file-handle'
+  const calemHandle = ref<CalemFileHandle | null>(null)
+
+  const setCalemHandle = async (h: CalemFileHandle | null) => {
+    calemHandle.value = h
+    try {
+      await storage.setKey(CALEM_HANDLE_KEY, h)
+    } catch {
+      // Gizli mod vb. — handle yalnızca oturumluk yaşar, sorun değil.
+    }
+  }
+
+  const loadCalemHandle = async () => {
+    try {
+      const h = await storage.getKey<CalemFileHandle>(CALEM_HANDLE_KEY)
+      if (h && typeof h.createWritable === 'function') calemHandle.value = h
+    } catch {
+      // Yoksay — ilk kayıtta picker açılır.
+    }
+  }
+
+  const ensureWritePermission = async (h: CalemFileHandle): Promise<boolean> => {
+    try {
+      if (typeof h.queryPermission === 'function') {
+        if ((await h.queryPermission({ mode: 'readwrite' })) === 'granted') return true
+      }
+      if (typeof h.requestPermission === 'function') {
+        return (await h.requestPermission({ mode: 'readwrite' })) === 'granted'
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const writeCalemToHandle = async (h: CalemFileHandle, blob: Blob): Promise<boolean> => {
+    try {
+      if (!(await ensureWritePermission(h))) return false
+      const w = await h.createWritable()
+      await w.write(blob)
+      await w.close()
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // Ctrl+S + "Calem'i kaydet": kayıtlı dosya varsa üstüne yazar,
+  // yoksa konum sorar (Save As), API yoksa klasik indirme.
+  const quickSaveCalem = async (): Promise<{ pages: number } | { error: string } | { cancelled: true }> => {
+    if (pdfBusy.value || imgBusy.value) return { error: 'işlem sürüyor' }
+    pdfBusy.value = true
+    try {
+      const built = await buildCalemJSON()
+      if ('error' in built) return built
+      const blob = new Blob([built.json], { type: 'application/json' })
+      if (calemHandle.value) {
+        if (await writeCalemToHandle(calemHandle.value, blob)) {
+          lastSavedAt.value = fmtTime(Date.now())
+          return { pages: pages.value.length }
+        }
+        // Handle ölmüş (taşınmış/silinmiş dosya, reddedilen izin) — unut, picker'a düş.
+        await setCalemHandle(null)
+      }
+      const how = await saveCalemBlob(blob, calemFileName())
+      if (how === 'saved') return { pages: pages.value.length }
+      if (how === 'cancelled') return { cancelled: true }
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = calemFileName()
+      a.click()
+      window.setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+      return { pages: pages.value.length }
+    } catch (e) {
+      console.error('[calem] hızlı kayıt hatası:', e)
+      return { error: `yazılamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+    } finally {
+      pdfBusy.value = false
     }
   }
 
@@ -3519,6 +3613,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     } catch {
       return false
     }
+    // Kayıtlı .calem dosya handle'ı (Ctrl+S direkt yazsın diye).
+    await loadCalemHandle()
     if (!doc || typeof doc.v !== 'number') return false
     // widths her sürümde ortak
     const w = (doc as { widths?: unknown }).widths as Record<string, unknown> | undefined
@@ -3909,6 +4005,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     exportPdf,
     buildCalemJSON,
     exportCalem,
+    quickSaveCalem,
+    setCalemHandle,
     importCalem,
     resizeCanvas,
   }
