@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
   coalescedOf,
+  expandRect,
   normRect,
   pointInPolygon,
   pointInRect,
+  rectAround,
   rectsOverlap,
   selectByLasso,
   selectByRect,
   selectionBBox,
   strokeBBox,
+  subRunsInRect,
+  unionRect,
 } from '../src/lib/select'
 
 const S = (id: string, pts: { x: number; y: number }[], width = 3) => ({
@@ -38,6 +42,20 @@ describe('rect yardimcilari', () => {
     expect(rectsOverlap(a, normRect(5, 5, 15, 15))).toBe(true)
     expect(rectsOverlap(a, normRect(11, 11, 20, 20))).toBe(false)
   })
+  it('unionRect iki kutuyu kapsar', () => {
+    expect(unionRect(normRect(0, 0, 10, 10), normRect(5, 5, 20, 20))).toEqual({
+      x0: 0,
+      y0: 0,
+      x1: 20,
+      y1: 20,
+    })
+  })
+  it('expandRect her yonde pay ekler', () => {
+    expect(expandRect(normRect(10, 10, 20, 20), 3)).toEqual({ x0: 7, y0: 7, x1: 23, y1: 23 })
+  })
+  it('rectAround nokta etrafinda kare', () => {
+    expect(rectAround(50, 40, 6)).toEqual({ x0: 44, y0: 34, x1: 56, y1: 46 })
+  })
   it('pointInRect sinir dahil', () => {
     const r = normRect(0, 0, 10, 10)
     expect(pointInRect(10, 10, r)).toBe(true)
@@ -52,6 +70,35 @@ describe('rect yardimcilari', () => {
     ]
     expect(pointInPolygon(5, 5, sq)).toBe(true)
     expect(pointInPolygon(15, 5, sq)).toBe(false)
+  })
+})
+
+describe('subRunsInRect', () => {
+  const line = (n: number) => Array.from({ length: n }, (_, i) => ({ x: i, y: 0, pressure: 0.5 }))
+
+  it('kutudan uzak kosu yok', () => {
+    expect(subRunsInRect(line(20), normRect(100, -1, 101, 1), 0)).toEqual([])
+  })
+
+  it('kesisen segmenti + komsu payiyla dondurur', () => {
+    const runs = subRunsInRect(line(20), normRect(9.5, -1, 10.5, 1), 0)
+    expect(runs.length).toBe(1)
+    // kesişen segmentler 9 ve 10 → nokta 9,10,11 → +-2 pad → 7..13 (7 nokta)
+    expect(runs[0]!.length).toBe(7)
+    expect(runs[0]![0]!.x).toBe(7)
+    expect(runs[0]![6]!.x).toBe(13)
+  })
+
+  it('tek nokta icerde/disarda', () => {
+    const p = [{ x: 5, y: 5, pressure: 1 }]
+    expect(subRunsInRect(p, normRect(0, 0, 10, 10), 0)).toEqual([p])
+    expect(subRunsInRect(p, normRect(50, 50, 60, 60), 0)).toEqual([])
+  })
+
+  it('inflate payi esigi genisletir', () => {
+    // line y=0, kutu y=3 → inflate yoksa kesismez, 4 ile kesisir
+    expect(subRunsInRect(line(20), normRect(9.5, 3, 10.5, 4), 0)).toEqual([])
+    expect(subRunsInRect(line(20), normRect(9.5, 3, 10.5, 4), 4).length).toBe(1)
   })
 })
 

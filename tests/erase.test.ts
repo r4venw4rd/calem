@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { dropTinyRuns, runLength, segmentCircleTs, splitRunsOutside } from '../src/lib/erase'
+import {
+  dropTinyRuns,
+  polylineHitsCircle,
+  runLength,
+  segmentCircleTs,
+  splitRunsOutside,
+} from '../src/lib/erase'
 
 const P = (x: number, y: number) => ({ x, y })
 
@@ -46,6 +52,29 @@ describe('splitRunsOutside', () => {
     expect(runs[0].at(-1)!.x).toBeCloseTo(5 - Math.sqrt(7), 9)
     expect(runs[1][0].x).toBeCloseTo(5 + Math.sqrt(7), 9)
     expect(runs[1].at(-1)!.x).toBe(10)
+  })
+})
+
+describe('polylineHitsCircle', () => {
+  it('ic nokta / kesen segment / uzak', () => {
+    const pts = [P(0, 0), P(10, 0)]
+    expect(polylineHitsCircle(pts, 5, 0, 3)).toBe(true) // segment kesiyor
+    expect(polylineHitsCircle(pts, 5, 10, 1)).toBe(false) // uzak
+    expect(polylineHitsCircle([P(5, 0)], 5, 0, 1)).toBe(true) // tek nokta içeride
+    expect(polylineHitsCircle([P(5, 0)], 50, 0, 1)).toBe(false)
+  })
+  it('splitRunsOutside ile aynı kararı verir (no-op tespiti)', () => {
+    const cases: [{ x: number; y: number }[], number, number, number][] = [
+      [[P(0, 0), P(1, 0), P(2, 0)], 50, 50, 3],
+      [[P(0, 0), P(10, 0)], 5, 0, 2],
+      [[P(4, 0), P(5, 0), P(6, 0)], 5, 0, 3],
+      [[P(0, 0), P(10, 0)], 5, 3, 4],
+    ]
+    for (const [pts, cx, cy, r] of cases) {
+      const runs = splitRunsOutside(pts, cx, cy, r)
+      const changed = !(runs.length === 1 && runs[0].length === pts.length)
+      expect(polylineHitsCircle(pts, cx, cy, r)).toBe(changed)
+    }
   })
 })
 

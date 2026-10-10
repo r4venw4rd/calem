@@ -1,7 +1,7 @@
 // Saf seçim geometrisi (Faz 2). Sayfa-uzayında (pt) çalışır, render/Pinia bağımsız.
 // Kural: seçim bbox üzerinden — hızlı ve öngörülebilir. Nokta-içi testi lassoda.
 
-import type { Stroke } from '../model/document'
+import type { Point, Stroke } from '../model/document'
 
 export interface NormRect {
   x0: number
@@ -51,6 +51,30 @@ export const normRect = (
 export const rectsOverlap = (a: NormRect, b: NormRect): boolean =>
   a.x0 <= b.x1 && a.x1 >= b.x0 && a.y0 <= b.y1 && a.y1 >= b.y0
 
+// İki kutuyu kapsayacak en küçük kutu (kirli-bölge biriktirme).
+export const unionRect = (a: NormRect, b: NormRect): NormRect => ({
+  x0: Math.min(a.x0, b.x0),
+  y0: Math.min(a.y0, b.y0),
+  x1: Math.max(a.x1, b.x1),
+  y1: Math.max(a.y1, b.y1),
+})
+
+// Kutuya her yönde pay ekle (AA / kalınlık taşması için).
+export const expandRect = (r: NormRect, pad: number): NormRect => ({
+  x0: r.x0 - pad,
+  y0: r.y0 - pad,
+  x1: r.x1 + pad,
+  y1: r.y1 + pad,
+})
+
+// Nokta etrafında kare kutu (silgi dairesi → kirli kutu).
+export const rectAround = (x: number, y: number, rad: number): NormRect => ({
+  x0: x - rad,
+  y0: y - rad,
+  x1: x + rad,
+  y1: y + rad,
+})
+
 export const pointInRect = (x: number, y: number, r: NormRect): boolean =>
   x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1
 
@@ -71,6 +95,57 @@ export const pointInPolygon = (
     if (intersect) inside = !inside
   }
   return inside
+}
+
+// Bir nokta koşusunu, verilen kutuyla kesişen KISIMLARIYLA sınırlar (kısmi repaint).
+// Dev bir stroke her frame baştan tessellate edilmesin: yalnız kutunun yakınındaki
+// noktalar çizilir. neighborPad = Catmull-Rom kontrol-komşusu payı (kesişen segmentin
+// eğrisi birebir aynı çıksın diye +-2 nokta).
+// NOT: Dönen koşular ORIJINAL dizinin dilimleri (element referansları korunur).
+export const subRunsInRect = (
+  pts: readonly Point[],
+  rect: NormRect,
+  inflate: number,
+  neighborPad = 2,
+): Point[][] => {
+  const n = pts.length
+  if (n === 0) return []
+  const r = expandRect(rect, inflate)
+  if (n === 1) {
+    const p = pts[0]!
+    return p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1 ? [[p]] : []
+  }
+  const keep = new Array<boolean>(n).fill(false)
+  for (let i = 0; i < n - 1; i++) {
+    const a = pts[i]!
+    const b = pts[i + 1]!
+    const sx0 = Math.min(a.x, b.x)
+    const sx1 = Math.max(a.x, b.x)
+    const sy0 = Math.min(a.y, b.y)
+    const sy1 = Math.max(a.y, b.y)
+    if (sx1 < r.x0 || sx0 > r.x1 || sy1 < r.y0 || sy0 > r.y1) continue
+    keep[i] = true
+    keep[i + 1] = true
+  }
+  // Komşu payıyla genişlet (kesişen segmentin kontrol noktaları dahil olsun).
+  const dil = new Array<boolean>(n).fill(false)
+  for (let i = 0; i < n; i++) {
+    if (!keep[i]) continue
+    const lo = Math.max(0, i - neighborPad)
+    const hi = Math.min(n - 1, i + neighborPad)
+    for (let j = lo; j <= hi; j++) dil[j] = true
+  }
+  const runs: Point[][] = []
+  let start = -1
+  for (let i = 0; i < n; i++) {
+    if (dil[i] && start === -1) start = i
+    else if (!dil[i] && start !== -1) {
+      runs.push(pts.slice(start, i))
+      start = -1
+    }
+  }
+  if (start !== -1) runs.push(pts.slice(start, n))
+  return runs
 }
 
 // Coalesced olaylar: donanım biriktirir, sentetik/CDP boş dönebilir.

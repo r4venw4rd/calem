@@ -44,6 +44,28 @@ const cutAt = (a: Point, b: Point, t: number): Point => ({
 
 const copyPt = (p: Point): Point => ({ x: p.x, y: p.y, pressure: p.pressure })
 
+// Polyline daireye DEĞİYOR MU (herhangi nokta içeride veya herhangi segment daireyi kesiyor)?
+// splitRunsOutside ile AYNI değişim koşulu, ama HİÇ AYIRIM YAPMAZ (no-op kopya/GC yok).
+// Yoğun sayfa-kaplayan stroke'larda silgi yolunun nokta başına tam kopyasını önler.
+export const polylineHitsCircle = (
+  pts: Point[],
+  cx: number,
+  cy: number,
+  r: number,
+): boolean => {
+  const n = pts.length
+  if (n === 0) return false
+  if (n === 1) return inside(pts[0]!, cx, cy, r)
+  if (inside(pts[0]!, cx, cy, r)) return true
+  for (let i = 1; i < n; i++) {
+    const a = pts[i - 1]!
+    const b = pts[i]!
+    if (inside(b, cx, cy, r)) return true
+    if (segmentCircleTs(a.x, a.y, b.x, b.y, cx, cy, r).length > 0) return true
+  }
+  return false
+}
+
 // Koşu boyu (polyline uzunluğu, pt). Silgi artığı eleme ölçüsü.
 export const runLength = (run: Point[]): number => {
   let n = 0
