@@ -1666,7 +1666,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
-import { drawingPerf, useDrawingStore } from '@/stores/drawing'
+import { drawingPerf } from '@/model/document'
+import { useDrawingStore } from '@/stores/drawing'
 import { PAGE_FORMATS, PAPER_THEMES } from '@/config/paper'
 import { CUSTOM_SLOT_COUNT } from '@/config/palettes'
 import { TOOL_META } from '@/config/tools'

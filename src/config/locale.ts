@@ -1,4 +1,4 @@
-import type { Tool } from '../stores/drawing'
+import type { Tool } from '../model/document'
 
 // Desteklenen arayüz dilleri. Varsayılan İngilizce.
 // Yeni dil eklemek: 1) Locale union'a ekle, 2) LOCALES'e ekle, 3) TOOL_LABELS + UI_STRINGS'e ekle.

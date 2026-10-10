@@ -1,4 +1,4 @@
-import type { ColorPalette } from '../stores/drawing'
+import type { ColorPalette } from '../model/document'
 
 // Hazır renk setleri + limitler. Kullanıcı setleri IDB ayarlarda yaşar.
 

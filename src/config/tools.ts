@@ -1,4 +1,4 @@
-import type { Tool } from '../stores/drawing'
+import type { Tool } from '../model/document'
 
 // Araç kataloğu: sıra + geçerlilik beyaz listesi (toolbar config buradan beslenir).
 // Varsayılan dizilim: kalem, silgi, vurgu, el, seç, şekiller, metin, resim.

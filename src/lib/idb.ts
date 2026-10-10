@@ -1,4 +1,4 @@
-import type { Page, Stroke, Tool } from '../stores/drawing'
+import type { Page, Stroke, Tool } from '../model/document'
 
 export interface PersistedDocV1 {
   v: 1

@@ -1,7 +1,7 @@
 // Saf seçim geometrisi (Faz 2). Sayfa-uzayında (pt) çalışır, render/Pinia bağımsız.
 // Kural: seçim bbox üzerinden — hızlı ve öngörülebilir. Nokta-içi testi lassoda.
 
-import type { Stroke } from '../stores/drawing'
+import type { Stroke } from '../model/document'
 
 export interface NormRect {
   x0: number

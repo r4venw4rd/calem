@@ -1,7 +1,7 @@
 // Saf silgi-split geometrisi: polyline'ı daire-dışı koşulara böler.
 // Render/store bağımsız — sayfa-uzayında (pt) çalışır, node'da test edilir.
 
-import type { Point } from '../stores/drawing'
+import type { Point } from '../model/document'
 
 // Segment-daire kesişim parametreleri (0..1 arası, sıralı). Teğet/uç-değme yok sayılır.
 export const segmentCircleTs = (
