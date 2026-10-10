@@ -1163,8 +1163,10 @@
             :ref="(el) => setBlockRef(el, p.id)"
             class="mx-auto rounded-sm overflow-hidden cursor-pointer scroll-mt-2 min-[640px]:scroll-mt-[72px]"
             :style="{ width: `${store.zoomFactor * 100}%`, aspectRatio: `${p.size.w} / ${p.size.h}`, visibility: i === store.activePageIndex ? 'hidden' : 'visible' }"
-            @pointerdown="onBlockDown"
+            @pointerdown.prevent="onBlockDown"
             @pointerup="onBlockUp($event, i)"
+            @touchstart.prevent
+            @touchmove.prevent
           ></div>
           </div>
         </div>
@@ -2519,6 +2521,7 @@ const startDraw = (e: PointerEvent) => {
 }
 
 const draw = (e: PointerEvent) => {
+  if (e.cancelable) e.preventDefault()
   const tracked = pointers.get(e.pointerId)
   if (tracked && overlayCanvas.value) {
     const r = overlayCanvas.value.getBoundingClientRect()
