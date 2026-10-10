@@ -1726,6 +1726,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     clearOverlay()
   }
 
+  const clearCachedRect = () => {
+    cachedRect = null
+  }
+
   const getPos = (e: PointerEvent) => {
     const canvas = overlayRef.value ?? canvasRef.value
     if (!canvas) return { x: 0, y: 0 }
@@ -3868,6 +3872,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     setCanvasRef,
     setOverlayRef,
     setupCanvas,
+    clearCachedRect,
     activePoints,
     startDrawing,
     draw,
