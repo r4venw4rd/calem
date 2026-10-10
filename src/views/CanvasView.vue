@@ -2160,6 +2160,7 @@ const cancelPan = () => {
 
 const startDraw = (e: PointerEvent) => {
   if (!overlayCanvas.value) return
+  store.clearCachedRect()
   // Avuç reddi pinch'ten ÖNCE: parmak (touchPan kapalıyken) hiç işleme girmez; yoksa
   // dinlenen avuç ikinci pointer olup aktif kalem çizgisini iptal ediyordu.
   if (e.pointerType === 'touch' && store.rejectTouch && !store.touchPan) return
@@ -2843,6 +2844,7 @@ let stopTextWatch: (() => void) | null = null
 let stopPageWatch: (() => void) | null = null
 let stopSettingsWatch: (() => void) | null = null
 let stopChromeWatch: (() => void) | null = null
+let stopToolWatch: (() => void) | null = null
 
 // Sayfa şeridi: düşük çözünürlüklü önbellek, tick+sayfa-değişiminde debounce'lu tazelenir.
 const thumbs = ref<string[]>([])
@@ -2916,6 +2918,15 @@ onMounted(() => {
       updateHud(true)
     },
   )
+  // Araç değişiminde (örn. metin aracından çıkınca veya girince header yüksekliği değişebilir)
+  // canvas boyutu ve konumu sync edilsin, çizim koordinatları kaymasın.
+  stopToolWatch = watch(
+    () => store.currentTool,
+    () => {
+      store.clearCachedRect()
+      nextTick(() => sizeCanvas())
+    },
+  )
   // Diyalog açılınca ilk kontrole odaklan, kapanınca tetikleyiciye dön.
   stopSettingsWatch = watch(showSettings, (open) => {
     if (open) {
@@ -2977,6 +2988,8 @@ onUnmounted(() => {
   stopSettingsWatch = null
   stopChromeWatch?.()
   stopChromeWatch = null
+  stopToolWatch?.()
+  stopToolWatch = null
   if (blockTimer) clearTimeout(blockTimer)
   blockTimer = undefined
   blockEls.clear()
