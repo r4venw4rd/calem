@@ -1282,6 +1282,19 @@
         aria-label="Sayfalar"
       >
         <button
+          v-if="store.pages.length > 1"
+          @click="store.setPageStripOpen(!store.pageStripOpen)"
+          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] transition"
+          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': store.pageStripOpen }"
+          :title="t('pageStrip')"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="7" y="7" width="14" height="14" rx="2" />
+            <path stroke-linecap="round" d="M3 17V5a2 2 0 012-2h12" />
+          </svg>
+        </button>
+        <span v-if="store.pages.length > 1" class="w-px h-4 bg-[var(--chrome-border)]"></span>
+        <button
           @click="prevPage"
           :disabled="store.activePageIndex === 0"
           class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
@@ -1356,7 +1369,7 @@
       ></div>
 
       <div
-        v-if="store.pages.length > 1 && !presenting"
+        v-if="store.pages.length > 1 && !presenting && store.pageStripOpen"
         class="absolute left-2 top-2 bottom-14 z-10 w-24 overflow-y-auto flex flex-col gap-2 p-1.5 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border)]"
         role="navigation"
         :aria-label="t('pageStrip')"

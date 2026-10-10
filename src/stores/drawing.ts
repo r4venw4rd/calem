@@ -149,6 +149,7 @@ export interface AppSettings {
   uiTheme: UiTheme
   locale?: Locale
   uiScale?: number
+  pageStripOpen?: boolean
 }
 
 // .calem aktarım dosyası: vektör belge + ayar + gömülü bytes (base64).
@@ -371,6 +372,15 @@ export const useDrawingStore = defineStore('drawing', () => {
     void persistSettings()
   }
 
+  // Sayfa şeridi (çok sayfalı küçük resimler): varsayılan kapalı, tercih saklanır.
+  const pageStripOpen = ref(false)
+  const setPageStripOpen = (v: boolean) => {
+    const next = !!v
+    if (pageStripOpen.value === next) return
+    pageStripOpen.value = next
+    void persistSettings()
+  }
+
   // Eski toolbar dizilimini yeni varsayılana göçürür: el silginin sağına.
   // v5 öncesi kayıtlarda el en sondadır; kullanıcının gizlilik/sıra tercihini
   // bozmadan sadece elin konumunu düzeltir.
@@ -409,6 +419,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         uiTheme: uiTheme.value,
         locale: locale.value,
         uiScale: uiScale.value,
+        pageStripOpen: pageStripOpen.value,
       }
       await storage.setKey(SETTINGS_KEY, doc)
     } catch {
@@ -435,6 +446,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         uiTheme: uiTheme.value,
         locale: locale.value,
         uiScale: uiScale.value,
+        pageStripOpen: pageStripOpen.value,
     }
     return JSON.stringify(doc)
   }
@@ -534,6 +546,10 @@ export const useDrawingStore = defineStore('drawing', () => {
       uiScale.value = sc
       applied = true
     }
+    if (typeof r.pageStripOpen === 'boolean') {
+      pageStripOpen.value = r.pageStripOpen
+      applied = true
+    }
     if (!applied) return false
     applyUiTheme()
     applyLocale()
@@ -621,6 +637,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       const rawScale = cleanUiScale(raw.uiScale)
       if (rawScale !== null) {
         uiScale.value = rawScale
+      }
+      if (typeof raw.pageStripOpen === 'boolean') {
+        pageStripOpen.value = raw.pageStripOpen
       }
       applyUiTheme()
       applyLocale()
@@ -3035,6 +3054,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         uiTheme: uiTheme.value,
         locale: locale.value,
         uiScale: uiScale.value,
+        pageStripOpen: pageStripOpen.value,
       }
       const out: CalemFile = {
         app: 'calem',
@@ -3954,6 +3974,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     setLocale,
     uiScale,
     setUiScale,
+    pageStripOpen,
+    setPageStripOpen,
     exportSettingsJSON,
     importSettingsJSON,
     strokeWidth,
