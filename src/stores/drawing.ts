@@ -1778,6 +1778,19 @@ export const useDrawingStore = defineStore('drawing', () => {
     clearOverlay()
   }
 
+  // Mobil açılışta layout henüz oturmamışsa (0px) körü körüne boyama —
+  // boyut gelene kadar kare kare bekle, sonra tam kurulum yap.
+  const ensureCanvasReady = (tries = 90): void => {
+    const base = canvasRef.value
+    const over = overlayRef.value
+    if (!base || !over) return
+    if ((base.clientWidth === 0 || base.clientHeight === 0) && tries > 0) {
+      requestAnimationFrame(() => ensureCanvasReady(tries - 1))
+      return
+    }
+    setupCanvas()
+  }
+
   const clearCachedRect = () => {
     cachedRect = null
   }
@@ -3879,6 +3892,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   const resizeCanvas = () => {
     cachedRect = null
     bb = null
+    // Boyut yoksa boyama (0px fit matematiğini bozar); bir sonraki resize düzeltir.
+    const c = canvasRef.value
+    if (c && (c.clientWidth === 0 || c.clientHeight === 0)) return
     setupBackingStoreFor(canvasRef.value)
     setupBackingStoreFor(overlayRef.value)
     layoutView()
@@ -4023,6 +4039,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     setCanvasRef,
     setOverlayRef,
     setupCanvas,
+    ensureCanvasReady,
     clearCachedRect,
     activePoints,
     startDrawing,

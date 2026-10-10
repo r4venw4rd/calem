@@ -3216,7 +3216,8 @@ onMounted(() => {
   store
     .loadSettings()
     .then(() => {
-      store.setupCanvas()
+      // Boyut hazır olana kadar bekleyen kurulum (mobil açılışta 0px yarışı).
+      store.ensureCanvasReady()
       return store.checkSavedSession()
     })
     .then(() => {
@@ -3231,6 +3232,8 @@ onMounted(() => {
   mobileMq.addEventListener('change', syncIsMobile)
   narrowMq.addEventListener('change', syncIsMobile)
   window.addEventListener('resize', sizeCanvas)
+  // Mobil URL barı açılıp kapanınca window.resize ateşlenmez; visualViewport yakalar.
+  window.visualViewport?.addEventListener('resize', sizeCanvas)
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
   document.addEventListener('fullscreenchange', onFullscreenChange)
@@ -3333,6 +3336,7 @@ onUnmounted(() => {
   narrowMq?.removeEventListener('change', syncIsMobile)
   narrowMq = null
   window.removeEventListener('resize', sizeCanvas)
+  window.visualViewport?.removeEventListener('resize', sizeCanvas)
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
