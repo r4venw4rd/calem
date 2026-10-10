@@ -165,84 +165,7 @@
           <span class="absolute -top-1 -right-1 min-w-4 h-4 px-0.5 rounded-full bg-indigo-600 text-white text-[9px] leading-4 text-center font-mono">{{ store.activePage.layers.length }}</span>
         </button>
 
-        <Teleport to="body">
-        <div
-          ref="layersPanel"
-          v-if="showLayers"
-          class="fixed left-1/2 top-[68px] z-30 w-64 max-w-[calc(100vw-1rem)] -translate-x-1/2 rounded-xl bg-[var(--float-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl backdrop-blur"
-          role="dialog"
-          :aria-label="t('layersDialog')"
-        >
-          <div class="flex items-center justify-between mb-2">
-            <span class="font-medium text-[var(--chrome-title)]">{{ t('layersDialog') }} <span class="text-[var(--chrome-faint)]">{{ t('layersOnTop') }}</span></span>
-            <button @click="showLayers = false" class="text-[var(--chrome-faint)] hover:text-[var(--chrome-title)]" :title="t('close')">
-              {{ t('close') }}
-            </button>
-          </div>
-
-          <div
-            v-for="(l, ri) in layersTopFirst"
-            :key="l.id"
-            class="flex items-center gap-1 px-1 py-0.5 rounded"
-            :class="l.id === store.activePage.activeLayerId ? 'bg-indigo-600/20' : 'hover:bg-[var(--chrome-bg-soft)]'"
-          >
-            <input
-              type="checkbox"
-              :checked="l.visible"
-              @change="store.toggleLayerVisible(l.id)"
-              class="accent-indigo-600"
-              :title="t('visibility')"
-            />
-            <button
-              @click="activateLayer(l.id)"
-              class="flex-1 min-w-0 text-left truncate px-1 py-0.5 rounded"
-              :class="l.id === store.activePage.activeLayerId ? 'text-[var(--chrome-title)] font-medium' : 'text-[var(--chrome-text)]'"
-              :title="`${t('makeActive')}: ${l.name}`"
-            >
-              {{ l.name }}
-              <span class="font-mono text-[10px] text-[var(--chrome-faint)]">{{ l.strokes.length }}</span>
-            </button>
-            <button
-              @click="store.moveLayer(l.id, 1)"
-              :disabled="ri === 0"
-              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
-              :title="t('moveUp')"
-            >
-              ↑
-            </button>
-            <button
-              @click="store.moveLayer(l.id, -1)"
-              :disabled="ri === layersTopFirst.length - 1"
-              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
-              :title="t('moveDown')"
-            >
-              ↓
-            </button>
-            <button
-              @click="renameLayer(l.id)"
-              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)]"
-              :title="t('nameLayer')"
-            >
-              {{ t('rename') }}
-            </button>
-            <button
-              @click="askDeleteLayer(l.id)"
-              class="px-1 rounded hover:bg-red-600/40"
-              :title="t('deleteLayer')"
-            >
-              {{ t('delete') }}
-            </button>
-          </div>
-
-          <button
-            @click="addLayerBtn"
-            class="mt-2 w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition font-mono"
-            :title="t('newLayerTitle')"
-          >
-            {{ t('newLayer') }}
-          </button>
-        </div>
-        </Teleport>
+        <LayersPanel :open="showLayers" ref="layersPanelRef" @close="showLayers = false" @changed="onLayersChanged" />
       </div>
 
       <span v-if="store.pdfBusy" class="text-[10px] text-yellow-400/80 font-mono ml-1">{{ t('processing') }}</span>
@@ -1668,10 +1591,13 @@
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
 import { drawingPerf } from '@/model/document'
 import { useDrawingStore } from '@/stores/drawing'
+import { useDialogs } from '@/composables/useDialogs'
+import { useLocale } from '@/composables/useLocale'
+import LayersPanel from '@/components/LayersPanel.vue'
 import { PAGE_FORMATS, PAPER_THEMES } from '@/config/paper'
 import { CUSTOM_SLOT_COUNT } from '@/config/palettes'
 import { TOOL_META } from '@/config/tools'
-import { LOCALES, TOOL_LABELS, tr as trFn, type UIKey } from '@/config/locale'
+import { LOCALES } from '@/config/locale'
 import { SLIDERS } from '@/config/ui'
 import { PAGE_MIN, PAGE_MAX } from '@/config/engine'
 import {
@@ -1722,7 +1648,12 @@ const fileMenu = ref<HTMLElement | null>(null)
 const settingsBtn = ref<HTMLElement | null>(null)
 const settingsPanel = ref<HTMLElement | null>(null)
 const layersBtn = ref<HTMLElement | null>(null)
-const layersPanel = ref<HTMLElement | null>(null)
+const layersPanelRef = ref<InstanceType<typeof LayersPanel> | null>(null)
+// Katman paneli değişikliğinde seçim overlay + HUD tazele (panel 'changed' yayını).
+const onLayersChanged = () => {
+  drawSelectionOverlay()
+  updateHud(true)
+}
 const styleBtn = ref<HTMLElement | null>(null)
 const stylePanel = ref<HTMLElement | null>(null)
 const filePanel = ref<HTMLElement | null>(null)
@@ -1730,101 +1661,30 @@ const moreBtn = ref<HTMLElement | null>(null)
 const morePanel = ref<HTMLElement | null>(null)
 const store = useDrawingStore()
 
-// --- Uygulama-içi onay/soru diyaloğu ---
-// Native confirm()/prompt() bloklar, stillenemez ve fullscreen'de bastırılabilir;
-// bu yüzden yıkıcı op'lar ve adlandırmalar aynı görsel dilde bir modal kullanır.
-const dialogOpen = ref(false)
-const dialogKind = ref<'confirm' | 'prompt'>('confirm')
-const dialogTitle = ref('')
-const dialogMessage = ref('')
-const dialogText = ref('')
-const dialogPanel = ref<HTMLElement | null>(null)
-const dialogInput = ref<HTMLInputElement | null>(null)
-let dialogResolve: ((v: boolean | string | null) => void) | null = null
+// --- Uygulama-içi onay/soru diyaloğu (tekil durum useDialogs'ta;
+// şablon burada, soru soran paneller aynı tekil diyaloğu kullanır) ---
+const {
+  dialogOpen,
+  dialogKind,
+  dialogTitle,
+  dialogMessage,
+  dialogText,
+  dialogPanel,
+  dialogInput,
+  askConfirm,
+  askPrompt,
+  dialogOk,
+  dialogCancel,
+} = useDialogs()
 
-const closeDialog = (result: boolean | string | null) => {
-  const r = dialogResolve
-  dialogResolve = null
-  dialogOpen.value = false
-  r?.(result)
-}
-const askConfirm = (title: string, message = ''): Promise<boolean> =>
-  new Promise((resolve) => {
-    dialogResolve = resolve as (v: boolean | string | null) => void
-    dialogKind.value = 'confirm'
-    dialogTitle.value = title
-    dialogMessage.value = message
-    dialogOpen.value = true
-    nextTick(() => dialogPanel.value?.querySelector<HTMLElement>('button')?.focus())
-  })
-const askPrompt = (title: string, def = ''): Promise<string | null> =>
-  new Promise((resolve) => {
-    dialogResolve = resolve as (v: boolean | string | null) => void
-    dialogKind.value = 'prompt'
-    dialogTitle.value = title
-    dialogMessage.value = ''
-    dialogText.value = def
-    dialogOpen.value = true
-    nextTick(() => {
-      dialogInput.value?.focus()
-      dialogInput.value?.select()
-    })
-  })
-const dialogOk = () => {
-  if (!dialogOpen.value) return
-  closeDialog(dialogKind.value === 'prompt' ? dialogText.value : true)
-}
-const dialogCancel = () => {
-  if (!dialogOpen.value) return
-  closeDialog(dialogKind.value === 'prompt' ? null : false)
-}
-
-// l10n: arayüz dili store.locale'dan beslenir, eksik anahtar Türkçe'ye düşer.
-const t = (k: UIKey): string => trFn(store.locale, k)
-// Şablon anahtarları: {n} yer tutucusunu doldurur (örn. 'Sayfa {n} temizlensin mi?').
-const tf = (k: UIKey, n: number): string => t(k).replace('{n}', String(n))
-const locTools = computed(() => TOOL_LABELS[store.locale] ?? TOOL_LABELS.tr)
-
-// Katman listesi üstte-ilk (dizi 0 = en alt).
-const layersTopFirst = computed(() => [...store.activePage.layers].reverse())
+// l10n + araç etiketleri (tekil useLocale'ten; paneller de aynısını kullanır).
+const { t, tf, locTools } = useLocale()
 
 // Custom renk satırında yalnızca İLK boş slot "+" gösterir; kalanı çizilmez.
 // (Aksi halde boşken 8 tane "+" yan yana dizilip toolbar'ı şişiriyordu.)
 const firstEmptySlot = computed<number | null>(() =>
   store.customColors.length < CUSTOM_SLOT_COUNT ? store.customColors.length + 1 : null,
 )
-
-const activateLayer = (id: string) => {
-  store.setActiveLayer(id)
-  drawSelectionOverlay()
-  updateHud(true)
-}
-
-const addLayerBtn = () => {
-  store.addLayer()
-  drawSelectionOverlay()
-  updateHud(true)
-}
-
-const askDeleteLayer = async (id: string) => {
-  const l = store.activePage.layers.find((x) => x.id === id)
-  if (!l) return
-  if (store.activePage.layers.length > 1 && l.strokes.length > 0) {
-    if (!(await askConfirm(`"${l.name}" — ${t('confirmDelete')}`, tf('strokesLost', l.strokes.length))))
-      return
-  }
-  store.deleteLayer(id)
-  drawSelectionOverlay()
-  updateHud(true)
-}
-
-const renameLayer = async (id: string) => {
-  const l = store.activePage.layers.find((x) => x.id === id)
-  if (!l) return
-  const name = await askPrompt('Katman adı', l.name)
-  if (name === null) return
-  store.renameLayer(id, name)
-}
 
 const addPaletteBtn = async () => {
   const name = await askPrompt('Palet adı', `Palet ${store.palettes.length + 1}`)
@@ -3050,7 +2910,7 @@ const onDocPointerDown = (e: PointerEvent) => {
   if (showSettings.value && !inside(settingsBtn.value) && !inside(settingsPanel.value)) {
     showSettings.value = false
   }
-  if (showLayers.value && !inside(layersBtn.value) && !inside(layersPanel.value)) {
+  if (showLayers.value && !inside(layersBtn.value) && !inside(layersPanelRef.value?.panelEl ?? null)) {
     showLayers.value = false
   }
   if (showStyle.value && !inside(styleBtn.value) && !inside(stylePanel.value)) {
