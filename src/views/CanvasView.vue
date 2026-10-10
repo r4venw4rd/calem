@@ -397,411 +397,7 @@
       </div>
   </header>
 
-      <div
-        v-if="showSettings"
-        class="fixed inset-0 z-30 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50"
-        @pointerdown.self="showSettings = false"
-      >
-      <div
-        ref="settingsPanel"
-        class="w-full sm:w-[min(94vw,400px)] h-[86vh] sm:h-auto sm:max-h-[85vh] flex flex-col rounded-t-2xl sm:rounded-xl bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] shadow-2xl"
-        role="dialog"
-        :aria-label="t('settings')"
-        @keydown.tab="trapFocus"
-      >
-        <div class="flex items-center justify-between px-3 pt-3 pb-2">
-          <span class="font-medium text-[var(--chrome-title)]">{{ t('settings') }}</span>
-          <button @click="showSettings = false" class="text-[var(--chrome-faint)] hover:text-[var(--chrome-title)]" :title="t('doneTitle')">
-            {{ t('close') }}
-          </button>
-        </div>
-
-        <div class="overflow-y-auto px-3 pb-3">
-        <details open class="group mb-2 rounded-lg border border-[var(--chrome-border)]">
-          <summary class="flex items-center justify-between gap-2 px-2.5 py-2 cursor-pointer list-none select-none font-medium text-[var(--chrome-muted)] hover:text-[var(--chrome-title)]">
-            <span>{{ t('secAppearance') }}</span>
-            <span class="font-mono text-[10px] transition group-open:rotate-180">▾</span>
-          </summary>
-          <div class="px-2.5 pb-2.5 pt-1">
-        <div class="mb-1 text-[var(--chrome-muted)]">{{ t('uiTheme') }}</div>
-        <div class="flex gap-1 mb-3">
-          <button
-            @click="store.setUiTheme('koyu')"
-            class="flex-1 px-2 py-1 rounded transition"
-            :class="store.uiTheme === 'koyu' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
-          >
-            {{ t('dark') }}
-          </button>
-          <button
-            @click="store.setUiTheme('acik')"
-            class="flex-1 px-2 py-1 rounded transition"
-            :class="store.uiTheme === 'acik' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
-          >
-            {{ t('light') }}
-          </button>
-        </div>
-
-        <div class="mb-1 text-[var(--chrome-muted)]">{{ t('language') }}</div>
-        <select
-          :value="store.locale"
-          @change="store.setLocale(($event.target as HTMLSelectElement).value)"
-          :title="t('languageTitle')"
-          class="w-full mb-3 px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
-        >
-          <option v-for="l in LOCALES" :key="l.id" :value="l.id">{{ l.label }}</option>
-        </select>
-
-        <div class="mb-1 text-[var(--chrome-muted)]">{{ t('uiScale') }}</div>
-        <div class="flex items-center gap-2 mb-3">
-          <input
-            type="range"
-            :min="SLIDERS.uiScale.min"
-            :max="SLIDERS.uiScale.max"
-            :step="SLIDERS.uiScale.step"
-            :value="store.uiScale"
-            @input="store.setUiScale(Number(($event.target as HTMLInputElement).value))"
-            class="flex-1 accent-indigo-600"
-            :title="t('uiScale')"
-          />
-          <span class="text-xs text-[var(--chrome-text)] w-10 text-right font-mono">{{ Math.round(store.uiScale * 100) }}%</span>
-        </div>
-
-        <div class="mb-1 text-[var(--chrome-muted)]">{{ t('paperTheme') }}</div>
-        <div class="flex gap-2 mb-2">
-          <button
-            v-for="(hex, name) in PAPER_THEMES"
-            :key="name"
-            @click="store.setPaper(hex)"
-            :title="String(name)"
-            class="w-8 h-8 rounded-full border-2 transition"
-            :class="store.paper === hex ? 'border-[var(--chrome-title)]' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
-            :style="{ background: hex }"
-          ></button>
-        </div>
-
-        <div class="flex gap-1 mb-2">
-          <select
-            :value="store.paperBackground.type"
-            @change="store.setPaperBackground({ type: ($event.target as HTMLSelectElement).value as typeof store.paperBackground.type })"
-            class="flex-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
-            :title="t('paperPattern')"
-          >
-            <option value="blank">{{ t('blank') }}</option>
-            <option value="ruled">{{ t('ruled') }}</option>
-            <option value="graph">{{ t('graph') }}</option>
-            <option value="dotted">{{ t('dottedBg') }}</option>
-            <option value="staff">{{ t('staff') }}</option>
-          </select>
-          <input
-            type="color"
-            :value="store.paperBackground.lineColor"
-            @input="store.setPaperBackground({ lineColor: ($event.target as HTMLInputElement).value })"
-            class="w-8 h-8 rounded bg-transparent border border-[var(--chrome-border-strong)] cursor-pointer p-0.5"
-            :title="t('patternColor')"
-          />
-        </div>
-
-        <div v-if="store.paperBackground.type !== 'blank'" class="flex items-center gap-2 mb-2">
-          <span class="text-[var(--chrome-faint)] whitespace-nowrap">{{ t('spacing') }}</span>
-          <input
-            type="range"
-            :min="SLIDERS.paperSpacing.min"
-            :max="SLIDERS.paperSpacing.max"
-            :step="SLIDERS.paperSpacing.step"
-            :value="store.paperBackground.spacing"
-            @input="store.setPaperBackground({ spacing: Number(($event.target as HTMLInputElement).value) })"
-            class="flex-1 accent-indigo-600"
-            :title="t('spacingTitle')"
-          />
-          <span class="text-xs text-[var(--chrome-text)] w-6 text-right font-mono">{{ store.paperBackground.spacing }}</span>
-        </div>
-
-        <label class="flex items-center gap-2 mb-3 cursor-pointer" :title="t('marginLineTitle')">
-          <input
-            type="checkbox"
-            :checked="store.paperBackground.margin"
-            @change="store.setPaperBackground({ margin: ($event.target as HTMLInputElement).checked })"
-            class="accent-indigo-600"
-          />
-          {{ t('marginLine') }}
-        </label>
-          </div>
-        </details>
-
-        <details class="group mb-2 rounded-lg border border-[var(--chrome-border)]">
-          <summary class="flex items-center justify-between gap-2 px-2.5 py-2 cursor-pointer list-none select-none font-medium text-[var(--chrome-muted)] hover:text-[var(--chrome-title)]">
-            <span>{{ t('secToolbar') }}</span>
-            <span class="font-mono text-[10px] transition group-open:rotate-180">▾</span>
-          </summary>
-          <div class="px-2.5 pb-2.5 pt-1">
-        <div class="mb-1 text-[var(--chrome-muted)]">{{ t('toolbar') }}</div>
-        <div class="flex flex-col gap-0.5 mb-3">
-          <div
-            v-for="(tool, i) in store.toolbarOrder"
-            :key="tool"
-            class="flex items-center gap-1 px-1 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)]"
-          >
-            <input
-              type="checkbox"
-              :checked="!store.hiddenTools.includes(tool)"
-              :disabled="!store.hiddenTools.includes(tool) && store.toolbarOrder.length - store.hiddenTools.length <= 1"
-              @change="store.setToolVisible(tool, ($event.target as HTMLInputElement).checked)"
-              class="accent-indigo-600"
-              :title="`${locTools[tool].label} ${t('toolVisibilitySuffix')}`"
-            />
-            <span class="flex-1 truncate" :class="store.hiddenTools.includes(tool) ? 'opacity-40' : ''">
-              {{ locTools[tool].label }}
-            </span>
-            <button
-              @click="store.moveTool(tool, -1)"
-              :disabled="i === 0"
-              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
-              :title="t('moveFront')"
-            >
-              ↑
-            </button>
-            <button
-              @click="store.moveTool(tool, 1)"
-              :disabled="i === store.toolbarOrder.length - 1"
-              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
-              :title="t('moveBack')"
-            >
-              ↓
-            </button>
-          </div>
-          <button
-            @click="store.resetToolbar()"
-            class="mt-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition font-mono"
-            :title="t('resetToolbarTitle')"
-          >
-            {{ t('reset') }}
-          </button>
-        </div>
-
-        <div class="mb-1 text-[var(--chrome-muted)]">{{ t('palettes') }}</div>
-        <div class="flex flex-col gap-0.5 mb-3">
-          <div
-            v-for="p in store.palettes"
-            :key="p.id"
-            class="flex items-center gap-1 px-1 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)]"
-            :class="{ 'bg-indigo-600/20': p.id === store.activePaletteId }"
-          >
-            <button
-              @click="store.setActivePalette(p.id)"
-              class="flex-1 min-w-0 text-left truncate px-1 py-0.5 rounded"
-              :class="p.id === store.activePaletteId ? 'text-[var(--chrome-title)] font-medium' : 'text-[var(--chrome-text)]'"
-              :title="`${t('makeActive')}: ${p.name} (${p.colors.length})`"
-            >
-              {{ p.name }}
-              <span class="font-mono text-[10px] text-[var(--chrome-faint)]">{{ p.colors.length }}</span>
-            </button>
-            <span class="flex -space-x-1">
-              <span
-                v-for="hex in p.colors.slice(0, 6)"
-                :key="hex"
-                class="w-3.5 h-3.5 rounded-full border border-[var(--chrome-border-strong)]"
-                :style="{ background: hex }"
-              ></span>
-            </span>
-            <button
-              @click="store.addColorToPalette(undefined, p.id)"
-              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] font-mono"
-              :title="t('addCurrentToPalette')"
-            >
-              +
-            </button>
-            <button
-              @click="store.appendCustomsToPalette(p.id)"
-              :disabled="store.customColors.length === 0"
-              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] font-mono disabled:opacity-30 disabled:cursor-not-allowed"
-              :title="t('addCustomsToPalette')"
-            >
-              C+
-            </button>
-            <button
-              @click="renamePaletteBtn(p.id)"
-              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)]"
-              :title="t('renameIt')"
-            >
-              {{ t('rename') }}
-            </button>
-            <button
-              @click="askDeletePalette(p.id)"
-              :disabled="store.palettes.length <= 1"
-              class="px-1 rounded hover:bg-red-600/40 disabled:opacity-30 disabled:cursor-not-allowed"
-              :title="t('deletePalette')"
-            >
-              {{ t('delete') }}
-            </button>
-          </div>
-          <button
-            @click="addPaletteBtn"
-            class="mt-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition font-mono"
-            :title="t('newPaletteTitle')"
-          >
-            {{ t('newPalette') }}
-          </button>
-        </div>
-          </div>
-        </details>
-
-        <details class="group mb-2 rounded-lg border border-[var(--chrome-border)]">
-          <summary class="flex items-center justify-between gap-2 px-2.5 py-2 cursor-pointer list-none select-none font-medium text-[var(--chrome-muted)] hover:text-[var(--chrome-title)]">
-            <span>{{ t('secPage') }}</span>
-            <span class="font-mono text-[10px] transition group-open:rotate-180">▾</span>
-          </summary>
-          <div class="px-2.5 pb-2.5 pt-1">
-        <div class="mb-1 text-[var(--chrome-muted)]">{{ t('pageFormat') }} <span class="text-[var(--chrome-faint)]">{{ t('newPages') }}</span></div>
-        <select
-          :value="store.pageFormat"
-          @change="onPageLayoutChange(store.setPageFormat(($event.target as HTMLSelectElement).value))"
-          class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
-        >
-          <option v-for="(_, name) in PAGE_FORMATS" :key="name" :value="name">{{ name }}</option>
-          <option value="custom">{{ t('custom') }}</option>
-        </select>
-
-        <div class="flex gap-1 mt-2">
-          <button
-            @click="onPageLayoutChange(store.setPageOrientation('portrait'))"
-            class="flex-1 px-2 py-1 rounded transition"
-            :class="store.pageOrientation === 'portrait' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
-          >
-            {{ t('portrait') }}
-          </button>
-          <button
-            @click="onPageLayoutChange(store.setPageOrientation('landscape'))"
-            class="flex-1 px-2 py-1 rounded transition"
-            :class="store.pageOrientation === 'landscape' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
-          >
-            {{ t('landscape') }}
-          </button>
-        </div>
-
-        <div v-if="store.pageFormat === 'custom'" class="flex items-center gap-2 mt-2">
-          <label class="flex-1">
-            <span class="text-[var(--chrome-faint)]">{{ t('widthLabel') }}</span>
-            <input
-              type="number"
-              :min="PAGE_MIN"
-              :max="PAGE_MAX"
-              :value="store.customW"
-              @change="onPageLayoutChange(store.setCustomSize(Number(($event.target as HTMLInputElement).value), store.customH))"
-              class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
-            />
-          </label>
-          <label class="flex-1">
-            <span class="text-[var(--chrome-faint)]">{{ t('heightLabel') }}</span>
-            <input
-              type="number"
-              :min="PAGE_MIN"
-              :max="PAGE_MAX"
-              :value="store.customH"
-              @change="onPageLayoutChange(store.setCustomSize(store.customW, Number(($event.target as HTMLInputElement).value)))"
-              class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
-            />
-          </label>
-        </div>
-
-          </div>
-        </details>
-
-        <details class="group mb-2 rounded-lg border border-[var(--chrome-border)]">
-          <summary class="flex items-center justify-between gap-2 px-2.5 py-2 cursor-pointer list-none select-none font-medium text-[var(--chrome-muted)] hover:text-[var(--chrome-title)]">
-            <span>{{ t('secInput') }}</span>
-            <span class="font-mono text-[10px] transition group-open:rotate-180">▾</span>
-          </summary>
-          <div class="px-2.5 pb-2.5 pt-1">
-        <div class="mt-3 pt-2 border-t border-[var(--chrome-border)]">
-          <div class="mb-1 text-[var(--chrome-muted)]">{{ t('pressure') }} <span class="text-[var(--chrome-faint)]">{{ t('pressureOff') }}</span></div>
-          <input
-            type="range"
-            :min="SLIDERS.pressure.min"
-            :max="SLIDERS.pressure.max"
-            :step="SLIDERS.pressure.step"
-            :value="store.pressureSensitivity"
-            @input="store.setPressureSensitivity(Number(($event.target as HTMLInputElement).value))"
-            class="w-full accent-indigo-600"
-            :title="t('pressureTitle')"
-          />
-          <div class="mb-1 mt-2 text-[var(--chrome-muted)]">{{ t('smoothing') }} <span class="text-[var(--chrome-faint)]">{{ t('smoothingHint') }}</span></div>
-          <input
-            type="range"
-            :min="SLIDERS.smoothing.min"
-            :max="SLIDERS.smoothing.max"
-            :step="SLIDERS.smoothing.step"
-            :value="store.smoothing"
-            @input="store.setSmoothing(Number(($event.target as HTMLInputElement).value))"
-            class="w-full accent-indigo-600"
-            :title="t('smoothingTitle')"
-          />
-          <label class="flex items-center gap-2 mt-2 cursor-pointer" :title="t('palmRejectTitle')">
-            <input
-              type="checkbox"
-              :checked="store.rejectTouch"
-              @change="store.setRejectTouch(($event.target as HTMLInputElement).checked)"
-              class="accent-indigo-600"
-            />
-            {{ t('palmReject') }}
-          </label>
-          <label class="flex items-center gap-2 mt-2 cursor-pointer" :title="t('touchPanTitle')">
-            <input
-              type="checkbox"
-              :checked="store.touchPan"
-              @change="store.setTouchPan(($event.target as HTMLInputElement).checked)"
-              class="accent-indigo-600"
-            />
-            {{ t('touchPan') }}
-          </label>
-        </div>
-          </div>
-        </details>
-
-        <details class="group mb-2 rounded-lg border border-[var(--chrome-border)]">
-          <summary class="flex items-center justify-between gap-2 px-2.5 py-2 cursor-pointer list-none select-none font-medium text-[var(--chrome-muted)] hover:text-[var(--chrome-title)]">
-            <span>{{ t('secData') }}</span>
-            <span class="font-mono text-[10px] transition group-open:rotate-180">▾</span>
-          </summary>
-          <div class="px-2.5 pb-2.5 pt-1">
-        <div class="mt-3 pt-2 border-t border-[var(--chrome-border)]">
-          <div class="mb-1 text-[var(--chrome-muted)]">{{ t('settingsBackup') }}</div>
-          <div class="flex gap-1">
-            <button
-              @click="backupSettings"
-              class="flex-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition"
-              :title="t('backupTitle')"
-            >
-              {{ t('backup') }}
-            </button>
-            <label
-              class="flex-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer text-center"
-              :title="t('restoreTitle')"
-            >
-              {{ t('restore') }}
-              <input type="file" :accept="SETTINGS_ACCEPT" class="hidden" @change="onSettingsFile" />
-            </label>
-          </div>
-        </div>
-
-        <div class="mt-3 pt-2 border-t border-[var(--chrome-border)]">
-          <div class="mb-1 text-[var(--chrome-muted)]">{{ t('shortcuts') }}</div>
-          <div class="font-mono text-[10px] leading-relaxed text-[var(--chrome-faint)]">
-            <div>{{ t('sc1') }}</div>
-            <div>{{ t('sc2') }}</div>
-            <div>{{ t('sc3') }}</div>
-            <div>{{ t('sc4') }}</div>
-            <div>{{ t('sc5') }}</div>
-            <div>{{ t('sc6') }}</div>
-            <div>{{ t('sc7') }}</div>
-            <div>{{ t('sc8') }}</div>
-            <div>{{ t('sc9') }}</div>
-          </div>
-        </div>
-          </div>
-        </details>
-        </div>
-      </div>
-      </div>
+      <SettingsPanel :open="showSettings" ref="settingsPanelRef" @close="showSettings = false" @page-layout="onPageLayoutChange" @error="showPdfError" />
 
 
     <div class="relative flex-1 bg-[var(--page-bg)] min-h-0">
@@ -1348,20 +944,11 @@ import { useDialogs } from '@/composables/useDialogs'
 import { useLocale } from '@/composables/useLocale'
 import { useSelectionOps } from '@/composables/useSelectionOps'
 import LayersPanel from '@/components/LayersPanel.vue'
+import SettingsPanel from '@/components/SettingsPanel.vue'
 import StylePanel from '@/components/StylePanel.vue'
-import { PAGE_FORMATS, PAPER_THEMES } from '@/config/paper'
 import { TOOL_META } from '@/config/tools'
-import { LOCALES } from '@/config/locale'
 import { SLIDERS } from '@/config/ui'
-import { PAGE_MIN, PAGE_MAX } from '@/config/engine'
-import {
-  CALEM_ACCEPT,
-  IMAGE_ACCEPT,
-  PDF_ACCEPT,
-  SETTINGS_ACCEPT,
-  pngFileName,
-  settingsBackupName,
-} from '@/config/files'
+import { CALEM_ACCEPT, IMAGE_ACCEPT, PDF_ACCEPT, pngFileName } from '@/config/files'
 import { selectionBBox, coalescedOf } from '@/lib/select'
 import { takeLaunchHandle, onLaunchHandle, type LaunchHandle } from '@/lib/launchFile'
 import ToolIcon from '@/components/ToolIcon.vue'
@@ -1400,7 +987,7 @@ const setBlockRef = (el: unknown, id: string) => {
 // Menü kapsayıcıları (dışarı-tıkla kapatma için; paneller v-if'li, butonlar ayrı div'de).
 const fileMenu = ref<HTMLElement | null>(null)
 const settingsBtn = ref<HTMLElement | null>(null)
-const settingsPanel = ref<HTMLElement | null>(null)
+const settingsPanelRef = ref<InstanceType<typeof SettingsPanel> | null>(null)
 const layersBtn = ref<HTMLElement | null>(null)
 const layersPanelRef = ref<InstanceType<typeof LayersPanel> | null>(null)
 // Katman paneli değişikliğinde seçim overlay + HUD tazele (panel 'changed' yayını).
@@ -1440,33 +1027,10 @@ const {
   askPrompt,
   dialogOk,
   dialogCancel,
+  trapIn,
 } = useDialogs()
-
 // l10n + araç etiketleri (tekil useLocale'ten; paneller de aynısını kullanır).
 const { t, tf, locTools } = useLocale()
-
-const addPaletteBtn = async () => {
-  const name = await askPrompt('Palet adı', `Palet ${store.palettes.length + 1}`)
-  if (name === null) return
-  store.addPalette(name)
-  updateHud(true)
-}
-
-const askDeletePalette = async (id: string) => {
-  const p = store.palettes.find((x) => x.id === id)
-  if (!p || store.palettes.length <= 1) return
-  if (!(await askConfirm(`"${p.name}" — ${t('paletteDeleteAsk')}`))) return
-  store.deletePalette(id)
-  updateHud(true)
-}
-
-const renamePaletteBtn = async (id: string) => {
-  const p = store.palettes.find((x) => x.id === id)
-  if (!p) return
-  const name = await askPrompt('Palet adı', p.name)
-  if (name === null) return
-  store.renamePalette(id, name)
-}
 
 // Araç düğme metadatası: config/tools (TOOL_META).
 // Hepsi gizlenirse kilitlenmemek için tam listeye düşer.
@@ -1837,26 +1401,6 @@ const onTextColorInput = (hex: string) => {
 }
 
 // Sekme odağını modal içinde tut (arkadaki toolbar'a kaçmasın).
-const trapIn = (panel: HTMLElement | null, e: KeyboardEvent) => {
-  if (!panel) return
-  const nodes = [
-    ...panel.querySelectorAll<HTMLElement>(
-      'button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    ),
-  ].filter((n) => !n.hasAttribute('disabled') && n.offsetParent !== null)
-  if (nodes.length === 0) return
-  const first = nodes[0]!
-  const last = nodes[nodes.length - 1]!
-  const active = document.activeElement as HTMLElement | null
-  if (e.shiftKey && (active === first || !panel.contains(active))) {
-    e.preventDefault()
-    last.focus()
-  } else if (!e.shiftKey && active === last) {
-    e.preventDefault()
-    first.focus()
-  }
-}
-const trapFocus = (e: KeyboardEvent) => trapIn(settingsPanel.value, e)
 const trapDialogFocus = (e: KeyboardEvent) => trapIn(dialogPanel.value, e)
 
 const closeTextEditor = () => {
@@ -2446,24 +1990,6 @@ const showPdfError = (msg: string) => {
   }, 4000)
 }
 
-const backupSettings = () => {
-  const blob = new Blob([store.exportSettingsJSON()], { type: 'application/json' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = settingsBackupName()
-  a.click()
-  window.setTimeout(() => URL.revokeObjectURL(a.href), 5000)
-}
-
-const onSettingsFile = async (e: Event) => {
-  const input = e.target as HTMLInputElement
-  const f = input.files?.[0]
-  input.value = ''
-  if (!f) return
-  const ok = await store.importSettingsJSON(await f.text())
-  if (!ok) showPdfError(t('invalidSettings'))
-}
-
 const onPdfFile = async (e: Event) => {
   showFile.value = false
   const input = e.target as HTMLInputElement
@@ -2609,7 +2135,7 @@ const onDocPointerDown = (e: PointerEvent) => {
   if (!t || !(t instanceof Node)) return
   const inside = (el: HTMLElement | null) => !!el && el.contains(t)
   if (showFile.value && !inside(fileMenu.value) && !inside(filePanel.value)) showFile.value = false
-  if (showSettings.value && !inside(settingsBtn.value) && !inside(settingsPanel.value)) {
+  if (showSettings.value && !inside(settingsBtn.value) && !inside(settingsPanelRef.value?.panelEl ?? null)) {
     showSettings.value = false
   }
   if (showLayers.value && !inside(layersBtn.value) && !inside(layersPanelRef.value?.panelEl ?? null)) {
@@ -3051,7 +2577,7 @@ onMounted(() => {
   stopSettingsWatch = watch(showSettings, (open) => {
     if (open) {
       nextTick(() =>
-        settingsPanel.value?.querySelector<HTMLElement>('button, input, select, textarea')?.focus(),
+        settingsPanelRef.value?.panelEl?.querySelector<HTMLElement>('button, input, select, textarea')?.focus(),
       )
     } else {
       settingsBtn.value?.querySelector<HTMLElement>('button')?.focus()

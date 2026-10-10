@@ -55,6 +55,27 @@ const dialogCancel = () => {
   closeDialog(dialogKind.value === 'prompt' ? null : false)
 }
 
+// Sekme odağını modal içinde tut (arkadaki toolbar'a kaçmasın).
+const trapIn = (panel: HTMLElement | null, e: KeyboardEvent) => {
+  if (!panel) return
+  const nodes = [
+    ...panel.querySelectorAll<HTMLElement>(
+      'button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    ),
+  ].filter((n) => !n.hasAttribute('disabled') && n.offsetParent !== null)
+  if (nodes.length === 0) return
+  const first = nodes[0]!
+  const last = nodes[nodes.length - 1]!
+  const active = document.activeElement as HTMLElement | null
+  if (e.shiftKey && (active === first || !panel.contains(active))) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault()
+    first.focus()
+  }
+}
+
 export function useDialogs() {
   return {
     dialogOpen,
@@ -69,5 +90,6 @@ export function useDialogs() {
     askPrompt,
     dialogOk,
     dialogCancel,
+    trapIn,
   }
 }
