@@ -1,6 +1,7 @@
 {
   "name": "Calem",
   "short_name": "Calem",
+  "lang": "en",
   "description": "Zero-latency note-taking PWA for Chromebook",
   "start_url": ".",
   "display": "standalone",
