@@ -942,6 +942,7 @@ import { drawingPerf } from '@/model/document'
 import { useDrawingStore } from '@/stores/drawing'
 import { useDialogs } from '@/composables/useDialogs'
 import { useLocale } from '@/composables/useLocale'
+import { usePointerState } from '@/composables/usePointerState'
 import { useSelectionOps } from '@/composables/useSelectionOps'
 import LayersPanel from '@/components/LayersPanel.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
@@ -1079,12 +1080,8 @@ const scheduleRender = () => {
 
 // Event handler'lar — template'teki @pointer* binding'leri yeterli.
 // onMounted'da addEventListener EKLEME (yoksa her olay 2 kez ateşlenir).
-// Tek aktif pointer kilidi: avuç ikinci parmağı mevcut çizgiyi gasp edemez.
-// İKİ parmak = pinch gesture: yarım çizgi çöpe atılır, zoom/pan başlar.
-let activePointerId: number | null = null
-const pointers = new Map<number, { x: number; y: number }>()
-let gesture: { d0: number; mx0: number; my0: number } | null = null
-let gestureConsumed = false
+// Tek aktif pointer kilidi / pinch jesti / Space-pan durumu: usePointerState.
+const ps = usePointerState()
 
 const ptrPos = (e: PointerEvent) => {
   const r = overlayCanvas.value!.getBoundingClientRect()
@@ -1109,7 +1106,7 @@ const cancelSelGesture = () => {
   selCurrent = null
   selPoly = null
   selHistOpen = false
-  activePointerId = null
+  ps.clearActive()
 }
 
 const drawSelectionOverlay = () => {
@@ -1188,7 +1185,7 @@ const selectDown = (e: PointerEvent) => {
   } catch {
     /* ignore */
   }
-  activePointerId = e.pointerId
+  ps.setActive(e.pointerId)
   const p = store.eventToPage(e)
   if (store.selectionCount > 0 && selInside(p)) {
     selMoving = true
@@ -1206,7 +1203,7 @@ const selectDown = (e: PointerEvent) => {
 }
 
 const selectMove = (e: PointerEvent) => {
-  if (!selActive || e.pointerId !== activePointerId) return
+  if (!selActive || !ps.isActive(e.pointerId)) return
   if (e.buttons === 0 && e.pointerType === 'mouse') return
   for (const ev of coalescedOf(e)) {
     const p = store.eventToPage(ev)
@@ -1230,13 +1227,13 @@ const selectMove = (e: PointerEvent) => {
 }
 
 const selectUp = (e?: PointerEvent) => {
-  if (e && activePointerId !== null && e.pointerId !== activePointerId) return
+  if (ps.stale(e)) return
   if (!selActive) {
-    activePointerId = null
+    ps.clearActive()
     return
   }
   selActive = false
-  activePointerId = null
+  ps.clearActive()
   selHistOpen = false
   if (selMoving) {
     selMoving = false
@@ -1317,7 +1314,7 @@ const textDown = (e: PointerEvent) => {
   } catch {
     /* ignore */
   }
-  activePointerId = e.pointerId
+  ps.setActive(e.pointerId)
   const p = store.eventToPage(e)
   const hit = store.textAt(p.x, p.y)
   textDownPos = p
@@ -1332,7 +1329,7 @@ const textDown = (e: PointerEvent) => {
 }
 
 const textMove = (e: PointerEvent) => {
-  if (e.pointerId !== activePointerId || !textDownPos) return
+  if (!ps.isActive(e.pointerId) || !textDownPos) return
   if (e.buttons === 0 && e.pointerType === 'mouse') return
   for (const ev of coalescedOf(e)) {
     const p = store.eventToPage(ev)
@@ -1357,14 +1354,14 @@ const textMove = (e: PointerEvent) => {
 }
 
 const textUp = (e?: PointerEvent) => {
-  if (e && activePointerId !== null && e.pointerId !== activePointerId) return
+  if (ps.stale(e)) return
   const wasMoving = textMoving
   const hit = textDownHit
   const at = textDownPos
   const boxCur = textBoxCurrent
   const wasBoxing = textBoxing
   cancelTextGesture()
-  activePointerId = null
+  ps.clearActive()
   if (wasBoxing) drawTextBoxOverlay()
   if (wasMoving) {
     updateHud(true)
@@ -1440,7 +1437,7 @@ const imageDown = (e: PointerEvent) => {
   } catch {
     /* ignore */
   }
-  activePointerId = e.pointerId
+  ps.setActive(e.pointerId)
   const p = store.eventToPage(e)
   const hit = store.imageAt(p.x, p.y)
   imgDownPos = p
@@ -1452,7 +1449,7 @@ const imageDown = (e: PointerEvent) => {
 }
 
 const imageMove = (e: PointerEvent) => {
-  if (e.pointerId !== activePointerId || !imgDownPos) return
+  if (!ps.isActive(e.pointerId) || !imgDownPos) return
   if (e.buttons === 0 && e.pointerType === 'mouse') return
   for (const ev of coalescedOf(e)) {
     const p = store.eventToPage(ev)
@@ -1473,12 +1470,12 @@ const imageMove = (e: PointerEvent) => {
 }
 
 const imageUp = (e?: PointerEvent) => {
-  if (e && activePointerId !== null && e.pointerId !== activePointerId) return
+  if (ps.stale(e)) return
   const wasMoving = imgMoving
   const hit = imgDownHit
   const at = imgDownPos
   cancelImageGesture()
-  activePointerId = null
+  ps.clearActive()
   if (wasMoving) {
     updateHud(true)
     return
@@ -1515,7 +1512,6 @@ const delActiveImage = () => {
 }
 
 // --- El/Space kaydırma: ekran-px delta ile pan (her araçta Space ile) ---
-let spacePan = false
 let panActive = false
 let panLast: { x: number; y: number } | null = null
 let panDx = 0
@@ -1528,14 +1524,14 @@ const panDown = (e: PointerEvent) => {
   } catch {
     /* ignore */
   }
-  activePointerId = e.pointerId
+  ps.setActive(e.pointerId)
   panLast = ptrPos(e)
   panActive = true
 }
 
 const panMove = (e: PointerEvent) => {
   // Space sonradan basılırsa devralınmaz (mürekkep gasp edilmesin) — önce Space, sonra bas.
-  if (!panActive || e.pointerId !== activePointerId) return
+  if (!panActive || !ps.isActive(e.pointerId)) return
   if (e.buttons === 0 && e.pointerType === 'mouse') return
   // Delta biriktir, boyayı rAF'e bırak: her move'da tam sahne boyası (repaintBase)
   // mobil GPU'da kasıyordu. Kalem yolundaki scheduleRender deseninin aynısı.
@@ -1568,7 +1564,7 @@ const schedulePan = () => {
 }
 
 const panUp = (e?: PointerEvent) => {
-  if (e && activePointerId !== null && e.pointerId !== activePointerId) return
+  if (ps.stale(e)) return
   if (panRaf !== 0) {
     cancelAnimationFrame(panRaf)
     panRaf = 0
@@ -1581,7 +1577,7 @@ const panUp = (e?: PointerEvent) => {
   }
   panActive = false
   panLast = null
-  activePointerId = null
+  ps.clearActive()
   updateHud(true)
 }
 
@@ -1606,8 +1602,8 @@ const startDraw = (e: PointerEvent) => {
   // Avuç reddi pinch'ten ÖNCE: parmak (touchPan kapalıyken) hiç işleme girmez; yoksa
   // dinlenen avuç ikinci pointer olup aktif kalem çizgisini iptal ediyordu.
   if (e.pointerType === 'touch' && store.rejectTouch && !store.touchPan) return
-  pointers.set(e.pointerId, ptrPos(e))
-  if (pointers.size === 2) {
+  ps.track(e.pointerId, ptrPos(e))
+  if (ps.count() === 2) {
     store.cancelActiveStroke()
     cancelSelGesture()
     cancelTextGesture()
@@ -1617,20 +1613,18 @@ const startDraw = (e: PointerEvent) => {
       cancelAnimationFrame(rafId)
       rafId = 0
     }
-    activePointerId = null
-    const [a, b] = [...pointers.values()] as [{ x: number; y: number }, { x: number; y: number }]
-    gesture = { d0: Math.hypot(a.x - b.x, a.y - b.y), mx0: (a.x + b.x) / 2, my0: (a.y + b.y) / 2 }
-    gestureConsumed = true
+    ps.clearActive()
+    ps.beginGesture()
     return
   }
-  if (pointers.size !== 1 || gesture || gestureConsumed) return
+  if (ps.count() !== 1 || ps.gestureLocked()) return
   // Dokun-kaydır açıksa parmak her araçta kaydırır (kalem/fare etkilenmez).
   if (e.pointerType === 'touch' && store.touchPan) {
     panDown(e)
     return
   }
   // Space-kaydırma her aracı ezer (pinch sonrası değil); el aracı dokunmayla da kaydırır.
-  if (spacePan || store.currentTool === 'hand') {
+  if (ps.spacePan() || store.currentTool === 'hand') {
     panDown(e)
     return
   }
@@ -1661,25 +1655,19 @@ const startDraw = (e: PointerEvent) => {
   }
   const started = store.startDrawing(e)
   if (!started) return
-  activePointerId = e.pointerId
+  ps.setActive(e.pointerId)
   scheduleRender()
 }
 
 const draw = (e: PointerEvent) => {
   if (e.cancelable) e.preventDefault()
-  const tracked = pointers.get(e.pointerId)
-  if (tracked && overlayCanvas.value) {
+  if (ps.has(e.pointerId) && overlayCanvas.value) {
     const r = overlayCanvas.value.getBoundingClientRect()
-    tracked.x = e.clientX - r.left
-    tracked.y = e.clientY - r.top
+    ps.moveTracked(e.pointerId, { x: e.clientX - r.left, y: e.clientY - r.top })
   }
-  if (gesture && pointers.size >= 2) {
-    const [a, b] = [...pointers.values()] as [{ x: number; y: number }, { x: number; y: number }]
-    const d1 = Math.hypot(a.x - b.x, a.y - b.y)
-    const mx = (a.x + b.x) / 2
-    const my = (a.y + b.y) / 2
-    if (gesture.d0 > 0) store.pinch(d1 / gesture.d0, mx, my, mx - gesture.mx0, my - gesture.my0)
-    gesture = { d0: d1, mx0: mx, my0: my }
+  const step = ps.stepGesture()
+  if (step) {
+    if (step.scale > 0) store.pinch(step.scale, step.midX, step.midY, step.dx, step.dy)
     updateHud()
     drawSelectionOverlay()
     return
@@ -1700,7 +1688,7 @@ const draw = (e: PointerEvent) => {
     imageMove(e)
     return
   }
-  if (!store.isDrawing || activePointerId === null || e.pointerId !== activePointerId) return
+  if (!store.isDrawing || ps.activeId() === null || !ps.isActive(e.pointerId)) return
   // Sadece basılıyken çiz (pointermove hover'da ateşlenir)
   if (e.buttons === 0 && e.pointerType === 'mouse') return
   // coalesced events: birikmiş ara noktaları da işle, çizgi köşelenmesin
@@ -1709,22 +1697,14 @@ const draw = (e: PointerEvent) => {
 }
 
 const endDraw = (e?: PointerEvent) => {
-  if (e) pointers.delete(e.pointerId)
-  if (pointers.size === 0) {
-    gesture = null
-    gestureConsumed = false
-  }
   // Gesture bitene (tüm parmaklar kalkana) kadar çizim kapalı — arta kalan parmak çizmesin.
-  if (gesture || gestureConsumed) {
-    if (gesture && pointers.size < 2) gesture = null
-    return
-  }
+  if (ps.releasePointer(e?.pointerId)) return
   // Aktif pointer kilidini pahalı commit'ten ÖNCE bırak: stopDrawing (snapshotDoc
   // tam-klon + base'e işleme) bitmeden gelen pointerdown temiz görsün, yoksa
   // isDrawing/pointerId kapılarına takılıp ilk vuruş sessizce yutuluyordu.
   // Alt dalların (selectUp/panUp/...) pointerId guard'ı null'da geçişlidir,
   // pinch kilidi yukarıda aynen korunur.
-  activePointerId = null
+  ps.clearActive()
   if (selActive || store.currentTool === 'select') {
     selectUp(e)
     return
@@ -1816,7 +1796,7 @@ const onKeyDown = (e: KeyboardEvent) => {
   if (!mod && !e.altKey && e.key === ' ' && !e.repeat) {
     if (t && t.tagName === 'BUTTON') return
     e.preventDefault()
-    spacePan = true
+    ps.setSpacePan(true)
     return
   }
   // Seçim aracı kısayolları (modsuz): sil / kaç / oklarla dürt.
@@ -1968,7 +1948,7 @@ const onKeyDown = (e: KeyboardEvent) => {
 }
 
 const onKeyUp = (e: KeyboardEvent) => {
-  if (e.key === ' ') spacePan = false
+  if (e.key === ' ') ps.setSpacePan(false)
   // Ok bırakılınca dürtme grubunu kapat — sonraki dürtme ayrı undo olsun.
   if (e.key.startsWith('Arrow')) store.endHistoryGroup()
 }
@@ -2156,7 +2136,7 @@ const askClearCanvas = async () => {
 }
 
 const clearCanvas = () => {
-  activePointerId = null
+  ps.clearActive()
   store.clearCanvas()
   updateHud(true)
 }
@@ -2265,7 +2245,7 @@ const askDeletePage = async () => {
   if (store.pages.length <= 1) return
   const msg = tf('delPageAsk', store.activePageIndex + 1)
   if (!(await askConfirm(msg, tf('strokesLost', store.drawingCount)))) return
-  activePointerId = null
+  ps.clearActive()
   store.deletePage(store.activePageIndex)
   updateHud(true)
 }
@@ -2360,7 +2340,7 @@ const onScrollBox = () => {
   if (scrollTimer) clearTimeout(scrollTimer)
   scrollTimer = setTimeout(() => {
     scrollTimer = undefined
-    if (!scrollMode.value || store.isDrawing || spacePan || smoothScrolling) return
+    if (!scrollMode.value || store.isDrawing || ps.spacePan() || smoothScrolling) return
     const box = scrollBox.value
     if (!box) return
     const br = box.getBoundingClientRect()
@@ -2430,8 +2410,8 @@ const toggleScroll = async () => {
   cancelTextGesture()
   cancelImageGesture()
   cancelPan()
-  activePointerId = null
-  pointers.clear()
+  ps.clearActive()
+  ps.clearPointers()
   scrollMode.value = !scrollMode.value
   store.setScrollLive(scrollMode.value)
   await nextTick()
@@ -2626,14 +2606,14 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (rafId !== 0) cancelAnimationFrame(rafId)
-  activePointerId = null
+  ps.clearActive()
   cancelSelGesture()
   cancelTextGesture()
   cancelImageGesture()
   cancelPan()
-  spacePan = false
-  pointers.clear()
-  gesture = null
+  ps.setSpacePan(false)
+  ps.clearPointers()
+  ps.clearGesture()
   stopSelWatch?.()
   stopSelWatch = null
   stopTextWatch?.()
