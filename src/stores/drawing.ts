@@ -2284,6 +2284,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (fastErase) {
       fastErase = false
       const radius = eraseRadius()
+      // Karar kesimDEN ÖNCE alınır: sweep bir metin kutusunu sökerse (metinler
+      // parçalanmaz, tümden gider) kontrol "nihai" der ama önizleme bandı yalnız
+      // süpürülen yeri boyar → kutunun bandın dışında kalan kısmı hayalet kalırdı.
+      const previewFinal = fastErasePreviewIsFinal()
       const tCut = performance.now()
       const hit = splitEraseSweep(erasePath, radius)
       drawingPerf.cutMs = performance.now() - tCut
@@ -2294,8 +2298,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       bb = null
       recountActive()
       // Önizleme zaten nihai görüntüyse repaint'i tamamen atla (e = 0);
-      // aksi halde yalnız süpürülen bandı geri boya (kirli bölge birikti).
-      if (fastErasePreviewIsFinal()) {
+      // aksi halde yalnız süpürülen/kirli bölgeyi geri boya (kirli kutu birikti).
+      if (previewFinal) {
         eraseDirty = null
         drawingPerf.eraseMs = 0
       } else {
