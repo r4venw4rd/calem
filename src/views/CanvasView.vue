@@ -1613,6 +1613,7 @@ import {
   settingsBackupName,
 } from '@/config/files'
 import { selectionBBox, coalescedOf } from '@/lib/select'
+import { takeLaunchHandle, onLaunchHandle, type LaunchHandle } from '@/lib/launchFile'
 import ToolIcon from '@/components/ToolIcon.vue'
 
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
@@ -2846,6 +2847,31 @@ const openCalemDoc = async () => {
   refreshThumbs()
 }
 
+// PWA dosya ilişkilendirme ile gelen .calem: doğrula → aç → handle'ı sakla (Ctrl+S yazar).
+const openLaunchedFile = async (handle: LaunchHandle) => {
+  if (store.hasInk && !(await askConfirm(t('calemReplace')))) return
+  let file: File
+  try {
+    file = await handle.getFile()
+  } catch {
+    return
+  }
+  const res = await store.importCalem(file)
+  if ('error' in res) {
+    showPdfError(res.error)
+    return
+  }
+  await store.setCalemHandle(handle)
+  store.dismissSavedSession()
+  updateHud(true)
+  refreshThumbs()
+}
+
+const drainLaunchSlot = () => {
+  const h = takeLaunchHandle()
+  if (h) void openLaunchedFile(h)
+}
+
 const onCalemFile = async (e: Event) => {
   showFile.value = false
   const input = e.target as HTMLInputElement
@@ -3131,6 +3157,7 @@ let stopPageWatch: (() => void) | null = null
 let stopSettingsWatch: (() => void) | null = null
 let stopChromeWatch: (() => void) | null = null
 let stopToolWatch: (() => void) | null = null
+let offLaunch: (() => void) | null = null
 
 // Sayfa şeridi: düşük çözünürlüklü önbellek, tick+sayfa-değişiminde debounce'lu tazelenir.
 const thumbs = ref<string[]>([])
@@ -3233,6 +3260,9 @@ onMounted(() => {
     },
   )
   stopThumbWatch = watch(() => [store.thumbTick, store.pages] as const, refreshThumbs)
+  // PWA dosya ilişkilendirme: soğuk açılışta slottaki handle + sıcak açılışlar.
+  drainLaunchSlot()
+  offLaunch = onLaunchHandle(drainLaunchSlot)
   refreshThumbs()
   stopBlockWatch = watch(() => store.thumbTick, refreshBlocks)
   stopPageWatch = watch(
@@ -3278,6 +3308,8 @@ onUnmounted(() => {
   stopChromeWatch = null
   stopToolWatch?.()
   stopToolWatch = null
+  offLaunch?.()
+  offLaunch = null
   if (blockTimer) clearTimeout(blockTimer)
   blockTimer = undefined
   blockEls.clear()
