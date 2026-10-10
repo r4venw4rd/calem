@@ -1,7 +1,8 @@
 <template>
   <div class="h-screen flex flex-col bg-[var(--page-bg)] overflow-hidden">
-    <header v-if="!presenting" class="relative z-10 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 max-sm:gap-x-2 max-sm:gap-y-1.5 max-sm:px-2 max-sm:py-2 bg-[var(--chrome-bg)] border-b border-[var(--chrome-border)]">
-      <img
+    <header v-if="!presenting" class="relative z-10 shrink-0 h-13 flex items-center justify-between gap-2 px-3 bg-[var(--chrome-bg)] border-b border-[var(--chrome-border)] select-none whitespace-nowrap">
+      <div class="flex items-center gap-1.5 shrink-0">
+        <img
         src="/icon-192.png"
         alt="Calem"
         title="Calem"
@@ -133,41 +134,149 @@
       <div ref="layersBtn" class="relative">
         <button
           @click="showLayers = !showLayers; showSettings = false"
-          class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
+          class="px-2.5 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
           :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showLayers }"
           :title="t('layersTitle')"
         >
           {{ t('layers') }} ({{ store.activePage.layers.length }})
         </button>
+
+        <div
+          ref="layersPanel"
+          v-if="showLayers"
+          class="absolute left-0 top-full mt-1 z-20 w-64 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
+          role="dialog"
+          :aria-label="t('layersDialog')"
+        >
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-medium text-[var(--chrome-title)]">{{ t('layersDialog') }} <span class="text-[var(--chrome-faint)]">{{ t('layersOnTop') }}</span></span>
+            <button @click="showLayers = false" class="text-[var(--chrome-faint)] hover:text-[var(--chrome-title)]" :title="t('close')">
+              {{ t('close') }}
+            </button>
+          </div>
+
+          <div
+            v-for="(l, ri) in layersTopFirst"
+            :key="l.id"
+            class="flex items-center gap-1 px-1 py-0.5 rounded"
+            :class="l.id === store.activePage.activeLayerId ? 'bg-indigo-600/20' : 'hover:bg-[var(--chrome-bg-soft)]'"
+          >
+            <input
+              type="checkbox"
+              :checked="l.visible"
+              @change="store.toggleLayerVisible(l.id)"
+              class="accent-indigo-600"
+              :title="t('visibility')"
+            />
+            <button
+              @click="activateLayer(l.id)"
+              class="flex-1 min-w-0 text-left truncate px-1 py-0.5 rounded"
+              :class="l.id === store.activePage.activeLayerId ? 'text-[var(--chrome-title)] font-medium' : 'text-[var(--chrome-text)]'"
+              :title="`${t('makeActive')}: ${l.name}`"
+            >
+              {{ l.name }}
+              <span class="font-mono text-[10px] text-[var(--chrome-faint)]">{{ l.strokes.length }}</span>
+            </button>
+            <button
+              @click="store.moveLayer(l.id, 1)"
+              :disabled="ri === 0"
+              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+              :title="t('moveUp')"
+            >
+              ↑
+            </button>
+            <button
+              @click="store.moveLayer(l.id, -1)"
+              :disabled="ri === layersTopFirst.length - 1"
+              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+              :title="t('moveDown')"
+            >
+              ↓
+            </button>
+            <button
+              @click="renameLayer(l.id)"
+              class="px-1 rounded hover:bg-[var(--chrome-bg-soft)]"
+              :title="t('nameLayer')"
+            >
+              {{ t('rename') }}
+            </button>
+            <button
+              @click="askDeleteLayer(l.id)"
+              class="px-1 rounded hover:bg-red-600/40"
+              :title="t('deleteLayer')"
+            >
+              {{ t('delete') }}
+            </button>
+          </div>
+
+          <button
+            @click="addLayerBtn"
+            class="mt-2 w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition font-mono"
+            :title="t('newLayerTitle')"
+          >
+            {{ t('newLayer') }}
+          </button>
+        </div>
       </div>
 
-      <div v-if="!isMobile" class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]" role="toolbar" :aria-label="t('tools')">
+      <span v-if="store.pdfBusy" class="text-[10px] text-yellow-400/80 font-mono ml-1">{{ t('processing') }}</span>
+      <span v-if="pdfError" class="text-[10px] text-red-400 font-mono ml-1">{{ pdfError }}</span>
+    </div>
+
+    <!-- ORTA: Desktop Araçları & Seçili Araç Ayarları -->
+    <div v-if="!isMobile" class="flex items-center gap-1.5 shrink-0">
+      <!-- Araç Dock'u -->
+      <div class="flex items-center gap-0.5 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]" role="toolbar" :aria-label="t('tools')">
         <button
           v-for="tool in visibleTools"
           :key="tool"
           @click="store.setTool(tool)"
-          :class="store.currentTool === tool ? TOOL_META[tool].active : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="px-2 py-1 rounded text-xs font-medium transition flex items-center gap-1"
+          :class="store.currentTool === tool ? (TOOL_META[tool].active + ' shadow-xs') : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)]'"
+          class="w-7 h-7 rounded-md flex items-center justify-center transition-all"
           :title="locTools[tool].title"
+          :aria-label="locTools[tool].label"
         >
           <svg v-if="TOOL_META[tool].icon === 'pen'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7l7 9z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
           </svg>
           <svg v-else-if="TOOL_META[tool].icon === 'hl'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 11l3 3m-2.5-2.5L4 17l5-1.5L19.5 5 15 3.5 9.5 8.5z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 11l3 3m-2.5-2.5L4 17l5-1.5L19.5 5 15 3.5 9.5 8.5z M4 20l4-1" />
           </svg>
           <svg v-else-if="TOOL_META[tool].icon === 'eraser'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m12 4h4m4-4v4m-4-6h4m-5.303-5.303L16 16" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10M5.5 14.5L14 6l4.5 4.5-8.5 8.5H5.5v-4.5z" />
+          </svg>
+          <svg v-else-if="TOOL_META[tool].icon === 'hand'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11V7a2 2 0 014 0v4m0-2a2 2 0 014 0v3m0-2a2 2 0 014 0v5a7 7 0 01-14 0V9a2 2 0 014 0v3" />
           </svg>
           <svg v-else-if="TOOL_META[tool].icon === 'select'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 7-6 2-2 6-6-15z" />
           </svg>
-          {{ locTools[tool].label }}
+          <svg v-else-if="TOOL_META[tool].icon === 'line'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 20L20 4" />
+          </svg>
+          <svg v-else-if="TOOL_META[tool].icon === 'rect'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="4" y="4" width="16" height="16" rx="2" stroke-width="2" stroke="currentColor" />
+          </svg>
+          <svg v-else-if="TOOL_META[tool].icon === 'ellipse'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="8" stroke-width="2" stroke="currentColor" />
+          </svg>
+          <svg v-else-if="TOOL_META[tool].icon === 'arrow'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19L19 5M19 5v8M19 5H11" />
+          </svg>
+          <svg v-else-if="TOOL_META[tool].icon === 'text'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M12 6v14" />
+          </svg>
+          <svg v-else-if="TOOL_META[tool].icon === 'image'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2" stroke="currentColor" />
+            <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15l-5-5L5 21" />
+          </svg>
         </button>
       </div>
 
+      <!-- Seçim İşlemleri (Select aktifken) -->
       <div
-        v-if="!isMobile && store.currentTool === 'select'"
+        v-if="store.currentTool === 'select'"
         class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]"
         role="toolbar"
         :aria-label="t('selOps')"
@@ -222,16 +331,23 @@
         </button>
       </div>
 
-      <div v-if="!isMobile && store.currentTool !== 'select'" class="flex flex-col gap-1" role="toolbar" :aria-label="t('palette')">
-        <div class="flex items-center gap-1.5">
-          <select
-            :value="store.activePaletteId"
-            @change="store.setActivePalette(($event.target as HTMLSelectElement).value)"
-            class="max-w-24 px-1.5 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)]"
-            :title="t('paletteTitle')"
-          >
-            <option v-for="p in store.palettes" :key="p.id" :value="p.id">{{ p.name }}</option>
-          </select>
+      <!-- Renk Paleti (Tek Satır: Hazır Palet + Renkler + Damlalık + Custom Renkler) -->
+      <div
+        v-if="store.currentTool !== 'select' && store.currentTool !== 'hand'"
+        class="flex items-center gap-1.5"
+        role="toolbar"
+        :aria-label="t('palette')"
+      >
+        <span class="w-px h-5 bg-[var(--chrome-border)] mx-0.5"></span>
+        <select
+          :value="store.activePaletteId"
+          @change="store.setActivePalette(($event.target as HTMLSelectElement).value)"
+          class="max-w-22 px-1.5 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)] focus:outline-none"
+          :title="t('paletteTitle')"
+        >
+          <option v-for="p in store.palettes" :key="p.id" :value="p.id">{{ p.name }}</option>
+        </select>
+        <div class="flex items-center gap-1 shrink-0">
           <span
             v-for="hex in store.activePalette.colors"
             :key="hex"
@@ -240,8 +356,8 @@
             <button
               @click="store.setColor(hex)"
               :title="hex"
-              class="w-6 h-6 rounded-full border transition block"
-              :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
+              class="w-5 h-5 rounded-full border transition block"
+              :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110 ring-2 ring-indigo-500/60' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
               :style="{ background: hex }"
             ></button>
             <button
@@ -253,14 +369,18 @@
             </button>
           </span>
         </div>
-        <div class="flex items-center gap-1.5">
+
+        <span class="w-px h-4 bg-[var(--chrome-border)] mx-0.5"></span>
+
+        <!-- Custom Renkler & Damlalık -->
+        <div class="flex items-center gap-1 shrink-0">
           <input
             ref="customPicker"
             type="color"
             :value="store.color"
             @input="onCustomInput(($event.target as HTMLInputElement).value)"
             @cancel="pickerArmed = false"
-            class="w-6 h-6 rounded-full appearance-none bg-transparent border border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0 shrink-0"
+            class="w-5 h-5 rounded-full appearance-none bg-transparent border border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0 shrink-0"
             :title="t('customColor')"
           />
           <span
@@ -272,9 +392,9 @@
               v-if="store.customColors[i - 1]"
               @click="store.setColor(store.customColors[i - 1]!); editingCustom = null"
               :title="`${store.customColors[i - 1]} ${t('editCustomSuffix')}`"
-              class="w-6 h-6 rounded-full border transition block"
+              class="w-5 h-5 rounded-full border transition block"
               :class="[
-                store.color.toLowerCase() === store.customColors[i - 1] ? 'border-[var(--chrome-title)] scale-110' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]',
+                store.color.toLowerCase() === store.customColors[i - 1] ? 'border-[var(--chrome-title)] scale-110 ring-2 ring-indigo-500/60' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]',
                 editingCustom === i - 1 ? 'ring-2 ring-indigo-500' : '',
               ]"
               :style="{ background: store.customColors[i - 1] }"
@@ -283,7 +403,7 @@
               v-else-if="i === firstEmptySlot"
               @click="pickCustom()"
               :title="t('openPicker')"
-              class="w-6 h-6 rounded-full border border-dashed border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition font-mono block"
+              class="w-5 h-5 rounded-full border border-dashed border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition font-mono flex items-center justify-center leading-none"
             >
               +
             </button>
@@ -307,30 +427,36 @@
         </div>
       </div>
 
-      <div v-if="!isMobile && store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'" class="flex items-center gap-2">
-        <span class="text-sm text-[var(--chrome-muted)]">{{ t('width') }}</span>
+      <!-- Kalınlık, Çizgi Stili, Opaklık ve Silgi Modu -->
+      <div
+        v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'"
+        class="flex items-center gap-1.5"
+      >
+        <span class="w-px h-4 bg-[var(--chrome-border)] mx-0.5"></span>
+        <span class="text-xs text-[var(--chrome-muted)] whitespace-nowrap">{{ t('width') }}</span>
         <input
           type="range"
           :min="store.widthMin"
           :max="store.widthMax"
           :value="store.strokeWidth"
           @input="store.setStrokeWidth(Number(($event.target as HTMLInputElement).value))"
-          class="w-24 accent-indigo-600"
+          class="w-18 accent-indigo-600 cursor-pointer"
         />
-        <span class="text-xs text-[var(--chrome-text)] w-6 text-right">{{ store.strokeWidth }}</span>
+        <span class="text-xs text-[var(--chrome-text)] w-5 text-right font-mono">{{ store.strokeWidth }}</span>
+
         <template v-if="['pen', 'line', 'rect', 'ellipse', 'arrow'].includes(store.currentTool)">
-          <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
+          <span class="w-px h-4 bg-[var(--chrome-border)] mx-0.5"></span>
           <select
             :value="store.strokeDash"
             @change="store.setStrokeDash(($event.target as HTMLSelectElement).value)"
-            class="px-1.5 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)]"
+            class="px-1.5 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)] focus:outline-none"
             :title="t('lineStyle')"
           >
             <option value="solid">{{ t('solid') }}</option>
             <option value="dash">{{ t('dashed') }}</option>
             <option value="dot">{{ t('dotted') }}</option>
           </select>
-          <span class="text-xs text-[var(--chrome-muted)]">{{ t('opacity') }}</span>
+          <span class="text-xs text-[var(--chrome-muted)] whitespace-nowrap">{{ t('opacity') }}</span>
           <input
             type="range"
             :min="SLIDERS.opacity.min"
@@ -338,13 +464,14 @@
             :step="SLIDERS.opacity.step"
             :value="store.strokeOpacity"
             @input="store.setStrokeOpacity(Number(($event.target as HTMLInputElement).value))"
-            class="w-16 accent-indigo-600"
+            class="w-14 accent-indigo-600 cursor-pointer"
             :title="t('opacity')"
           />
-          <span class="text-xs text-[var(--chrome-text)] w-8 text-right font-mono">{{ Math.round(store.strokeOpacity * 100) }}%</span>
+          <span class="text-xs text-[var(--chrome-text)] w-7 text-right font-mono">{{ Math.round(store.strokeOpacity * 100) }}%</span>
         </template>
+
         <template v-if="store.currentTool === 'eraser'">
-          <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
+          <span class="w-px h-4 bg-[var(--chrome-border)] mx-0.5"></span>
           <button
             @click="store.setEraserMode('standard')"
             :class="store.eraserMode === 'standard' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
@@ -364,8 +491,10 @@
         </template>
       </div>
 
-      <div v-if="!isMobile && store.currentTool === 'text'" class="flex items-center gap-2">
-        <span class="text-sm text-[var(--chrome-muted)]">{{ t('textLabel') }}</span>
+      <!-- Metin Boyutu -->
+      <div v-if="store.currentTool === 'text'" class="flex items-center gap-1.5">
+        <span class="w-px h-4 bg-[var(--chrome-border)] mx-0.5"></span>
+        <span class="text-xs text-[var(--chrome-muted)] whitespace-nowrap">{{ t('textLabel') }}</span>
         <input
           type="range"
           :min="SLIDERS.textSize.min"
@@ -373,34 +502,71 @@
           :step="SLIDERS.textSize.step"
           :value="store.textSize"
           @input="store.setTextSize(Number(($event.target as HTMLInputElement).value))"
-          class="w-24 accent-indigo-600"
+          class="w-20 accent-indigo-600 cursor-pointer"
           :title="t('textSizeTitle')"
         />
-        <span class="text-xs text-[var(--chrome-text)] w-6 text-right">{{ store.textSize }}</span>
+        <span class="text-xs text-[var(--chrome-text)] w-5 text-right font-mono">{{ store.textSize }}</span>
       </div>
+    </div>
 
+    <!-- SAĞ: Undo / Redo / Temizle / Sunum -->
+    <div class="flex items-center gap-1 shrink-0 ml-auto">
+      <template v-if="!isMobile">
+        <!-- Geri al (Undo) -->
+        <button
+          @click="undo"
+          :disabled="store.undoStack.length === 0"
+          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-30 disabled:cursor-not-allowed"
+          :title="t('undoTitle')"
+          aria-label="Geri al"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2M3 10l5-5M3 10l5 5" />
+          </svg>
+        </button>
+
+        <!-- Yinele (Redo) -->
+        <button
+          @click="redo"
+          :disabled="store.redoStack.length === 0"
+          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-30 disabled:cursor-not-allowed"
+          :title="t('redoTitle')"
+          aria-label="Yinele"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10H11a5 5 0 00-5 5v2M21 10l-5-5M21 10l-5 5" />
+          </svg>
+        </button>
+
+        <span class="w-px h-5 bg-[var(--chrome-border)] mx-0.5"></span>
+      </template>
+
+      <!-- Temizle (Clear Canvas) -->
       <button
-        v-if="!isMobile"
-        @click="undo"
-        :disabled="store.undoStack.length === 0"
-        class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition disabled:opacity-40 disabled:cursor-not-allowed"
-        :title="t('undoTitle')"
+        @click="askClearCanvas"
+        class="h-8 px-2.5 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition flex items-center gap-1.5"
+        :title="t('clearTitle')"
       >
-        {{ t('undo') }}
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m5 0V4a1 1 0 011-1h6a1 1 0 011 1v3M9 11v6m6-6v6" />
+        </svg>
+        <span class="hidden xl:inline">{{ t('clear') }}</span>
       </button>
 
+      <!-- Sunum (Present) -->
       <button
-        v-if="!isMobile"
-        @click="redo"
-        :disabled="store.redoStack.length === 0"
-        class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition disabled:opacity-40 disabled:cursor-not-allowed"
-        :title="t('redoTitle')"
+        @click="togglePresent"
+        class="h-8 px-2.5 rounded-lg text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition flex items-center gap-1.5"
+        :title="t('presentTitle')"
       >
-        {{ t('redo') }}
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <rect x="2" y="3" width="20" height="14" rx="2" stroke-width="2" stroke="currentColor" fill="none" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 21h8m-4-4v4" />
+        </svg>
+        <span class="hidden xl:inline">{{ t('present') }}</span>
       </button>
-
-      <span v-if="store.pdfBusy" class="text-[10px] text-yellow-400/80 font-mono">{{ t('processing') }}</span>
-      <span v-if="pdfError" class="text-[10px] text-red-400 font-mono">{{ pdfError }}</span>
+    </div>
+  </header>
 
       <div
         v-if="showSettings"
@@ -792,102 +958,6 @@
       </div>
       </div>
 
-      <div
-        ref="layersPanel"
-        v-if="showLayers"
-        class="absolute left-2 top-full mt-1 z-20 w-64 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
-        role="dialog"
-        :aria-label="t('layersDialog')"
-      >
-        <div class="flex items-center justify-between mb-2">
-          <span class="font-medium text-[var(--chrome-title)]">{{ t('layersDialog') }} <span class="text-[var(--chrome-faint)]">{{ t('layersOnTop') }}</span></span>
-          <button @click="showLayers = false" class="text-[var(--chrome-faint)] hover:text-[var(--chrome-title)]" :title="t('close')">
-            {{ t('close') }}
-          </button>
-        </div>
-
-        <div
-          v-for="(l, ri) in layersTopFirst"
-          :key="l.id"
-          class="flex items-center gap-1 px-1 py-0.5 rounded"
-          :class="l.id === store.activePage.activeLayerId ? 'bg-indigo-600/20' : 'hover:bg-[var(--chrome-bg-soft)]'"
-        >
-          <input
-            type="checkbox"
-            :checked="l.visible"
-            @change="store.toggleLayerVisible(l.id)"
-            class="accent-indigo-600"
-            :title="t('visibility')"
-          />
-          <button
-            @click="activateLayer(l.id)"
-            class="flex-1 min-w-0 text-left truncate px-1 py-0.5 rounded"
-            :class="l.id === store.activePage.activeLayerId ? 'text-[var(--chrome-title)] font-medium' : 'text-[var(--chrome-text)]'"
-            :title="`${t('makeActive')}: ${l.name}`"
-          >
-            {{ l.name }}
-            <span class="font-mono text-[10px] text-[var(--chrome-faint)]">{{ l.strokes.length }}</span>
-          </button>
-          <button
-            @click="store.moveLayer(l.id, 1)"
-            :disabled="ri === 0"
-            class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
-            :title="t('moveUp')"
-          >
-            ↑
-          </button>
-          <button
-            @click="store.moveLayer(l.id, -1)"
-            :disabled="ri === layersTopFirst.length - 1"
-            class="px-1 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
-            :title="t('moveDown')"
-          >
-            ↓
-          </button>
-          <button
-            @click="renameLayer(l.id)"
-            class="px-1 rounded hover:bg-[var(--chrome-bg-soft)]"
-            :title="t('nameLayer')"
-          >
-            {{ t('rename') }}
-          </button>
-          <button
-            @click="askDeleteLayer(l.id)"
-            class="px-1 rounded hover:bg-red-600/40"
-            :title="t('deleteLayer')"
-          >
-            {{ t('delete') }}
-          </button>
-        </div>
-
-        <button
-          @click="addLayerBtn"
-          class="mt-2 w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition font-mono"
-          :title="t('newLayerTitle')"
-        >
-          {{ t('newLayer') }}
-        </button>
-      </div>
-
-      <button
-        @click="askClearCanvas"
-        class="px-3 py-1 rounded text-xs font-medium text-red-400 hover:text-red-300 transition flex items-center gap-1"
-        :title="t('clearTitle')"
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m12 4h4m4-4v4m-4-6h4m-5.303-5.303L16 16" />
-        </svg>
-        {{ t('clear') }}
-      </button>
-
-      <button
-        @click="togglePresent"
-        class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
-        :title="t('presentTitle')"
-      >
-        {{ t('present') }}
-      </button>
-    </header>
 
     <div class="relative flex-1 bg-[var(--page-bg)] min-h-0">
       <!-- Tekli mod: tam-alan canlı canvas. Kaydırmalı mod: statik bloklar + aktif slota yüzen canlı canvas. -->
