@@ -18,6 +18,7 @@ import {
   strokeBBox,
 } from '../lib/select'
 import { splitRunsOutside } from '../lib/erase'
+import { wrapTextToWidth } from '../lib/text'
 import { calemFileName, pdfFileName } from '../config/files'
 import { ALL_TOOLS, DEFAULT_WIDTHS, WIDTH_MAX, WIDTH_MIN } from '../config/tools'
 import { A4, DEFAULT_PAPER_BACKGROUND, PAGE_FORMATS, PAPER_THEMES } from '../config/paper'
@@ -89,6 +90,8 @@ export interface TextItem {
   text: string
   color: string
   size: number
+  /** Metin alanı genişliği (pt). Varsa satırlar bu genişliğe sarılır (Xournal metin kutusu gibi). */
+  w?: number
 }
 export const TEXT_SIZE_MIN = 8
 export const TEXT_SIZE_MAX = 120
@@ -1059,11 +1062,16 @@ export const useDrawingStore = defineStore('drawing', () => {
   const clearActiveText = () => {
     activeTextId.value = null
   }
+  // Kutu genişliği varsa sarma sonrası satır sayısı tahmini (kaba).
+  const estimateLines = (t: TextItem): number => {
+    if (!t.w || t.w <= 0) return t.text.split('\n').length
+    return Math.max(1, wrapTextToWidth(t.text, t.w, t.size).length)
+  }
   // Metin kaba kutusu (ölçümsüz tahmin; vuruş-testi ve daire-değme için yeterli).
   const textBBoxOf = (t: TextItem): { x0: number; y0: number; x1: number; y1: number } => {
     const lines = t.text.split('\n')
-    const w = Math.max(...lines.map((l) => l.length)) * t.size * 0.62 + 8
-    const h = lines.length * t.size * 1.25 + 4
+    const w = t.w && t.w > 0 ? t.w : Math.max(...lines.map((l) => l.length)) * t.size * 0.62 + 8
+    const h = estimateLines(t) * t.size * 1.25 + 4
     return { x0: t.x - 4, y0: t.y - 4, x1: t.x + w, y1: t.y + h }
   }
   // Tıklanan noktadaki en üst metin (kaba kutu: ölçümsüz tahmin, editör gerçeği gösterir).
@@ -1077,8 +1085,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     return null
   }
-  const createText = (x: number, y: number): string => {
+  const createText = (x: number, y: number, w?: number): string => {
     const size = activePage.value.size
+    const boxW =
+      typeof w === 'number' && Number.isFinite(w) && w >= 40 ? Math.min(size.w, Math.round(w)) : undefined
     const item: TextItem = {
       id: newStrokeId(),
       x: Math.min(size.w - 8, Math.max(0, x)),
@@ -1086,6 +1096,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       text: '',
       color: color.value,
       size: textSize.value,
+      ...(boxW !== undefined ? { w: boxW } : {}),
     }
     pushHistory()
     activePage.value.texts.push(item)
@@ -2311,7 +2322,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       ctx.fillStyle = t.color
       ctx.font = `${t.size}px sans-serif`
       const lh = t.size * 1.25
-      const lines = t.text.split('\n')
+      const lines = wrapTextToWidth(t.text, t.w ?? 0, t.size)
       for (let i = 0; i < lines.length; i++) {
         ctx.fillText(lines[i]!, t.x, t.y + i * lh)
       }
@@ -2778,7 +2789,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       const [r, g, b] = hexToRgb(t.color)
       doc.setTextColor(r, g, b)
       doc.setFontSize(t.size)
-      doc.text(t.text.split('\n'), t.x, t.y, { baseline: 'top', lineHeightFactor: 1.25 })
+      doc.text(wrapTextToWidth(t.text, t.w ?? 0, t.size), t.x, t.y, { baseline: 'top', lineHeightFactor: 1.25 })
     }
   }
 
@@ -3230,6 +3241,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     text: t.text,
     color: t.color,
     size: t.size,
+    ...(t.w !== undefined ? { w: t.w } : {}),
   })
 
   const snapshotImage = (t: ImageItem): ImageItem => ({
@@ -3331,6 +3343,9 @@ export const useDrawingStore = defineStore('drawing', () => {
           typeof r.size === 'number' && Number.isFinite(r.size)
             ? Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, Math.round(r.size)))
             : 24,
+        ...(typeof r.w === 'number' && Number.isFinite(r.w) && r.w >= 40
+          ? { w: Math.round(r.w) }
+          : {}),
       })
     }
     return clean

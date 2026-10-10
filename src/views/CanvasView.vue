@@ -1812,6 +1812,9 @@ let textDownHit: string | null = null
 let textMoving = false
 let textMoveId: string | null = null
 let textMoveLast: { x: number; y: number } | null = null
+// Boş alanda sürükleme: Xournal metin kutusu gibi genişlik seçimi (canlı önizleme).
+let textBoxing = false
+let textBoxCurrent: { x: number; y: number } | null = null
 
 const cancelTextGesture = () => {
   textDownPos = null
@@ -1819,6 +1822,38 @@ const cancelTextGesture = () => {
   textMoving = false
   textMoveId = null
   textMoveLast = null
+  textBoxing = false
+  textBoxCurrent = null
+}
+
+// Sürükleyerek metin kutusu seçiminin kesikli önizlemesi (overlay'e doğrudan).
+const drawTextBoxOverlay = () => {
+  const c = overlayCanvas.value
+  if (!c) return
+  const ctx = c.getContext('2d')
+  if (!ctx) return
+  const dpr = store.dpr || window.devicePixelRatio || 1
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.clearRect(0, 0, c.width, c.height)
+  if (!textBoxing || !textDownPos || !textBoxCurrent) return
+  const t = store.getViewTransform()
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  const sx = (x: number) => x * t.scale + t.ox
+  const sy = (y: number) => y * t.scale + t.oy
+  const x0 = sx(Math.min(textDownPos.x, textBoxCurrent.x))
+  const y0 = sy(Math.min(textDownPos.y, textBoxCurrent.y))
+  const x1 = sx(Math.max(textDownPos.x, textBoxCurrent.x))
+  const y1 = sy(Math.max(textDownPos.y, textBoxCurrent.y))
+  ctx.save()
+  ctx.setLineDash([6, 4])
+  ctx.lineWidth = 1.2
+  ctx.strokeStyle = '#818cf8'
+  ctx.fillStyle = 'rgba(99,102,241,0.08)'
+  ctx.beginPath()
+  ctx.rect(x0, y0, x1 - x0, y1 - y0)
+  ctx.fill()
+  ctx.stroke()
+  ctx.restore()
 }
 
 const textDown = (e: PointerEvent) => {
@@ -1836,6 +1871,10 @@ const textDown = (e: PointerEvent) => {
   textMoving = false
   textMoveId = null
   textMoveLast = null
+  // Boş alan: metin kutusu seçimine başla (sürüklenirse genişlik; tıklanırsa serbest metin).
+  textBoxing = !hit
+  textBoxCurrent = textBoxing ? p : null
+  if (textBoxing) drawTextBoxOverlay()
 }
 
 const textMove = (e: PointerEvent) => {
@@ -1856,8 +1895,11 @@ const textMove = (e: PointerEvent) => {
     } else if (textMoving && textMoveId && textMoveLast) {
       store.moveText(textMoveId, p.x - textMoveLast.x, p.y - textMoveLast.y)
       textMoveLast = p
+    } else if (textBoxing) {
+      textBoxCurrent = p
     }
   }
+  if (textBoxing) drawTextBoxOverlay()
 }
 
 const textUp = (e?: PointerEvent) => {
@@ -1865,8 +1907,11 @@ const textUp = (e?: PointerEvent) => {
   const wasMoving = textMoving
   const hit = textDownHit
   const at = textDownPos
+  const boxCur = textBoxCurrent
+  const wasBoxing = textBoxing
   cancelTextGesture()
   activePointerId = null
+  if (wasBoxing) drawTextBoxOverlay()
   if (wasMoving) {
     updateHud(true)
     return
@@ -1875,8 +1920,13 @@ const textUp = (e?: PointerEvent) => {
     // Mevcut metne tık: düzenle.
     store.activeTextId = hit
   } else if (at) {
-    // Boşa tık: yeni metin + düzenle.
-    store.createText(at.x, at.y)
+    // Ölçek/pt uzayında anlamlı sürükleme → kutu genişliği; aksi halde serbest metin.
+    const dx = boxCur ? Math.abs(boxCur.x - at.x) : 0
+    if (boxCur && dx >= 14) {
+      store.createText(Math.min(at.x, boxCur.x), Math.min(at.y, boxCur.y), dx)
+    } else {
+      store.createText(at.x, at.y)
+    }
   }
   updateHud(true)
 }
