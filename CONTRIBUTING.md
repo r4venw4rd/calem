@@ -9,6 +9,7 @@ npm install
 npm run dev        # http://localhost:5173
 npm test           # vitest, everything must be green
 npm run type-check # required before a PR
+npm run test:e2e   # Playwright against the system Chrome (starts its own dev server)
 ```
 
 ## Rules
@@ -28,6 +29,7 @@ npm run type-check # required before a PR
 
 - [ ] `npm test` green
 - [ ] `npm run type-check` clean
+- [ ] Touch the canvas/erase/undo path? `npm run test:e2e` green too
 - [ ] New logic tested / manual checklist updated
 - [ ] No synchronous painting on a millisecond-critical path
 
