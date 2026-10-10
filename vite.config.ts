@@ -1,6 +1,6 @@
 import { fileURLToPath, URL } from 'node:url'
 
-import { defineConfig } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import tailwindcssVite from '@tailwindcss/vite'
@@ -25,5 +25,10 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
+  },
+  test: {
+    // Birim testleri `tests/` altında; e2e ayrı koşar (playwright.config.ts).
+    // Hariç tutulmazsa vitest, Playwright spec'lerini de toplamaya çalışır.
+    exclude: [...configDefaults.exclude, 'tests/e2e/**'],
   },
 })
