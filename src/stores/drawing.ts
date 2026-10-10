@@ -753,11 +753,16 @@ export const useDrawingStore = defineStore('drawing', () => {
   let viewZoom = 1
   let viewPanX = 0
   let viewPanY = 0
+  // Kaydırmalı modda canlı canvas: slot zaten zoom'lu boyutta olduğundan boya yolu
+  // zoom'u bir kez sayar (slot + paint çift saymasın). Tekli modda etkisiz.
+  let scrollLive = false
+  const ze = () => (scrollLive ? 1 : viewZoom)
+  const zoomFactor = ref(1)
   const zoomLabel = ref('100%')
   // Zoom kelepçesi: config/engine (ZOOM_MIN/ZOOM_MAX).
-  const effScale = () => (viewScale || 1) * viewZoom
-  const effOx = () => viewOx * viewZoom + viewPanX
-  const effOy = () => viewOy * viewZoom + viewPanY
+  const effScale = () => (viewScale || 1) * ze()
+  const effOx = () => viewOx * ze() + viewPanX
+  const effOy = () => viewOy * ze() + viewPanY
   const layoutView = () => {
     const canvas = canvasRef.value
     const page = activePage.value
@@ -775,6 +780,7 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // --- Zoom / pan (pinch, ctrl-wheel, trackpad-kaydırma) ---
   const syncZoomLabel = () => {
+    zoomFactor.value = viewZoom
     zoomLabel.value = `${Math.round(viewZoom * 100)}%`
   }
 
@@ -786,11 +792,13 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // İç çekirdek: verilen ekran noktasının altındaki sayfa noktası sabit kalır.
+  // Okuma terimleri telafili (ze): kaydırmalı modda slot zaten zoom'lu boyutta.
+  // Yazım terimleri (nz) hedef state'i tutar; slot reflow sonrası ankraj yaklaşık olur.
   const applyZoomAt = (nz: number, cx: number, cy: number) => {
     const fs = viewScale || 1
-    const es = fs * viewZoom
-    const px = (cx - (viewOx * viewZoom + viewPanX)) / es
-    const py = (cy - (viewOy * viewZoom + viewPanY)) / es
+    const es = fs * ze()
+    const px = (cx - (viewOx * ze() + viewPanX)) / es
+    const py = (cy - (viewOy * ze() + viewPanY)) / es
     viewZoom = nz
     viewPanX = cx - (px * fs * nz + viewOx * nz)
     viewPanY = cy - (py * fs * nz + viewOy * nz)
@@ -843,6 +851,14 @@ export const useDrawingStore = defineStore('drawing', () => {
     syncZoomLabel()
     repaintBase()
     clearOverlay()
+  }
+
+  // Kaydırmalı mod canlı canvas bayrağı: mod değişiminde view çağrılır,
+  // pan sıfırlanır (farklı geometriye eski pan taşınmaz).
+  const setScrollLive = (v: boolean) => {
+    scrollLive = v
+    viewPanX = 0
+    viewPanY = 0
   }
 
   // Ekran merkezli kademeli zoom (butonlar için).
@@ -4001,6 +4017,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     exportPageToCanvas,
     thumbTick,
     zoomLabel,
+    zoomFactor,
+    setScrollLive,
     zoomBy,
     panBy,
     pinch,

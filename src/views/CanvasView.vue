@@ -1151,12 +1151,16 @@
           <div
             v-for="(p, i) in store.pages"
             :key="p.id"
+            class="w-full"
+          >
+          <div
             :ref="(el) => setBlockRef(el, p.id)"
-            class="w-full rounded-sm overflow-hidden cursor-pointer"
-            :style="{ aspectRatio: `${p.size.w} / ${p.size.h}`, visibility: i === store.activePageIndex ? 'hidden' : 'visible' }"
+            class="mx-auto rounded-sm overflow-hidden cursor-pointer scroll-mt-2 min-[640px]:scroll-mt-[72px]"
+            :style="{ width: `${store.zoomFactor * 100}%`, aspectRatio: `${p.size.w} / ${p.size.h}`, visibility: i === store.activePageIndex ? 'hidden' : 'visible' }"
             @pointerdown="onBlockDown"
             @pointerup="onBlockUp($event, i)"
           ></div>
+          </div>
         </div>
         <div ref="activeSlot" class="absolute" style="display: none">
           <canvas
@@ -3163,11 +3167,24 @@ const positionSlot = () => {
   slot.style.height = `${block.offsetHeight}px`
 }
 
-const scrollActiveIntoView = () => {
+// Programatik yumuşak kaydırma uçuşurken spy ara sayfalara takılmasın.
+let smoothScrolling = false
+let smoothTimer: ReturnType<typeof setTimeout> | undefined
+const scrollActiveIntoView = (smooth = true) => {
   if (!scrollMode.value) return
   const pg = store.pages[store.activePageIndex]
   const block = pg ? blockEls.get(pg.id) : undefined
-  block?.scrollIntoView({ block: 'nearest' })
+  if (!block) return
+  const reduce = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  const useSmooth = smooth && !reduce
+  if (useSmooth) {
+    smoothScrolling = true
+    if (smoothTimer) clearTimeout(smoothTimer)
+    smoothTimer = setTimeout(() => {
+      smoothScrolling = false
+    }, 650)
+  }
+  block.scrollIntoView({ block: 'nearest', behavior: useSmooth ? 'smooth' : 'auto' })
 }
 
 // Kaydırmalı modda sayfayı yerinde aktifleştir (görünüm kaymaz, canlı canvas taşınır).
@@ -3185,7 +3202,7 @@ const onScrollBox = () => {
   if (scrollTimer) clearTimeout(scrollTimer)
   scrollTimer = setTimeout(() => {
     scrollTimer = undefined
-    if (!scrollMode.value || store.isDrawing || spacePan) return
+    if (!scrollMode.value || store.isDrawing || spacePan || smoothScrolling) return
     const box = scrollBox.value
     if (!box) return
     const br = box.getBoundingClientRect()
@@ -3237,7 +3254,9 @@ const refreshBlocks = () => {
         if (p.id === activeId) continue
         const el = blockEls.get(p.id)
         if (!el) continue
-        const c = store.exportPageToCanvas(p, p.size.w > 0 ? 860 / p.size.w : 0.5)
+        // Statik resim zoom'u takip eder (bitmap tavanlı, canlı ile aynı ölçek hissi).
+        const z = Math.min(2.5, Math.max(0.5, store.zoomFactor))
+        const c = store.exportPageToCanvas(p, p.size.w > 0 ? (860 / p.size.w) * z : 0.5)
         if (!c) continue
         c.className = 'block w-full h-auto'
         el.replaceChildren(c)
@@ -3256,6 +3275,7 @@ const toggleScroll = async () => {
   activePointerId = null
   pointers.clear()
   scrollMode.value = !scrollMode.value
+  store.setScrollLive(scrollMode.value)
   await nextTick()
   bindCanvases()
   if (scrollMode.value) {
@@ -3275,6 +3295,7 @@ let stopPageWatch: (() => void) | null = null
 let stopSettingsWatch: (() => void) | null = null
 let stopChromeWatch: (() => void) | null = null
 let stopToolWatch: (() => void) | null = null
+let stopZoomWatch: (() => void) | null = null
 let offLaunch: (() => void) | null = null
 
 // Sayfa şeridi: düşük çözünürlüklü önbellek, tick+sayfa-değişiminde debounce'lu tazelenir.
@@ -3400,6 +3421,17 @@ onMounted(() => {
     },
   )
   stopThumbWatch = watch(() => [store.thumbTick, store.pages] as const, refreshThumbs)
+  // Zoom değişince kaydırmalı yerleşimi yenile (tekli modda etkisiz).
+  stopZoomWatch = watch(
+    () => store.zoomLabel,
+    () => {
+      if (!scrollMode.value) return
+      positionSlot()
+      store.resizeCanvas()
+      refreshBlocks()
+      drawSelectionOverlay()
+    },
+  )
   // PWA dosya ilişkilendirme: soğuk açılışta slottaki handle + sıcak açılışlar.
   drainLaunchSlot()
   offLaunch = onLaunchHandle(drainLaunchSlot)
@@ -3450,12 +3482,16 @@ onUnmounted(() => {
   stopChromeWatch = null
   stopToolWatch?.()
   stopToolWatch = null
+  stopZoomWatch?.()
+  stopZoomWatch = null
   offLaunch?.()
   offLaunch = null
   if (blockTimer) clearTimeout(blockTimer)
   blockTimer = undefined
   if (scrollTimer) clearTimeout(scrollTimer)
   scrollTimer = undefined
+  if (smoothTimer) clearTimeout(smoothTimer)
+  smoothTimer = undefined
   blockEls.clear()
   mobileMq?.removeEventListener('change', syncIsMobile)
   mobileMq = null
