@@ -975,7 +975,7 @@
         <div class="mb-1 text-[var(--chrome-muted)]">{{ t('pageFormat') }} <span class="text-[var(--chrome-faint)]">{{ t('newPages') }}</span></div>
         <select
           :value="store.pageFormat"
-          @change="store.setPageFormat(($event.target as HTMLSelectElement).value)"
+          @change="onPageLayoutChange(store.setPageFormat(($event.target as HTMLSelectElement).value))"
           class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
         >
           <option v-for="(_, name) in PAGE_FORMATS" :key="name" :value="name">{{ name }}</option>
@@ -984,14 +984,14 @@
 
         <div class="flex gap-1 mt-2">
           <button
-            @click="store.setPageOrientation('portrait')"
+            @click="onPageLayoutChange(store.setPageOrientation('portrait'))"
             class="flex-1 px-2 py-1 rounded transition"
             :class="store.pageOrientation === 'portrait' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
           >
             {{ t('portrait') }}
           </button>
           <button
-            @click="store.setPageOrientation('landscape')"
+            @click="onPageLayoutChange(store.setPageOrientation('landscape'))"
             class="flex-1 px-2 py-1 rounded transition"
             :class="store.pageOrientation === 'landscape' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
           >
@@ -1007,7 +1007,7 @@
               :min="PAGE_MIN"
               :max="PAGE_MAX"
               :value="store.customW"
-              @change="store.setCustomSize(Number(($event.target as HTMLInputElement).value), store.customH)"
+              @change="onPageLayoutChange(store.setCustomSize(Number(($event.target as HTMLInputElement).value), store.customH))"
               class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
             />
           </label>
@@ -1018,7 +1018,7 @@
               :min="PAGE_MIN"
               :max="PAGE_MAX"
               :value="store.customH"
-              @change="store.setCustomSize(store.customW, Number(($event.target as HTMLInputElement).value))"
+              @change="onPageLayoutChange(store.setCustomSize(store.customW, Number(($event.target as HTMLInputElement).value)))"
               class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
             />
           </label>
@@ -3214,6 +3214,20 @@ const refreshThumbs = () => {
 const goStrip = (i: number) => {
   store.goToPage(i)
   updateHud(true)
+}
+
+// Biçim/yön değişimi boş aktif sayfaya anında işlediyse şeridi ve slotu tazele.
+const onPageLayoutChange = (applied: boolean) => {
+  if (!applied) return
+  refreshThumbs()
+  updateHud(true)
+  if (scrollMode.value) {
+    refreshBlocks()
+    nextTick(() => {
+      positionSlot()
+      store.resizeCanvas()
+    })
+  }
 }
 
 // Canvas initialization

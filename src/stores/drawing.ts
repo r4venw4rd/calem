@@ -282,23 +282,46 @@ export const useDrawingStore = defineStore('drawing', () => {
     return pageOrientation.value === 'landscape' ? { w: h, h: w } : { w, h }
   }
 
-  const setPageFormat = (f: string) => {
-    if (f !== 'custom' && !(f in PAGE_FORMATS)) return
+  const setPageFormat = (f: string): boolean => {
+    if (f !== 'custom' && !(f in PAGE_FORMATS)) return false
     pageFormat.value = f as PageFormat
     void persistSettings()
+    return applySizeToBlankActivePage()
   }
 
-  const setPageOrientation = (o: string) => {
-    if (o !== 'portrait' && o !== 'landscape') return
+  const setPageOrientation = (o: string): boolean => {
+    if (o !== 'portrait' && o !== 'landscape') return false
     pageOrientation.value = o
     void persistSettings()
+    return applySizeToBlankActivePage()
   }
 
-  const setCustomSize = (w: number, h: number) => {
-    if (!Number.isFinite(w) || !Number.isFinite(h)) return
+  const setCustomSize = (w: number, h: number): boolean => {
+    if (!Number.isFinite(w) || !Number.isFinite(h)) return false
     customW.value = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(w)))
     customH.value = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(h)))
     void persistSettings()
+    return applySizeToBlankActivePage()
+  }
+
+  // Aktif sayfa boşsa (mürekkep/metin/resim yok, PDF değil) yeni ölçüyü
+  // anında uygular: yön/biçim değişimi boş sayfada anlık görünür.
+  // Dolu sayfalar korunur (ayar sonraki sayfalara işler). Uygulandıysa true.
+  const isPageBlank = (p: Page): boolean => {
+    if (p.pdfPageIndex !== undefined && p.pdfPageIndex !== null) return false
+    if ((p.texts?.length ?? 0) > 0 || (p.images?.length ?? 0) > 0) return false
+    return (p.layers ?? []).every((l) => (l.strokes?.length ?? 0) === 0)
+  }
+
+  const applySizeToBlankActivePage = (): boolean => {
+    const p = activePage.value
+    if (!p || !isPageBlank(p)) return false
+    p.size = defaultPageSize()
+    layoutView()
+    repaintBase()
+    clearOverlay()
+    scheduleSave()
+    return true
   }
 
   // Arayüz teması (koyu/açık chrome). <html data-theme> üzerinden CSS var'ları besler.
