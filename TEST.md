@@ -1,6 +1,6 @@
 # Calem Test Şeması
 
-Otomatik: `npm test` (vitest — `tests/` altında 85 test: paper/select/erase/config/membership/auth/storage/sync/billing).
+Otomatik: `npm test` (vitest — `tests/` altında 94 test: paper/select/erase/config/membership/auth/storage/sync/billing).
 Aşağıdakiler manuel/E2E şemasıdır. Her maddede **beklenen sonuç** yazar.
 
 ## 0. Kurulum
@@ -107,4 +107,13 @@ Aşağıdakiler manuel/E2E şemasıdır. Her maddede **beklenen sonuç** yazar.
 | 11.6 | Yeniden yükle | Tema + toolbar + kâğıt + smoothing + dokun-kaydır korunur |
 
 ## 12. Regresyon kapısı (her push öncesi)
-- `npm run type-check` temiz, `npm run build-only` temiz, `npm test` 85/85.
+- `npm run type-check` temiz, `npm run build-only` temiz, `npm test` 94/94.
+
+## 13. Girdi / kapanış (mobil + tablet)
+| # | Adım | Beklenen |
+|---|------|----------|
+| 13.1 | Çizimden <1sn sonra sekmeyi kapatmaya çalış | Tarayıcı kapanış onayı sorar (flush bekleyen iş var) |
+| 13.2 | Bekleyip kapat | Soru çıkmaz (autosave IDB'ye yazdı), açılışta banner geri getirir |
+| 13.3 | Seri hızlı çiz (mektup temposu) | İlk nokta yutulmaz, çizgi başı tam başlar |
+| 13.4 | El aracıyla sayfayı hızlı sürükle | Kasma yok, bırakıştaki son milimetre işlenir |
+| 13.5 | Küçük yuvarlağı standart silgiyle sil | Nokta artığı kalmaz, yay temiz kesilir |
