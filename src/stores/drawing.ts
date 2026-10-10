@@ -13,11 +13,17 @@ import {
 } from '../lib/paper'
 import {
   coalescedOf,
+  expandRect,
+  rectAround,
+  rectsOverlap,
   selectByLasso as selByLasso,
   selectByRect as selByRect,
   strokeBBox,
+  subRunsInRect,
+  unionRect,
+  type NormRect,
 } from '../lib/select'
-import { dropTinyRuns, splitRunsOutside } from '../lib/erase'
+import { dropTinyRuns, polylineHitsCircle, splitRunsOutside } from '../lib/erase'
 import { newStrokeId, snapshotImage, snapshotLayer, snapshotStroke, snapshotText } from '../persist/snapshot'
 import { dashFor, effectiveWidth, paintStroke } from '../render/strokes'
 import { wrapTextToWidth } from '../lib/text'
@@ -80,6 +86,9 @@ import { drawingPerf, isShapeTool, TEXT_SIZE_MAX, TEXT_SIZE_MIN } from '../model
 // A4 punto — boş sayfaların varsayılan boyutu.
 // Sayfa arkaplan bitmap'leri: sayfa id → render edilmiş canvas. Persist edilmez,
 // PDF bytes'larından yeniden üretilir. Aspect her zaman page.size ile aynıdır (inşa gereği).
+// Kısmi repaint'te stroke seçim payı (page-pt): en kalın fırça bleed'ini kapsar.
+const DIRTY_STROKE_MARGIN = WIDTH_MAX.highlighter * 0.8
+
 const bgCanvases = new Map<string, HTMLCanvasElement>()
 
 // Resim bitmap'leri: fileId → decode edilmiş canvas. Persist edilmez,
@@ -102,6 +111,16 @@ export const useDrawingStore = defineStore('drawing', () => {
   let smoothPt: { x: number; y: number } | null = null
   // Aktif çizginin kirli kutusu (SAYFA uzayında) — overlay fullscreen değil, bu kutu temizlenir.
   let bb: { x0: number; y0: number; x1: number; y1: number } | null = null
+  // Silgi kirli kutusu (SAYFA uzayı): hareket boyunca birikir, rAF'te tek KISMİ repaint'e
+  // dönüşür. Tam-sayfa repaint yerine yalnız değişen bölge raster'lanır (darboğaz buradaydı).
+  let eraseDirty: NormRect | null = null
+  let eraseRaf = 0
+  // Hızlı silgi önizlemesi (opak kâğıt): sürüklemede her hareket için kısmi repaint
+  // yerine base'e doğrudan kâğıt rengi boyanır (O(1)/hareket). Gerçek veri kesimi
+  // bırakışta bir kez uygulanır + tek tam repaint. Yoğun mürekkepte asıl darboğaz buydu.
+  let fastErase = false
+  let erasePath: { x: number; y: number }[] = []
+  let eraseFastLast: { x: number; y: number } | null = null
   // Kâğıt rengi (ayar; esnek config'in ilk üyesi — tema/toolbar konumu vs. buraya eklenir).
   // PDF sayfalarında kâğıt YOKTUR (bitmap opak zaten) → şeffaf mod.
   const paper = ref<string>(PAPER_THEMES.gece)
@@ -1741,6 +1760,42 @@ export const useDrawingStore = defineStore('drawing', () => {
   // --- Silgi (iki mod da veri-seviyesinde): sökülen history'de yaşar ---
   // Vuruş: dokunduğu çizgiyi/metin kutusunu tümden söker. Kes: dairede kalanı keser.
   // Silgi stroke'ları hedef değildir (mürekkep hortlamasın).
+  // --- Silgi kirli-bölge (SAYFA uzayı): tam-sayfa repaint yerine yalnız değişen bölge ---
+  const brushDirty = (r: NormRect) => {
+    eraseDirty = eraseDirty ? unionRect(eraseDirty, r) : { ...r }
+  }
+  const brushDirtyAround = (x: number, y: number, rad: number) => brushDirty(rectAround(x, y, rad))
+  // Birikmiş kirli kutuyu tek KISMİ repaint'le base'e işler (rAF batched — hareket
+  // başına en çok bir raster, pan yolundaki schedulePan deseninin aynısı).
+  const flushEraseRepaint = () => {
+    eraseRaf = 0
+    const d = eraseDirty
+    eraseDirty = null
+    if (!d) return
+    const ctx = getCtx(canvasRef.value)
+    if (!ctx) return
+    const pad = DIRTY_PAD_SCREEN / (effScale() || 1)
+    const box = expandRect(d, pad)
+    const t0 = performance.now()
+    // Temizle + yalnız bu kutuya kırpıp yeniden boya (temizlenen ve boyanan bölge AYNI).
+    applyView(ctx, () => {
+      ctx.clearRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0)
+    })
+    applyView(ctx, () => {
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0)
+      ctx.clip()
+      paintPage(ctx, activePage.value, box)
+      ctx.restore()
+    })
+    drawingPerf.eraseMs = performance.now() - t0
+  }
+  const scheduleEraseRepaint = () => {
+    if (eraseRaf !== 0) return
+    eraseRaf = requestAnimationFrame(flushEraseRepaint)
+  }
+
   let eraseSession = 0
   let lastPushedSession = -1
   // Oturumun ilk gerçek sökümünde tek kayıt açar (sürükleme tek undo olur).
@@ -1758,6 +1813,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       const idx = tarr.findIndex((t) => t.id === hitText.id)
       if (idx !== -1) {
         noteEraseMutation()
+        brushDirty(textBBoxOf(hitText))
         const [gone] = tarr.splice(idx, 1)
         if (activeTextId.value === gone!.id) activeTextId.value = null
         return true
@@ -1771,6 +1827,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (!bb) continue
       if (x < bb.x0 || x > bb.x1 || y < bb.y0 || y > bb.y1) continue
       noteEraseMutation()
+      brushDirty(bb)
       const [gone] = arr.splice(i, 1)
       if (selectedIds.value.includes(gone!.id)) {
         selectedIds.value = selectedIds.value.filter((id) => id !== gone!.id)
@@ -1785,6 +1842,70 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Arkaplan (kâğıt deseni / PDF / resim) tanımsız korunur — layer mekaniği gibi
   // ama render katmanı bölmeden, veri seviyesinde. Undo mezarla geri getirir.
   const eraseRadius = (): number => Math.max(strokeWidth.value / 2, 2.5)
+
+  const clampToPage = (p: { x: number; y: number }) => {
+    const s = activePage.value.size
+    return { x: Math.min(s.w, Math.max(0, p.x)), y: Math.min(s.h, Math.max(0, p.y)) }
+  }
+
+  // Önizleme boyaması: base'e kâğıt rengi kalın çizgi/nokta (veri değişmez, repaint yok).
+  const paintFastErase = (
+    a: { x: number; y: number } | null,
+    b: { x: number; y: number },
+    radius: number,
+  ) => {
+    const paperHex = paperFor(activePage.value)
+    if (!paperHex || radius <= 0) return
+    const ctx = getCtx(canvasRef.value)
+    if (!ctx) return
+    // Bırakışta bu bandı kısmi repaint ile geri yükle (desen/resim/alt katman doğru dönsün).
+    brushDirty(rectAround(b.x, b.y, radius + 2))
+    if (a) brushDirty(rectAround(a.x, a.y, radius + 2))
+    applyView(ctx, () => {
+      ctx.save()
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.strokeStyle = paperHex
+      ctx.fillStyle = paperHex
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      ctx.lineWidth = radius * 2
+      ctx.beginPath()
+      if (a) {
+        ctx.moveTo(a.x, a.y)
+        ctx.lineTo(b.x, b.y)
+        ctx.stroke()
+      } else {
+        ctx.arc(b.x, b.y, radius, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      ctx.restore()
+    })
+  }
+
+  // Hızlı-silgi önizlemesi (kâğıt rengi) zaten NİHAİ görüntü mü?
+  // Öyleyse bırakış repaint'i gereksiz (yalnız veri kesilir). Desen/metin/resim/alt
+  // katman varsa false döner (önizleme onları yanlış örter → gerçek repaint şart).
+  const fastErasePreviewIsFinal = (): boolean => {
+    const bg = paperBackground.value
+    if (bg.type !== 'blank' || bg.margin) return false
+    const page = activePage.value
+    if (page.images.length > 0 || page.texts.length > 0) return false
+    let visible = 0
+    for (const l of page.layers) if (l.visible) visible++
+    return visible <= 1
+  }
+
+  // Kesim yolu (seyreltilmiş): çemberler örtüşecek sıklıkta saklanır.
+  const recordErasePath = (p: { x: number; y: number }, radius: number) => {
+    const last = erasePath[erasePath.length - 1]
+    if (last) {
+      const dx = p.x - last.x
+      const dy = p.y - last.y
+      const minD = Math.max(1.5, radius * 0.5)
+      if (dx * dx + dy * dy < minD * minD) return
+    }
+    erasePath.push({ x: p.x, y: p.y })
+  }
   const splitEraseAt = (x: number, y: number, radius: number): boolean => {
     const layer = activeLayer.value
     let touched = false
@@ -1806,6 +1927,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       const dy = y - ny
       if (dx * dx + dy * dy > radius * radius) continue
       touch()
+      brushDirty(bb)
       const [gone] = tarr.splice(i, 1)
       if (activeTextId.value === gone!.id) activeTextId.value = null
     }
@@ -1816,14 +1938,151 @@ export const useDrawingStore = defineStore('drawing', () => {
       const bb = strokeBBox(s)
       if (!bb) continue
       if (bb.x1 < x - radius || bb.x0 > x + radius || bb.y1 < y - radius || bb.y0 > y + radius) continue
+      // Gerçekten değmiyorsa pahalı kopyalı kesime girme (bbox kaba filtre yetmez).
+      // Yoğun sayfa-kaplayan stroke'ta yol noktası başına tam-dizi kopyasını önler.
+      if (!polylineHitsCircle(s.points, x, y, radius)) continue
       const runs = splitRunsOutside(s.points, x, y, radius)
       if (runs.length === 1 && runs[0]!.length === s.points.length) continue // değmedi
       touch()
+      // Daire + atılan kırıntı uzantısı + kalınlık taşması tek kutuda toplanır.
+      brushDirtyAround(x, y, radius * 2 + s.width)
       layer.strokes.splice(i, 1)
       const pieces: Stroke[] = []
       // Kesim artığı eleme: 1-2pt'lik kırıntılar nokta gibi çizilip
       // "2 küçük yuvarlak" bırakıyordu. Eşik silgi yarıçapına oranlı.
       for (const run of dropTinyRuns(runs, Math.max(2, radius * 0.5))) {
+        const piece: Stroke = {
+          id: newStrokeId(),
+          tool: s.tool,
+          color: s.color,
+          width: s.width,
+          dash: s.dash,
+          opacity: s.opacity,
+          points: run,
+        }
+        pieces.push(piece)
+      }
+      // Parçalar orijinal sıraya (z-düzeni korunur).
+      layer.strokes.splice(i, 0, ...pieces)
+      if (keptSel.delete(s.id)) {
+        for (const p of pieces) keptSel.add(p.id)
+        selChanged = true
+      }
+    }
+    if (!touched) return false
+    if (selChanged) selectedIds.value = [...keptSel]
+    return true
+  }
+
+  // Bırakışta kaydedilmiş SÜPÜRME yolunu TEK geçişte uygular: daire-başına tüm
+  // stroke'ları taramak yerine stroke başına bbox BİR kez hesaplanır, yalnız
+  // süpürme kutusuna girenler dairelerle sınanır → O(nokta × stroke) yerine
+  // O(stroke + nokta × aday). Görsel sonuç splitEraseAt ile aynı (kümeler eşit),
+  // kırıntı eleme tüm daireler uygulandıktan SONRA bir kez yapılır.
+  const splitEraseSweep = (path: { x: number; y: number }[], radius: number): boolean => {
+    if (path.length === 0) return false
+    const layer = activeLayer.value
+    let touched = false
+    const touch = () => {
+      if (!touched) {
+        touched = true
+        noteEraseMutation()
+      }
+    }
+    let sx0 = Infinity
+    let sy0 = Infinity
+    let sx1 = -Infinity
+    let sy1 = -Infinity
+    for (const p of path) {
+      if (p.x - radius < sx0) sx0 = p.x - radius
+      if (p.y - radius < sy0) sy0 = p.y - radius
+      if (p.x + radius > sx1) sx1 = p.x + radius
+      if (p.y + radius > sy1) sy1 = p.y + radius
+    }
+    const sweep: NormRect = { x0: sx0, y0: sy0, x1: sx1, y1: sy1 }
+    const minRun = Math.max(2, radius * 0.5)
+    // Daire ızgarası (hücre = çap): uzun süpürmede (100+lerce daire) stroke başına
+    // yalnız kendi bbox'ının kapladığı hücrelerdeki daireler sınanır.
+    const cell = Math.max(radius * 2, 1)
+    const grid = new Map<string, { x: number; y: number }[]>()
+    for (const c of path) {
+      const key = `${Math.floor(c.x / cell)}:${Math.floor(c.y / cell)}`
+      const bucket = grid.get(key)
+      if (bucket) bucket.push(c)
+      else grid.set(key, [c])
+    }
+    // Metin kutuları parçalanmaz: daire değerse tümden gider.
+    const tarr = activePage.value.texts
+    for (let i = tarr.length - 1; i >= 0; i--) {
+      const t = tarr[i]!
+      if (!t.text) continue
+      const tbb = textBBoxOf(t)
+      if (!rectsOverlap(tbb, sweep)) continue
+      let hit = false
+      for (const c of path) {
+        const nx = Math.min(Math.max(c.x, tbb.x0), tbb.x1)
+        const ny = Math.min(Math.max(c.y, tbb.y0), tbb.y1)
+        const dx = c.x - nx
+        const dy = c.y - ny
+        if (dx * dx + dy * dy <= radius * radius) {
+          hit = true
+          break
+        }
+      }
+      if (!hit) continue
+      touch()
+      brushDirty(tbb)
+      const [gone] = tarr.splice(i, 1)
+      if (activeTextId.value === gone!.id) activeTextId.value = null
+    }
+    const keptSel = new Set(selectedIds.value)
+    let selChanged = false
+    for (let i = layer.strokes.length - 1; i >= 0; i--) {
+      const s = layer.strokes[i]!
+      const bb = strokeBBox(s)
+      if (!bb) continue
+      if (!rectsOverlap(bb, sweep)) continue
+      let runs: Point[][] = [s.points]
+      let hitAny = false
+      const gx0 = Math.floor(bb.x0 / cell)
+      const gx1 = Math.floor(bb.x1 / cell)
+      const gy0 = Math.floor(bb.y0 / cell)
+      const gy1 = Math.floor(bb.y1 / cell)
+      for (let gy = gy0; gy <= gy1; gy++) {
+        for (let gx = gx0; gx <= gx1; gx++) {
+          const bucket = grid.get(`${gx}:${gy}`)
+          if (!bucket) continue
+          for (const c of bucket) {
+            const cRect: NormRect = {
+              x0: c.x - radius,
+              y0: c.y - radius,
+              x1: c.x + radius,
+              y1: c.y + radius,
+            }
+            if (!rectsOverlap(bb, cRect)) continue
+            let hitCircle = false
+            const next: Point[][] = []
+            for (const run of runs) {
+              if (polylineHitsCircle(run, c.x, c.y, radius)) {
+                hitCircle = true
+                for (const piece of splitRunsOutside(run, c.x, c.y, radius)) next.push(piece)
+              } else {
+                next.push(run)
+              }
+            }
+            if (!hitCircle) continue
+            hitAny = true
+            runs = next
+            // Daire + atılan kırıntı uzantısı + kalınlık taşması tek kutuda toplanır.
+            brushDirtyAround(c.x, c.y, radius * 2 + s.width)
+          }
+        }
+      }
+      if (!hitAny) continue
+      touch()
+      layer.strokes.splice(i, 1)
+      const pieces: Stroke[] = []
+      for (const run of dropTinyRuns(runs, minRun)) {
         const piece: Stroke = {
           id: newStrokeId(),
           tool: s.tool,
@@ -1853,14 +2112,17 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (!canvasRef.value || isDrawing.value) return false
     if (currentTool.value === 'select' || currentTool.value === 'text' || currentTool.value === 'image' || currentTool.value === 'hand') return false
     if (shouldIgnoreEvent(e)) return false
+    // Bayat hızlı-silgi bayrağı kalmasın (yalnız aktif silgi sürüklemesinde true).
+    fastErase = false
     // Vuruş-silgi nokta toplamaz: dokunduğu anda söker.
+    // (Hızlı önizleme YOK: süpürme başına söküm semantiği korunsun.)
     if (currentTool.value === 'eraser' && eraserMode.value === 'stroke') {
       isDrawing.value = true
       eraseSession += 1
       const { x, y } = getPos(e)
       if (eraseStrokeAt(x, y)) {
         recountActive()
-        repaintBase()
+        scheduleEraseRepaint()
         scheduleSave()
       }
       return true
@@ -1870,10 +2132,18 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (currentTool.value === 'eraser') {
       isDrawing.value = true
       eraseSession += 1
-      const { x, y } = getPos(e)
-      if (splitEraseAt(x, y, eraseRadius())) {
+      const p0 = clampToPage(getPos(e))
+      const r = eraseRadius()
+      if (paperFor(activePage.value) !== null) {
+        fastErase = true
+        erasePath = [p0]
+        eraseFastLast = p0
+        paintFastErase(null, p0, r)
+        return true
+      }
+      if (splitEraseAt(p0.x, p0.y, r)) {
         recountActive()
-        repaintBase()
+        scheduleEraseRepaint()
         scheduleSave()
       }
       return true
@@ -1940,7 +2210,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       if (hit) {
         recountActive()
-        repaintBase()
+        scheduleEraseRepaint()
         scheduleSave()
       }
       return
@@ -1949,6 +2219,19 @@ export const useDrawingStore = defineStore('drawing', () => {
     // Kes-silgi: dairede kalanı kes, tur başına tek boya (arkaplan ezilmez).
     if (currentTool.value === 'eraser') {
       const r = eraseRadius()
+      if (fastErase) {
+        // Frame başına TEK önizleme çizgisi: ara olaylar tek korda birleşir.
+        // Kalın fırçada N kez kalın raster yerine 1 kez → fill-rate kazancı.
+        let last = eraseFastLast
+        for (const ev of coalescedOf(e)) {
+          const p = clampToPage(getPos(ev))
+          recordErasePath(p, r)
+          last = p
+        }
+        if (last && last !== eraseFastLast) paintFastErase(eraseFastLast, last, r)
+        eraseFastLast = last
+        return
+      }
       let hit = false
       for (const ev of coalescedOf(e)) {
         const p = getPos(ev)
@@ -1956,7 +2239,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       if (hit) {
         recountActive()
-        repaintBase()
+        scheduleEraseRepaint()
         scheduleSave()
       }
       return
@@ -1997,6 +2280,31 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Bitti — stroke'u geçmişe kaydet ve base katmanına bir kez işle (overlay temizlenir).
   // Silgi nokta toplamaz: kes/vuruş oturumlarında points boştur, kayıt oluşmaz.
   const stopDrawing = () => {
+    // Hızlı silgi: bırakışta gerçek kesimi yol boyunca uygula + tek tam repaint.
+    if (fastErase) {
+      fastErase = false
+      const radius = eraseRadius()
+      const tCut = performance.now()
+      const hit = splitEraseSweep(erasePath, radius)
+      drawingPerf.cutMs = performance.now() - tCut
+      erasePath = []
+      eraseFastLast = null
+      isDrawing.value = false
+      points.value = []
+      bb = null
+      recountActive()
+      // Önizleme zaten nihai görüntüyse repaint'i tamamen atla (e = 0);
+      // aksi halde yalnız süpürülen bandı geri boya (kirli bölge birikti).
+      if (fastErasePreviewIsFinal()) {
+        eraseDirty = null
+        drawingPerf.eraseMs = 0
+      } else {
+        flushEraseRepaint()
+      }
+      clearOverlay()
+      if (hit) scheduleSave()
+      return
+    }
     if (isDrawing.value && points.value.length > 0) {
       // Şekiller uç-noktayla saklanır (ara noktalar sürükleme artığıdır, export'u şişirmesin).
       const shapeEnds = isShapeTool(currentTool.value) ? shapeEndpoints(points.value) : null
@@ -2055,6 +2363,12 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // Base katmanını geçmişten baştan çiz — sadece undo/clear/resize/setup/sayfa geçişinde (nadir).
   const repaintBase = () => {
+    // Bekleyen kısmi repaint tam boyamayla gereksiz; iptal + kirli kutuyu sıfırla.
+    if (eraseRaf !== 0) {
+      cancelAnimationFrame(eraseRaf)
+      eraseRaf = 0
+    }
+    eraseDirty = null
     const ctx = getCtx(canvasRef.value)
     if (!ctx) return
     clearLayer(ctx)
@@ -2160,7 +2474,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
-  const paintPage = (ctx: CanvasRenderingContext2D, page: Page) => {
+  // dirty: verilirse yalnız bu kutuyla kesişen stroke'lar boyanır (kısmi repaint).
+  // Kâğıt/desen/arkaplan/resim tam çizilir; çağıran zaten clip'ler.
+  const paintPage = (ctx: CanvasRenderingContext2D, page: Page, dirty: NormRect | null = null) => {
     const paperHex = paperFor(page)
     if (paperHex) {
       ctx.fillStyle = paperHex
@@ -2174,6 +2490,28 @@ export const useDrawingStore = defineStore('drawing', () => {
     for (const layer of page.layers) {
       if (!layer.visible) continue
       for (const s of layer.strokes) {
+        if (dirty) {
+          // strokeBBox yalnız width/2 pay bırakır; vurgulayıcı w*2.5 ile çizilir
+          // (bleed ~0.75*w). Komşu kalın vuruş kesik görünmesin diye marj ekle.
+          const b = strokeBBox(s)
+          if (!b || !rectsOverlap(expandRect(b, DIRTY_STROKE_MARGIN), dirty)) continue
+          // Sayfa-kaplayan dev stroke'u her frame baştan tessellate etme: yalnız kirli
+          // kutuya yakın nokta koşularını çiz (şekiller uç-noktalı, onlar tam kalır).
+          if (!isShapeTool(s.tool)) {
+            const runs = subRunsInRect(s.points, dirty, DIRTY_STROKE_MARGIN)
+            if (runs.length === 0) continue
+            // Genişlik TÜM noktalardan hesaplanır (basınç ortalaması) — koşuya bölününce
+            // değişmesin diye tam genişliği geçir, hassasiyeti 0 ver.
+            const fullW =
+              s.tool === 'eraser'
+                ? s.width
+                : effectiveWidth(s.points, s.width, pressureSensitivity.value)
+            for (const run of runs) {
+              paintStroke(ctx, { ...s, width: fullW, points: run }, paperHex, 0)
+            }
+            continue
+          }
+        }
         paintStroke(ctx, s, paperHex, pressureSensitivity.value)
       }
     }

@@ -1055,6 +1055,8 @@ const updateHud = (force = false) => {
   lastHudAt = now
   el.textContent =
     `${drawingPerf.emaMs.toFixed(1)}/${drawingPerf.frameMs.toFixed(0)}ms` +
+    ` e${drawingPerf.eraseMs.toFixed(1)}` +
+    ` c${drawingPerf.cutMs.toFixed(1)}` +
     ` · ${store.drawingCount} ${t('lines')}` +
     ` · ${fmtPts(store.activePoints())}+${fmtPts(drawingPerf.totalPoints)}`
 }
@@ -2386,6 +2388,11 @@ const refreshBlocks = () => {
   if (blockTimer) clearTimeout(blockTimer)
   blockTimer = setTimeout(() => {
     blockTimer = undefined
+    // Çizim sürerken pasif blokları yeniden render etme — bırakışa ertele.
+    if (store.isDrawing) {
+      refreshBlocks()
+      return
+    }
     try {
       const activeId = store.pages[store.activePageIndex]?.id
       for (const p of store.pages) {
@@ -2441,9 +2448,29 @@ const thumbs = ref<string[]>([])
 let thumbTimer: ReturnType<typeof setTimeout> | undefined
 let stopThumbWatch: (() => void) | null = null
 const refreshThumbs = () => {
+  // Şerit görünmüyorsa (tek sayfa / kapalı) thumbnail üretme: aksi halde her silme
+  // bırakışında tüm sayfa render + toDataURL (GPU readback) yapılıp bir sonraki
+  // sürüklemenin üstüne denk gelerek kasardı.
+  if (!store.pageStripOpen || store.pages.length <= 1) {
+    if (thumbTimer) {
+      clearTimeout(thumbTimer)
+      thumbTimer = undefined
+    }
+    if (thumbs.value.length > 0) thumbs.value = []
+    return
+  }
   if (thumbTimer) clearTimeout(thumbTimer)
   thumbTimer = setTimeout(() => {
     thumbTimer = undefined
+    // Görünürlük kapanmış olabilir / çizim sürüyor olabilir — ikisinde de ertele.
+    if (!store.pageStripOpen || store.pages.length <= 1) {
+      if (thumbs.value.length > 0) thumbs.value = []
+      return
+    }
+    if (store.isDrawing) {
+      refreshThumbs()
+      return
+    }
     try {
       thumbs.value = store.pages.map((p) => {
         const c = store.exportPageToCanvas(p, p.size.w > 0 ? 96 / p.size.w : 0.15)
@@ -2570,7 +2597,10 @@ onMounted(() => {
       if (id) nextTick(() => textArea.value?.focus())
     },
   )
-  stopThumbWatch = watch(() => [store.thumbTick, store.pages] as const, refreshThumbs)
+  stopThumbWatch = watch(
+    () => [store.thumbTick, store.pages, store.pageStripOpen] as const,
+    refreshThumbs,
+  )
   // Zoom değişince kaydırmalı yerleşimi yenile (tekli modda etkisiz).
   stopZoomWatch = watch(
     () => store.zoomLabel,
