@@ -44,6 +44,23 @@ const cutAt = (a: Point, b: Point, t: number): Point => ({
 
 const copyPt = (p: Point): Point => ({ x: p.x, y: p.y, pressure: p.pressure })
 
+// Koşu boyu (polyline uzunluğu, pt). Silgi artığı eleme ölçüsü.
+export const runLength = (run: Point[]): number => {
+  let n = 0
+  for (let i = 1; i < run.length; i++) {
+    const dx = run[i]!.x - run[i - 1]!.x
+    const dy = run[i]!.y - run[i - 1]!.y
+    n += Math.hypot(dx, dy)
+  }
+  return n
+}
+
+// Silgi artığı eleme: boyu eşiğin altındaki koşular atılır. Tek noktalı koşu
+// her zaman artıktır (nokta gibi çizilip "2 küçük yuvarlak" bırakır). Eşik
+// silgi yarıçapına oranlı verilir (çağıran: max(2, radius * 0.5)).
+export const dropTinyRuns = (runs: Point[][], minLen: number): Point[][] =>
+  runs.filter((r) => r.length > 1 && runLength(r) >= minLen)
+
 // Daire dışında kalan koşular. Kesim noktaları eklenir (temiz kenar).
 // Dokunulmadıysa [orijinal dizi] (aynı referans değil, içerik aynı).
 export const splitRunsOutside = (pts: Point[], cx: number, cy: number, r: number): Point[][] => {
