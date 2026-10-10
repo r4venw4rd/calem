@@ -2449,6 +2449,13 @@ const startDraw = (e: PointerEvent) => {
     panDown(e)
     return
   }
+  // Orta tuş (yalnızca fare): her araçta el gibi kaydırır. Stylus'a dokunulmaz —
+  // kalem gövde tuşları button 2/5 + pointerType 'pen' üretir, bu kapıdan geçemez.
+  if (e.pointerType === 'mouse' && e.button === 1) {
+    e.preventDefault()
+    panDown(e)
+    return
+  }
   if (store.currentTool === 'select') {
     selectDown(e)
     return
