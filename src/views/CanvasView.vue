@@ -1143,14 +1143,16 @@
           @pointercancel="endDraw"
         ></canvas>
       </template>
-      <div v-else ref="scrollBox" class="absolute inset-0 overflow-y-auto">
+      <div v-else ref="scrollBox" class="absolute inset-0 overflow-y-auto" @scroll.passive="onScrollBox">
         <div class="mx-auto w-full max-w-[860px] px-3 pt-3 pb-28 flex flex-col gap-4">
           <div
             v-for="(p, i) in store.pages"
             :key="p.id"
             :ref="(el) => setBlockRef(el, p.id)"
-            class="w-full rounded-sm overflow-hidden"
+            class="w-full rounded-sm overflow-hidden cursor-pointer"
             :style="{ aspectRatio: `${p.size.w} / ${p.size.h}`, visibility: i === store.activePageIndex ? 'hidden' : 'visible' }"
+            @pointerdown="onBlockDown"
+            @pointerup="onBlockUp($event, i)"
           ></div>
         </div>
         <div ref="activeSlot" class="absolute" style="display: none">
@@ -3145,6 +3147,59 @@ const scrollActiveIntoView = () => {
   block?.scrollIntoView({ block: 'nearest' })
 }
 
+// Kaydırmalı modda sayfayı yerinde aktifleştir (görünüm kaymaz, canlı canvas taşınır).
+let holdScroll = false
+const activatePageInPlace = (i: number) => {
+  if (!scrollMode.value || i === store.activePageIndex) return
+  holdScroll = true
+  store.goToPage(i)
+}
+
+// Scroll bitince en görünür bloğu aktifleştir (sürekli mod beklentisi).
+// Debounce'lu: programatik kaydırma bitince hedef zaten aktif olduğundan no-op olur.
+let scrollTimer: ReturnType<typeof setTimeout> | undefined
+const onScrollBox = () => {
+  if (scrollTimer) clearTimeout(scrollTimer)
+  scrollTimer = setTimeout(() => {
+    scrollTimer = undefined
+    if (!scrollMode.value || store.isDrawing || spacePan) return
+    const box = scrollBox.value
+    if (!box) return
+    const br = box.getBoundingClientRect()
+    let best = -1
+    let bestVis = 0
+    for (let i = 0; i < store.pages.length; i++) {
+      const pg = store.pages[i]
+      if (!pg) continue
+      const el = blockEls.get(pg.id)
+      if (!el) continue
+      const r = el.getBoundingClientRect()
+      const vis = Math.max(0, Math.min(r.bottom, br.bottom) - Math.max(r.top, br.top))
+      if (vis > bestVis) {
+        bestVis = vis
+        best = i
+      }
+    }
+    if (best >= 0 && bestVis > 0) activatePageInPlace(best)
+  }, 150)
+}
+
+// Bloğa tıklama = o sayfada çalışmaya başla. Kaydırmayı bozmamak için
+// sürükleme eşiği var (dokunmatik kaydırmada pointercancel zaten keser).
+let blockTap: { x: number; y: number; id: number } | null = null
+const onBlockDown = (e: PointerEvent) => {
+  blockTap = { x: e.clientX, y: e.clientY, id: e.pointerId }
+}
+const onBlockUp = (e: PointerEvent, i: number) => {
+  const t = blockTap
+  blockTap = null
+  if (!t || t.id !== e.pointerId) return
+  const dx = e.clientX - t.x
+  const dy = e.clientY - t.y
+  if (dx * dx + dy * dy > 64) return
+  activatePageInPlace(i)
+}
+
 // Pasif sayfaların statik resmi (aktif sayfa canlı canvas'la gelir, atlanır).
 let blockTimer: ReturnType<typeof setTimeout> | undefined
 let stopBlockWatch: (() => void) | null = null
@@ -3331,7 +3386,9 @@ onMounted(() => {
         store.resizeCanvas()
         drawSelectionOverlay()
         refreshBlocks()
-        scrollActiveIntoView()
+        // Yerinde aktivasyonda (tık/spy) görünümü zıplatma.
+        if (!holdScroll) scrollActiveIntoView()
+        holdScroll = false
       })
     },
   )
@@ -3369,6 +3426,8 @@ onUnmounted(() => {
   offLaunch = null
   if (blockTimer) clearTimeout(blockTimer)
   blockTimer = undefined
+  if (scrollTimer) clearTimeout(scrollTimer)
+  scrollTimer = undefined
   blockEls.clear()
   mobileMq?.removeEventListener('change', syncIsMobile)
   mobileMq = null
