@@ -2438,6 +2438,10 @@ const cancelPan = () => {
 }
 
 const startDraw = (e: PointerEvent) => {
+  // iPadOS ilk dokunuşu jest kararı için bekletmesin: olayı en başta sahiplen.
+  // (touch-action:none ile birlikte; Apple Pencil hover'ı move tarafında zaten no-op.)
+  e.preventDefault()
+  blockTap = null
   if (!overlayCanvas.value) return
   store.clearCachedRect()
   // Avuç reddi pinch'ten ÖNCE: parmak (touchPan kapalıyken) hiç işleme girmez; yoksa
