@@ -2029,11 +2029,38 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     const cx = Math.min(size.w, Math.max(0, x))
     const cy = Math.min(size.h, Math.max(0, y))
-    const p = readPressure(e)
-    lastPressure = p
-    smoothPt = { x: cx, y: cy }
-    points.value = [{ x: cx, y: cy, pressure: p }]
+    // İlk vuruş tohumu: donanımın biriktirdiği ara noktaları da al. Hızlı kalem
+    // girişinde tek nokta, çizginin başını yutuyordu. Basınç her noktanın kendi
+    // event'inden; liste boşsa/tekse davranış birebir aynı (mouse'ta no-op).
+    const seedPts: { x: number; y: number; pressure: number }[] = [
+      { x: cx, y: cy, pressure: readPressure(e) },
+    ]
+    if (typeof e.getCoalescedEvents === 'function') {
+      const minD = MIN_DIST_SCREEN / (effScale() || 1)
+      for (const ev of e.getCoalescedEvents()) {
+        if (ev === e) continue
+        const g = getPos(ev as PointerEvent)
+        if (g.x < -m || g.y < -m || g.x > size.w + m || g.y > size.h + m) continue
+        const qx = Math.min(size.w, Math.max(0, g.x))
+        const qy = Math.min(size.h, Math.max(0, g.y))
+        const last = seedPts[seedPts.length - 1]!
+        const dx = qx - last.x
+        const dy = qy - last.y
+        if (dx * dx + dy * dy < minD * minD) continue
+        seedPts.push({ x: qx, y: qy, pressure: readPressure(ev as PointerEvent) })
+      }
+    }
+    const lastSeed = seedPts[seedPts.length - 1]!
+    lastPressure = lastSeed.pressure
+    smoothPt = { x: lastSeed.x, y: lastSeed.y }
+    points.value = seedPts
     bb = { x0: cx, y0: cy, x1: cx, y1: cy }
+    for (const s of seedPts) {
+      if (s.x < bb.x0) bb.x0 = s.x
+      else if (s.x > bb.x1) bb.x1 = s.x
+      if (s.y < bb.y0) bb.y0 = s.y
+      else if (s.y > bb.y1) bb.y1 = s.y
+    }
     return true
   }
 
