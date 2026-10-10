@@ -137,7 +137,7 @@ See [BACKEND.md](BACKEND.md) for detailed architecture and cloud plans.
 
 ## License
 
-Calem is licensed under the **Apache License 2.0**. Copyright ownership and authorship remain with r4venw4rd. Others can use, modify, and distribute the software freely, but the original copyright must be preserved.
+Calem is licensed under the **GNU Affero General Public License v3.0 or later**. Copyright ownership and authorship remain with r4venw4rd. If you run a modified version on a server, you must offer the source code to its users (see LICENSE §13).
 
 See [LICENSE](LICENSE) for details.
 
