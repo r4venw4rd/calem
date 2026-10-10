@@ -17,7 +17,7 @@ import {
   selectByRect as selByRect,
   strokeBBox,
 } from '../lib/select'
-import { splitRunsOutside } from '../lib/erase'
+import { dropTinyRuns, splitRunsOutside } from '../lib/erase'
 import { wrapTextToWidth } from '../lib/text'
 import { calemFileName, pdfFileName } from '../config/files'
 import { ALL_TOOLS, DEFAULT_WIDTHS, WIDTH_MAX, WIDTH_MIN } from '../config/tools'
@@ -1961,8 +1961,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       touch()
       layer.strokes.splice(i, 1)
       const pieces: Stroke[] = []
-      for (const run of runs) {
-        if (run.length === 0) continue
+      // Kesim artığı eleme: 1-2pt'lik kırıntılar nokta gibi çizilip
+      // "2 küçük yuvarlak" bırakıyordu. Eşik silgi yarıçapına oranlı.
+      for (const run of dropTinyRuns(runs, Math.max(2, radius * 0.5))) {
         const piece: Stroke = {
           id: newStrokeId(),
           tool: s.tool,

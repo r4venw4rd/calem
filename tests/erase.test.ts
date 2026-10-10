@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { segmentCircleTs, splitRunsOutside } from '../src/lib/erase'
+import { dropTinyRuns, runLength, segmentCircleTs, splitRunsOutside } from '../src/lib/erase'
 
 const P = (x: number, y: number) => ({ x, y })
 
@@ -46,5 +46,30 @@ describe('splitRunsOutside', () => {
     expect(runs[0].at(-1)!.x).toBeCloseTo(5 - Math.sqrt(7), 9)
     expect(runs[1][0].x).toBeCloseTo(5 + Math.sqrt(7), 9)
     expect(runs[1].at(-1)!.x).toBe(10)
+  })
+})
+
+describe('dropTinyRuns', () => {
+  it('tek nokta ve kisa kosulari atar', () => {
+    const runs = [[P(0, 0)], [P(0, 0), P(1, 0)], [P(0, 0), P(10, 0)]]
+    expect(runLength(runs[1]!)).toBeCloseTo(1, 9)
+    const kept = dropTinyRuns(runs, 2)
+    expect(kept).toHaveLength(1)
+    expect(kept[0]).toHaveLength(2)
+  })
+  it('yuvarlak silmede nokta artigi birakmaz', () => {
+    // r=8 cember, kenardan r=3 silgi: 2 noktalik 1.14pt kirinti elenir, ana yay kalir.
+    const pts = Array.from({ length: 32 }, (_, i) => {
+      const a = (i / 32) * Math.PI * 2
+      return P(8 * Math.cos(a), 8 * Math.sin(a))
+    })
+    const runs = splitRunsOutside(pts, 7, 4, 3)
+    expect(runs).toHaveLength(2)
+    const kept = dropTinyRuns(runs, Math.max(2, 3 * 0.5))
+    expect(kept).toHaveLength(1)
+    for (const r of kept) {
+      expect(r.length).toBeGreaterThan(1)
+      expect(runLength(r)).toBeGreaterThanOrEqual(2)
+    }
   })
 })
