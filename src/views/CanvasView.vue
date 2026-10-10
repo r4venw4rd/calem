@@ -754,6 +754,21 @@
           <option v-for="l in LOCALES" :key="l.id" :value="l.id">{{ l.label }}</option>
         </select>
 
+        <div class="mb-1 text-[var(--chrome-muted)]">{{ t('uiScale') }}</div>
+        <div class="flex items-center gap-2 mb-3">
+          <input
+            type="range"
+            :min="SLIDERS.uiScale.min"
+            :max="SLIDERS.uiScale.max"
+            :step="SLIDERS.uiScale.step"
+            :value="store.uiScale"
+            @input="store.setUiScale(Number(($event.target as HTMLInputElement).value))"
+            class="flex-1 accent-indigo-600"
+            :title="t('uiScale')"
+          />
+          <span class="text-xs text-[var(--chrome-text)] w-10 text-right font-mono">{{ Math.round(store.uiScale * 100) }}%</span>
+        </div>
+
         <div class="mb-1 text-[var(--chrome-muted)]">{{ t('paperTheme') }}</div>
         <div class="flex gap-2 mb-2">
           <button
