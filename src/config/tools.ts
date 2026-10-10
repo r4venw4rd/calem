@@ -59,11 +59,24 @@ export const DEFAULT_WIDTHS: Record<Tool, number> = {
   hand: 3,
 }
 
+export type ToolIcon =
+  | 'pen'
+  | 'hl'
+  | 'eraser'
+  | 'hand'
+  | 'select'
+  | 'line'
+  | 'rect'
+  | 'ellipse'
+  | 'arrow'
+  | 'text'
+  | 'image'
+
 export interface ToolMeta {
   label: string
   title: string
   active: string
-  icon?: 'pen' | 'hl' | 'eraser' | 'select'
+  icon: ToolIcon
 }
 
 /** Toolbar düğme metadatası (Türkçe etiketler burada tekillenir). */
@@ -76,21 +89,22 @@ export const TOOL_META: Record<Tool, ToolMeta> = {
     icon: 'hl',
   },
   eraser: { label: 'Silgi', title: 'Silgi (E)', active: 'bg-red-600 text-white', icon: 'eraser' },
+  hand: {
+    label: 'El',
+    title: 'El (sürükle-kaydır, veya Space basılı tut)',
+    active: 'bg-indigo-600 text-white',
+    icon: 'hand',
+  },
   select: {
     label: 'Seç',
     title: 'Seç/Taşı (V)',
     active: 'bg-indigo-600 text-white',
     icon: 'select',
   },
-  line: { label: 'Çizgi', title: 'Çizgi (L)', active: 'bg-indigo-600 text-white' },
-  rect: { label: 'Kare', title: 'Kare (R)', active: 'bg-indigo-600 text-white' },
-  ellipse: { label: 'Elips', title: 'Elips (O)', active: 'bg-indigo-600 text-white' },
-  arrow: { label: 'Ok', title: 'Ok (A)', active: 'bg-indigo-600 text-white' },
-  text: { label: 'Metin', title: 'Metin (T)', active: 'bg-indigo-600 text-white' },
-  image: { label: 'Resim', title: 'Resim (G)', active: 'bg-indigo-600 text-white' },
-  hand: {
-    label: 'El',
-    title: 'El (sürükle-kaydır, veya Space basılı tut)',
-    active: 'bg-indigo-600 text-white',
-  },
+  line: { label: 'Çizgi', title: 'Çizgi (L)', active: 'bg-indigo-600 text-white', icon: 'line' },
+  rect: { label: 'Kare', title: 'Kare (R)', active: 'bg-indigo-600 text-white', icon: 'rect' },
+  ellipse: { label: 'Elips', title: 'Elips (O)', active: 'bg-indigo-600 text-white', icon: 'ellipse' },
+  arrow: { label: 'Ok', title: 'Ok (A)', active: 'bg-indigo-600 text-white', icon: 'arrow' },
+  text: { label: 'Metin', title: 'Metin (T)', active: 'bg-indigo-600 text-white', icon: 'text' },
+  image: { label: 'Resim', title: 'Resim (G)', active: 'bg-indigo-600 text-white', icon: 'image' },
 }
