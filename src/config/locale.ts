@@ -1,6 +1,6 @@
 import type { Tool } from '../stores/drawing'
 
-// Desteklenen arayüz dilleri. Varsayılan Türkçe (mevcut davranış korunur).
+// Desteklenen arayüz dilleri. Varsayılan İngilizce.
 // Yeni dil eklemek: 1) Locale union'a ekle, 2) LOCALES'e ekle, 3) TOOL_LABELS + UI_STRINGS'e ekle.
 export type Locale = 'tr' | 'en'
 
@@ -9,7 +9,7 @@ export const LOCALES: { id: Locale; label: string }[] = [
   { id: 'en', label: 'English' },
 ]
 
-export const DEFAULT_LOCALE: Locale = 'tr'
+export const DEFAULT_LOCALE: Locale = 'en'
 
 export const isLocale = (v: unknown): v is Locale => v === 'tr' || v === 'en'
 

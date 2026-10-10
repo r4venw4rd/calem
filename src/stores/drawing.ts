@@ -3385,7 +3385,10 @@ export const useDrawingStore = defineStore('drawing', () => {
   let saveTimer: ReturnType<typeof setTimeout> | undefined
 
   const fmtTime = (t: number) =>
-    new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+    new Date(t).toLocaleTimeString(locale.value === 'tr' ? 'tr-TR' : 'en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
 
   // Reactive proxy'leri düz veriye çevir — IDB structured-clone'a temiz girer.
   const snapshotStroke = (s: Stroke): Stroke => ({
