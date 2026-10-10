@@ -130,9 +130,14 @@ export interface PerfStats {
   frameMs: number
   renders: number
   totalPoints: number
+  // Son silgi kısmi-repaint süresi (ms) — HUD'da görünür, darboğaz teşhisi için.
+  // Repaint atlandıysa (önizleme zaten nihai) 0 yazılır: bayat değer kalmasın.
+  eraseMs: number
+  // Bırakıştaki gerçek veri kesiminin süresi (ms) — HUD'da `c` olarak görünür.
+  cutMs: number
 }
 
 // Bilerek reaktivite DIŞI (modül seviyesi): her frame yazılır.
 // Pinia state'i içinde olsaydı her yazım tüm store'u (tüm stroke'lar dahil)
 // reaktivite/devtools hattından geçirir → çizgi sayısı arttıkça kasar.
-export const drawingPerf: PerfStats = { lastMs: 0, emaMs: 0, frameMs: 0, renders: 0, totalPoints: 0 }
+export const drawingPerf: PerfStats = { lastMs: 0, emaMs: 0, frameMs: 0, renders: 0, totalPoints: 0, eraseMs: 0, cutMs: 0 }
