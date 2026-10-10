@@ -271,7 +271,7 @@
           :title="t('palette')"
         >
           <span
-            v-if="store.currentTool !== 'select' && store.currentTool !== 'hand'"
+            v-if="store.currentTool !== 'select' && store.currentTool !== 'hand' && store.currentTool !== 'eraser'"
             class="w-4 h-4 rounded-full border border-[var(--chrome-border-strong)]"
             :style="{ background: store.color }"
           ></span>
@@ -289,7 +289,7 @@
       <!-- Geniş ekran satır-içi ayarları (renk + kalınlık + opaklık). Dar ekranda popover'da. -->
       <div v-if="!isMobile" class="hidden min-[1440px]:flex shrink-0 items-center gap-1.5">
         <div
-          v-if="store.currentTool !== 'select' && store.currentTool !== 'hand'"
+          v-if="store.currentTool !== 'select' && store.currentTool !== 'hand' && store.currentTool !== 'eraser'"
           class="flex items-center gap-1 shrink-0"
           role="toolbar"
           :aria-label="t('palette')"
@@ -340,6 +340,24 @@
               :title="t('opacity')"
             />
             <span class="text-xs text-[var(--chrome-text)] w-7 text-right font-mono">{{ Math.round(store.strokeOpacity * 100) }}%</span>
+          </template>
+          <template v-if="store.currentTool === 'eraser'">
+            <button
+              @click="store.setEraserMode('standard')"
+              :class="store.eraserMode === 'standard' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+              class="px-2 py-1 rounded text-xs font-medium transition"
+              :title="t('eraserStandardTitle')"
+            >
+              {{ t('eraserStandard') }}
+            </button>
+            <button
+              @click="store.setEraserMode('stroke')"
+              :class="store.eraserMode === 'stroke' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+              class="px-2 py-1 rounded text-xs font-medium transition"
+              :title="t('eraserStrokeTitle')"
+            >
+              {{ t('eraserStroke') }}
+            </button>
           </template>
         </span>
       </div>
@@ -472,7 +490,7 @@
 
       <!-- Renk Paleti (Tek Satır: Hazır Palet + Renkler + Damlalık + Custom Renkler) -->
       <div
-        v-if="store.currentTool !== 'select' && store.currentTool !== 'hand'"
+        v-if="store.currentTool !== 'select' && store.currentTool !== 'hand' && store.currentTool !== 'eraser'"
         class="flex flex-wrap items-center gap-2"
         role="toolbar"
         :aria-label="t('palette')"
@@ -1465,7 +1483,7 @@
           <button @click="mobileOptions = false" class="px-2 py-1 rounded hover:bg-[var(--chrome-bg-soft)]">{{ t('done') }}</button>
         </div>
 
-        <template v-if="store.currentTool !== 'select'">
+        <template v-if="store.currentTool !== 'select' && store.currentTool !== 'hand' && store.currentTool !== 'eraser'">
           <select
             :value="store.activePaletteId"
             @change="store.setActivePalette(($event.target as HTMLSelectElement).value)"
