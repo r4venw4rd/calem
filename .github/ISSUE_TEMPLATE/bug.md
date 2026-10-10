@@ -1,23 +1,23 @@
 ---
-name: Hata
-about: Yanlış çalışan bir şey bildir
+name: Bug
+about: Report something that behaves incorrectly
 labels: bug
 ---
 
-## Cihaz + Tarayıcı
+## Device + Browser
 
-<!-- örn: Samsung Tab S9, Chrome 131 / iPad Air, Safari 18 -->
+<!-- e.g. Samsung Tab S9, Chrome 131 / iPad Air, Safari 18 -->
 
-## Tekrar Adımları
+## Steps to Reproduce
 
 1.
 2.
 3.
 
-## Beklenen / Olan
+## Expected / Actual
 
-<!-- ne olmalıydı, ne oldu? -->
+<!-- what should have happened, what happened instead? -->
 
-## Ekran Görüntüsü / Video
+## Screenshot / Video
 
-<!-- varsa sürükle-bırak -->
+<!-- drag and drop if you have one -->

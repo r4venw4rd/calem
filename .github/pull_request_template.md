@@ -1,10 +1,10 @@
-## Ne değişti
+## What Changed
 
-<!-- bir cümle -->
+<!-- one sentence -->
 
-## Kontrol
+## Checks
 
-- [ ] `npm test` yeşil
-- [ ] `npm run type-check` temiz
-- [ ] Yeni mantık testli / manuel şema güncelli
-- [ ] Kritik yolda senkron boya yok
+- [ ] `npm test` green
+- [ ] `npm run type-check` clean
+- [ ] New logic tested / manual checklist updated
+- [ ] No synchronous painting on a critical path

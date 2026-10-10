@@ -95,7 +95,7 @@ src/
 ├── router/        # Vue Router navigation
 ├── views/         # Top-level page components
 └── assets/        # Styles and static resources
-tests/            # Vitest suite (~80 tests covering core logic)
+tests/            # Vitest suite (117 tests covering core logic)
 public/           # PWA assets: manifest, service worker, icons
 ```
 

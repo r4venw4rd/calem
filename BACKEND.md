@@ -1,59 +1,59 @@
-# Calem Backend Planı
+# Calem Backend Plan
 
-Calem bulut bağlantılı olacak. Henüz planlanmamış cloud spec'leri: **cloud sync**, **membership**, **accounts**, **authentication**.
+Calem will be cloud-connected. Cloud specs not designed yet: **cloud sync**, **membership**, **accounts**, **authentication**.
 
-## Katmanlar
-### 1. `src/config/` (kod sabitleri)
-Sabit paketesi tek kaynaktır: `engine.ts` (görünüm/render/zamanlama/limitler), `tools.ts` (araç kataloğu, kalınlık tabloları, TOOL_META etiketleri), `paper.ts` (kâğıt/sayfa varsayılanları), `palettes.ts` (hazır setler, cap'ler), `ui.ts` (slider aralıkları), `files.ts` (dosya adları, accept filtreleri, SW yolu). Davranış değişikliği burada yapılır, `tests/config.test.ts` kilitler.
+## Layers
+### 1. `src/config/` (code constants)
+The constants package is the single source: `engine.ts` (view/render/timing/limits), `tools.ts` (tool catalogue, width tables, TOOL_META labels), `paper.ts` (paper/page defaults), `palettes.ts` (preset sets, caps), `ui.ts` (slider ranges), `files.ts` (file names, accept filters, SW path). Behaviour changes are made here, and `tests/config.test.ts` locks them down.
 
-### 2. IndexedDB (local gerçek kaynak)
-Cookie/localStorage yok, olmayacak — cookie 4KB ve her HTTP isteğinde gider; MB'larca stroke + resim/PDF bytes için yanlış araç. Tek kaynak IndexedDB: `docs` store (çizim + ayarlar), `files` store (PDF/resim bytes). Ayar şeması versiyonlu (v1→v4), yeni alan optional + presence-check ile göçer, versiyon şişirilmez.
+### 2. IndexedDB (the local source of truth)
+No cookies/localStorage, and there never will be — a cookie is 4KB and travels on every HTTP request; the wrong tool for megabytes of strokes plus image/PDF bytes. IndexedDB is the single store: the `docs` store (drawing + settings), the `files` store (PDF/image bytes). The settings schema is versioned (v1→v4); new fields migrate as optional with presence-checks, without inflating the version.
 
-### 3. Backend tohumu (hesap/auth/sync/membership dikişleri — saf kurallar kod, ağ yok)
-- **Auth seam:** `AuthProvider` interface (`getUser/signIn/signOut/onAuthChange`), default `LocalAuthProvider` (tek anonim local kullanıcı). Gerçek auth sonradan aynı imzayla takılır: e-posta+şifre ve OAuth (Google) ayrı sağlayıcılar, local üçüncü sağlayıcı olarak kalır. Login ekranı yok — sadece dikiş + anonim akış.
-- **User-scoped depolama:** `DocStorage` interface arkasında IDB adaptörü (`idbStorage`, `setStorage` ile değişir). Hesap gelince: kullanıcı başına key namespace + dokümanlara `ownerId`; backward-compatible göçle (mevcut veri anonim local'e).
-- **Sync motoru:** offline-first outbox deseni; doküman `{v, savedAt}` taşıyor. Çakışma kuralı: sayfa-seviyesi last-write-wins (sayfa `updatedAt`'ine göre birleşir). Silinen sayfalar tombstone ile senkronize edilir. İçerik-adresli dosya bytes (eksikse yükle).
-- **Membership:** `MembershipTier` (free/pro), kota kapıları saf fonksiyon (`canAddPage`, `storageQuotaBytes`) `config/membership.ts` placeholder sabitleriyle; kota sayıları en son belirlenecek. Local'da özellik kilidi yok — üyelik yalnızca bulutu açar (sync/kota/paylaşım), tier rozettir kapı açmaz. Billing kodu yok.
-- **Anonim→hesap taşıma:** login sonrası "local veriyi hesaba taşı?" modalı, varsayılan EVET, tek tık. Otomatik merge yok; `.calem` import'u asla otomatik upload edilmez.
+### 3. Backend seed (account/auth/sync/membership seams — pure rules in code, no network)
+- **Auth seam:** `AuthProvider` interface (`getUser/signIn/signOut/onAuthChange`), default `LocalAuthProvider` (a single anonymous local user). Real auth plugs in later with the same signature: email+password and OAuth (Google) as separate providers, with local staying as the third provider. No login screen — just the seam plus the anonymous flow.
+- **User-scoped storage:** the IDB adapter sits behind the `DocStorage` interface (`idbStorage`, swapped via `setStorage`). Once accounts arrive: a per-user key namespace plus `ownerId` on documents; backward-compatible migration (existing data stays in the anonymous local namespace).
+- **Sync engine:** offline-first outbox pattern; the document carries `{v, savedAt}`. Conflict rule: page-level last-write-wins (merged by page `updatedAt`). Deleted pages sync as tombstones. Content-addressed file bytes (uploaded when missing).
+- **Membership:** `MembershipTier` (free/pro), quota gates as pure functions (`canAddPage`, `storageQuotaBytes`) with placeholder constants in `config/membership.ts`; quota numbers will be decided last. There is no local feature lock — membership only unlocks the cloud (sync/quota/sharing); the tier is a badge, not a gate. No billing code.
+- **Anonymous→account migration:** after login a "move local data into your account?" modal, defaulting to YES, one click. No automatic merge; a `.calem` import is never uploaded automatically.
 
-## Bulut maliyet gerçekleri (doğrulandı: 2026-10, supabase.com/docs + /pricing)
+## Cloud cost realities (verified: 2026-10, supabase.com/docs + /pricing)
 
-Supabase FREE tavanları **proje başına toplamdır** (kullanıcı başına değil):
+Supabase FREE ceilings are **per project, not per user**:
 
-| Kaynak | Free | Pro ($25/ay) |
+| Resource | Free | Pro ($25/mo) |
 |---|---|---|
-| DB boyutu | 500 MB (aşınca read-only kilit) | 8 GB dahil |
-| Dosya storage | 1 GB | 100 GB dahil |
-| Egress | 5 GB + 5 GB cache /ay | 250 GB dahil |
-| Auth MAU | 50.000 | 100.000 dahil |
-| Proje | 2 aktif | duraklatma yok |
+| DB size | 500 MB (locked read-only when exceeded) | 8 GB included |
+| File storage | 1 GB | 100 GB included |
+| Egress | 5 GB + 5 GB cache /mo | 250 GB included |
+| Auth MAU | 50,000 | 100,000 included |
+| Projects | 2 active | no pausing |
 
-- **7 gün işlemsizlik → proje duraklatılır** (uyarı e-postası gelir, 1 yıl içinde dashboard'dan resume, cold-start 10-30sn). Günlük birkaç sorgu canlı tutar ama gerçek kullanıcıya "senkronum çalışmıyor" yaşatır.
-- **Free'de otomatik yedek YOKTUR** — `.calem` dışa aktarım yedek görevi görür, görünür kalır.
-- Kota matematiği: free 25MB × 40 kullanıcı = 1GB tavan. Tavan yaklaşınca ücretsiz alım durur veya Pro'ya geçilir.
+- **7 days without activity → the project is paused** (a warning email arrives; resume from the dashboard within a year, cold start 10-30s). A few daily queries keep it alive, but a real user would still see "my sync isn't working".
+- **There are NO automatic backups on Free** — `.calem` export doubles as the backup and stays visible.
+- Quota math: free 25MB × 40 users = the 1GB ceiling. As the ceiling approaches, either free sign-ups stop or we move to Pro.
 
-Kararlar:
-- Sync ilk günden **"beta"** etiketli açılır; `.calem` dışa aktarım yedek olarak menüde kalır.
-- PDF arkaplan bytes'ları sync'e girmez (local'de yeniden import edilir); yalnızca vektör mürekkep + küçük resimler senkronlanır — storage/egress'i korur.
-- İlk sabit gider: Supabase Pro ~$25/ay. İlk gelirden önce kapatılması gereken kalemdir.
-- Dağıtım hamleleri (faturalama yokken bile): bekleme listesi butonu YOK — karar: önce altyapı dikişi. MoR (Polar/Lemon Squeezy ~%5 + $0.50 — küçük sepette ~%10 efektif, doğrula) hesabını erken açıp KYC/onayı bekletme. Erken kullanıcıya **kurucu üye rozeti + %50 ömür indirimi** sözü (`FOUNDER_DISCOUNT_PCT`, `CalemUser.founder`) — ücretli geçişte "tuzağa düştüm" hissi olmaz.
+Decisions:
+- Sync ships on day one labelled **"beta"**; `.calem` export stays in the menu as a backup.
+- PDF background bytes stay out of sync (re-imported locally); only vector ink + small images sync — this protects storage/egress.
+- The first fixed cost: Supabase Pro at ~$25/mo. It has to be covered before the first revenue.
+- Distribution moves (even before billing exists): NO waiting-list button — the decision is to build the infrastructure seam first. Open the MoR account (Polar/Lemon Squeezy ~5% + $0.50 — roughly 10% effective on a small basket, verify) early so KYC/approval is already done. Promise early users a **founder badge + 50% lifetime discount** (`FOUNDER_DISCOUNT_PCT`, `CalemUser.founder`) — this avoids the "I got trapped" feeling when the paid tier arrives.
 
-## Fazlar
-- **Faz 1 — `src/config/` paketi:** sabit taşıma + kilit testleri (yapıldı).
-- **Faz 2 — storage interface:** `DocStorage` + IDB adaptörü (yapıldı).
-- **Faz 3 — UI tekrarları:** slider sınırları, TOOL_META, dosya adları (yapıldı).
-- **Faz 4 — backend tohumları:** auth + user-scoped storage + sync kuralları + membership (yapıldı, ağ yok).
-  - `src/lib/auth.ts`: `AuthProvider` + `LocalAuthProvider` (tek anonim local kullanıcı), `getAuth/setAuthProvider` binding.
-  - `src/lib/idb.ts`: `PersistedDocV5.ownerId?` (yoksa `local-anon`, göçsüz), `docOwner`, `namespaceFor`, `namespacedStorage` (doc+ayar öneklenir, içerik-adresli dosyalar global).
-  - `src/lib/sync.ts`: saf kurallar — `mergePages` (sayfa LWW, eşitlikte local), `mergeTombstones`, `applyTombstones`, `mergeDocuments`, outbox (`enqueueOp/ackOps/pendingFileIds`, cap 200), `contentKey` (FNV-1a), `missingFileIds`, `isRemoteNewer`.
-  - `src/config/membership.ts`: `MembershipTier` (free/pro), placeholder kotalar, `canAddPage`/`storageQuotaBytes` (local'da çağrılmaz, kilit yok), `canUseCloud`.
-  - Testler: `tests/auth|storage|sync|membership.test.ts` (29 test; toplam 80/80).
-  - YapılMAyan: ağ aktarımı, login ekranı, anonim→hesap taşıma modalı, billing — hesap geldikten sonra.
-- **Faz 5 — billing altyapı dikişi:** (yapıldı, ağ yok, bekleme listesi UI yok).
-  - `src/lib/billing.ts`: `BillingProvider` (`getStatus/checkout/openPortal/onBillingChange`) + `NoopBillingProvider` (checkout/portal açıkça reddeder), `getBilling/setBillingProvider` binding.
-  - `src/config/membership.ts`: `FOUNDER_DISCOUNT_PCT` (%50) + `applyDiscount` (aşağı yuvarlar); `CalemUser.founder?` bayrağı.
-  - Testler: `tests/billing.test.ts` + founder indirimi kilitleri.
+## Phases
+- **Phase 1 — the `src/config/` package:** constant migration + lock tests (done).
+- **Phase 2 — storage interface:** `DocStorage` + IDB adapter (done).
+- **Phase 3 — UI duplication:** slider bounds, TOOL_META, file names (done).
+- **Phase 4 — backend seeds:** auth + user-scoped storage + sync rules + membership (done, no network).
+  - `src/lib/auth.ts`: `AuthProvider` + `LocalAuthProvider` (a single anonymous local user), `getAuth/setAuthProvider` binding.
+  - `src/lib/idb.ts`: `PersistedDocV5.ownerId?` (falls back to `local-anon`, no migration), `docOwner`, `namespaceFor`, `namespacedStorage` (docs+settings prefixed, content-addressed files global).
+  - `src/lib/sync.ts`: pure rules — `mergePages` (page LWW, local wins ties), `mergeTombstones`, `applyTombstones`, `mergeDocuments`, outbox (`enqueueOp/ackOps/pendingFileIds`, cap 200), `contentKey` (FNV-1a), `missingFileIds`, `isRemoteNewer`.
+  - `src/config/membership.ts`: `MembershipTier` (free/pro), placeholder quotas, `canAddPage`/`storageQuotaBytes` (not called locally, no locking), `canUseCloud`.
+  - Tests: `tests/auth|storage|sync|membership.test.ts` (29 tests; 80/80 overall at that time).
+  - Not done: network transport, login screen, anonymous→account migration modal, billing — all after accounts exist.
+- **Phase 5 — billing infrastructure seam:** (done, no network, no waiting-list UI).
+  - `src/lib/billing.ts`: `BillingProvider` (`getStatus/checkout/openPortal/onBillingChange`) + `NoopBillingProvider` (checkout/portal explicitly refuse), `getBilling/setBillingProvider` binding.
+  - `src/config/membership.ts`: `FOUNDER_DISCOUNT_PCT` (50%) + `applyDiscount` (rounds down); `CalemUser.founder?` flag.
+  - Tests: `tests/billing.test.ts` + founder discount locks.
 
-## Bilerek yapılMAYacak
-- Cookie/localStorage'a taşıma, backend kodu, kullanıcı hesabı (bu planda sadece dikişleri var).
-- Davranış değişikliği yok — saf taşıma + test.
+## Deliberately out of scope
+- Moving to cookies/localStorage, backend code, user accounts (this plan only has their seams).
+- No behaviour change — pure migration + tests.

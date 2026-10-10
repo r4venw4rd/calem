@@ -1,48 +1,48 @@
-# Mimari
+# Architecture
 
-Calem tek sayfalık offline-first PWA: Vue 3 + Pinia + Canvas 2D + IndexedDB. Kural: **sayfa-uzayı vektör + base/overlay** — noktalar sayfa punto'sunda saklanır, resize/zoom asla noktayı ölçeklemez.
+Calem is a single-page offline-first PWA: Vue 3 + Pinia + Canvas 2D + IndexedDB. The rule: **page-space vectors + base/overlay** — points are stored in page points, so resize/zoom never scales a point.
 
-## Katmanlar
-
-```
-src/config/   Sabitler (tek kaynak): engine, tools, paper, palettes, ui, files, membership
-src/lib/      Saf mantık (UI/store bağımsız, unit-testli): erase, select, paper, text, sync, auth, billing, idb
-src/stores/   Pinia: orkestrasyon (hedef: ince katman — bkz. aşağıda "God-file borcu")
-src/views/    CanvasView + paneller
-```
-
-> **God-file borcu (devam eden iş):** `stores/drawing.ts` (~4K satır) ve `views/CanvasView.vue`
-> (~3.6K satır) henüz bölünmedi. Hedef: `src/model/` (tipler), `src/render/` (boyama),
-> `src/persist/` (snapshot+IDB) — her dilim ayrı commit, davranış değişikliği sıfır.
-
-## Veri Akışı
+## Layers
 
 ```
-pointer/touch → CanvasSurface (preventDefault, jest kilidi)
-  → store action (nokta topla, decimation)
-  → rAF kuyruğu (frame başına tek boya)
-  → overlay: aktif çizgi · base: commit'lenmiş mürekkep
-pointerup → stopDrawing: base'e işle + history snapshot + debounce'lu IDB
+src/config/   Constants (single source): engine, tools, paper, palettes, ui, files, membership
+src/lib/      Pure logic (independent of UI/store, unit-tested): erase, select, paper, text, sync, auth, billing, idb
+src/stores/   Pinia: orchestration (goal: a thin layer — see "God-file debt" below)
+src/views/    CanvasView + panels
 ```
 
-Kritik yollar **senkron boya yapmaz** (pan dahil). Şüphede HUD'daki `emaMs/frameMs`'e bak.
+> **God-file debt (ongoing work):** `stores/drawing.ts` (~4K lines) and `views/CanvasView.vue`
+> (~3.6K lines) have not been split yet. Target: `src/model/` (types), `src/render/` (painting),
+> `src/persist/` (snapshot+IDB) — one slice per commit, zero behaviour change.
 
-## Dikişler (seams)
+## Data Flow
 
-Dış servisler interface arkasında, ağ kodu yok — gerçek sağlayıcı aynı imzayla takılır:
+```
+pointer/touch → CanvasSurface (preventDefault, gesture lock)
+  → store action (collect points, decimation)
+  → rAF queue (one paint per frame)
+  → overlay: active stroke · base: committed ink
+pointerup → stopDrawing: apply to base + history snapshot + debounced IDB
+```
 
-| Dikiş | Interface | Varsayılan | Gerçek |
+Critical paths **never paint synchronously** (pan included). When in doubt, check `emaMs/frameMs` in the HUD.
+
+## Seams
+
+External services sit behind interfaces; there is no network code — the real provider plugs in with the same signature:
+
+| Seam | Interface | Default | Real |
 |---|---|---|---|
-| Auth | `AuthProvider` (`lib/auth`) | `LocalAuthProvider` (anonim) | e-posta/OAuth sonradan |
-| Depolama | `DocStorage` (`lib/idb`) | IDB adaptörü | kullanıcı-namespace'li |
-| Senkron | saf kurallar (`lib/sync`) | outbox + sayfa-LWW | aktarım sonradan |
-| Fatura | `BillingProvider` (`lib/billing`) | `NoopBillingProvider` | Polar/Stripe sonradan |
+| Auth | `AuthProvider` (`lib/auth`) | `LocalAuthProvider` (anonymous) | email/OAuth later |
+| Storage | `DocStorage` (`lib/idb`) | IDB adapter | user-namespaced |
+| Sync | pure rules (`lib/sync`) | outbox + page LWW | transport later |
+| Billing | `BillingProvider` (`lib/billing`) | `NoopBillingProvider` | Polar/Stripe later |
 
-Yeni araç eklemek: `Tool` union'ına tip + `config/tools`'a meta + `lib/`'ye mantık — core'a dokunmadan kapanmalı (kapanmıyorsa mimari borçtur, issue aç).
+Adding a new tool: a type in the `Tool` union + metadata in `config/tools` + logic in `lib/` — it should land without touching the core (if it can't, that's architectural debt; open an issue).
 
-## Göçler
+## Migrations
 
-- Ayar: `v1 → v4` (presence-check, versiyon şişirme yok).
-- Doküman: `v2 → v5` (` PersistedDoc.v`). Kural: eski kayıt tek sayfa/tek katman/blank kâğıt açılır, **mürekkep asla kaybolmaz**.
+- Settings: `v1 → v4` (presence-check, no version inflation).
+- Document: `v2 → v5` (`PersistedDoc.v`). Rule: an old record opens as one page / one layer / blank paper, and **ink is never lost**.
 
-Detaylı bulut planı: `BACKEND.md`. Xournal parite planı: `plan.md`.
+Detailed cloud plan: `BACKEND.md`. Xournal parity plan: `plan.md`.
