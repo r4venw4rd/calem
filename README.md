@@ -4,7 +4,7 @@
 
 **Zero-latency, offline-first handwriting + PDF annotation PWA for Chromebook and modern browsers.**
 
-🚀 **Canlı Sürüm / Live Demo:** [calem.tayfunucuncu.dev](https://calem-iheuj4k64-r4venw4rd.vercel.app/)
+🚀 **Canlı Sürüm / Live Demo:** [calem-iheuj4k64-r4venw4rd.vercel.app](https://calem-iheuj4k64-r4venw4rd.vercel.app/)
 
 Calem is a lightweight, bloat-free note-taking application optimized for fast handwriting input and PDF markup. Built for Chromebook users who need instant responsiveness without cloud overhead.
 
