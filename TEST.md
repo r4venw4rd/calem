@@ -1,6 +1,7 @@
 # Calem Test Checklist
 
 Automated: `npm test` (vitest — 117 tests under `tests/`: paper/select/erase/config/membership/auth/storage/sync/billing/geometry/text/pointerState).
+Browser-level: `npm run test:e2e` (Playwright — real pointer events on the canvas read back pixel by pixel).
 Everything below is a manual/E2E checklist. Each row states the **expected result**.
 
 ## 0. Setup
@@ -108,6 +109,7 @@ Everything below is a manual/E2E checklist. Each row states the **expected resul
 
 ## 12. Regression gate (before every push)
 - `npm run type-check` clean, `npm run build-only` clean, `npm test` 117/117.
+- Canvas/erase/undo path touched? `npm run test:e2e` green as well (Playwright, system Chrome).
 
 ## 13. Input / closing (mobile + tablet)
 | # | Step | Expected |
