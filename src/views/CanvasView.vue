@@ -1139,11 +1139,17 @@
           ref="overlayCanvas"
           class="absolute inset-0 w-full h-full touch-none select-none block"
           :style="{ cursor: store.currentTool === 'text' ? 'text' : store.currentTool === 'image' ? 'copy' : store.currentTool === 'hand' ? 'grab' : store.currentTool === 'select' ? 'default' : 'crosshair' }"
-          @pointerdown="startDraw"
-          @pointermove="draw"
+          @pointerdown.prevent="startDraw"
+          @pointermove.prevent="draw"
           @pointerup="endDraw"
           @pointerleave="endDraw"
           @pointercancel="endDraw"
+          @touchstart.prevent
+          @touchmove.prevent
+          @gesturestart.prevent
+          @gesturechange.prevent
+          @dblclick.prevent
+          @contextmenu.prevent
         ></canvas>
       </template>
       <div v-else ref="scrollBox" class="absolute inset-0 overflow-y-auto" @scroll.passive="onScrollBox">
@@ -1171,11 +1177,17 @@
             ref="overlayCanvas"
             class="absolute inset-0 w-full h-full touch-none select-none block"
             :style="{ cursor: store.currentTool === 'text' ? 'text' : store.currentTool === 'image' ? 'copy' : store.currentTool === 'hand' ? 'grab' : store.currentTool === 'select' ? 'default' : 'crosshair' }"
-            @pointerdown="startDraw"
-            @pointermove="draw"
+            @pointerdown.prevent="startDraw"
+            @pointermove.prevent="draw"
             @pointerup="endDraw"
             @pointerleave="endDraw"
             @pointercancel="endDraw"
+            @touchstart.prevent
+            @touchmove.prevent
+            @gesturestart.prevent
+            @gesturechange.prevent
+            @dblclick.prevent
+            @contextmenu.prevent
           ></canvas>
         </div>
       </div>
@@ -3342,12 +3354,20 @@ const onPageLayoutChange = (applied: boolean) => {
 
 // Canvas initialization
 // Canvas'lar mod değişiminde remount olur → ref'leri + wheel'i yeniden bağlar.
+// iPadOS Safari: touch jestleri passive listener'da engellenemez; non-passive
+// native bloklayıcılar Scribble/callout/pinch kararını çizimden önce öldürür.
+const blockGesture = (e: Event) => e.preventDefault()
 const bindCanvases = () => {
   if (!baseCanvas.value || !overlayCanvas.value) return false
   overlayCanvas.value.style.touchAction = 'none'
   store.setCanvasRef(baseCanvas.value)
   store.setOverlayRef(overlayCanvas.value)
+  overlayCanvas.value.removeEventListener('wheel', onWheel)
   overlayCanvas.value.addEventListener('wheel', onWheel, { passive: false })
+  for (const t of ['touchstart', 'touchmove', 'gesturestart', 'gesturechange'] as const) {
+    overlayCanvas.value.removeEventListener(t, blockGesture)
+    overlayCanvas.value.addEventListener(t, blockGesture, { passive: false })
+  }
   return true
 }
 
@@ -3510,6 +3530,9 @@ onUnmounted(() => {
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   document.removeEventListener('pointerdown', onDocPointerDown)
   overlayCanvas.value?.removeEventListener('wheel', onWheel)
+  for (const t of ['touchstart', 'touchmove', 'gesturestart', 'gesturechange'] as const) {
+    overlayCanvas.value?.removeEventListener(t, blockGesture)
+  }
   store.setCanvasRef(null)
   store.setOverlayRef(null)
 })
@@ -3519,6 +3542,8 @@ onUnmounted(() => {
 canvas {
   -webkit-tap-highlight-color: transparent;
   touch-action: none;
+  -webkit-touch-callout: none;
   user-select: none;
+  -webkit-user-select: none;
 }
 </style>
