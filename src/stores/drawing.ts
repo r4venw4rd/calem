@@ -19,6 +19,8 @@ import {
 } from '../lib/select'
 import { dropTinyRuns, splitRunsOutside } from '../lib/erase'
 import { wrapTextToWidth } from '../lib/text'
+import { estimateLines, textBBoxOf } from '../lib/text'
+import { fitContain, needsPdfRerender, shapeEndpoints } from '../lib/geometry'
 import { calemFileName, pdfFileName } from '../config/files'
 import { ALL_TOOLS, DEFAULT_WIDTHS, WIDTH_MAX, WIDTH_MIN } from '../config/tools'
 import { A4, DEFAULT_PAPER_BACKGROUND, PAGE_FORMATS, PAPER_THEMES } from '../config/paper'
@@ -81,22 +83,6 @@ const bgCanvases = new Map<string, HTMLCanvasElement>()
 // Resim bitmap'leri: fileId → decode edilmiş canvas. Persist edilmez,
 // IDB files deposundaki bytes'tan üretilir (PDF arkaplan deseni).
 const imgBitmaps = new Map<string, HTMLCanvasElement>()
-
-// Test edilebilir saf kural: ihtiyaç mevcudun %20 üstündeyse yeniden render et.
-// (Sürekli üret-tüket döngüsüne girmemesi için histerezis şart.)
-export const needsPdfRerender = (current: number, need: number): boolean =>
-  Number.isFinite(current) &&
-  Number.isFinite(need) &&
-  current > 0 &&
-  need > current * 1.2
-
-// Contain-fit: bitmap CSS boyutu + hedef CSS boyut → ölçek + offset.
-const fitContain = (bw: number, bh: number, cssW: number, cssH: number) => {
-  const scale = Math.min(cssW / bw, cssH / bh)
-  const dw = bw * scale
-  const dh = bh * scale
-  return { scale, ox: (cssW - dw) / 2, oy: (cssH - dh) / 2, dw, dh }
-}
 
 export const useDrawingStore = defineStore('drawing', () => {
   const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -1059,18 +1045,6 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   const clearActiveText = () => {
     activeTextId.value = null
-  }
-  // Kutu genişliği varsa sarma sonrası satır sayısı tahmini (kaba).
-  const estimateLines = (t: TextItem): number => {
-    if (!t.w || t.w <= 0) return t.text.split('\n').length
-    return Math.max(1, wrapTextToWidth(t.text, t.w, t.size).length)
-  }
-  // Metin kaba kutusu (ölçümsüz tahmin; vuruş-testi ve daire-değme için yeterli).
-  const textBBoxOf = (t: TextItem): { x0: number; y0: number; x1: number; y1: number } => {
-    const lines = t.text.split('\n')
-    const w = t.w && t.w > 0 ? t.w : Math.max(...lines.map((l) => l.length)) * t.size * 0.62 + 8
-    const h = estimateLines(t) * t.size * 1.25 + 4
-    return { x0: t.x - 4, y0: t.y - 4, x1: t.x + w, y1: t.y + h }
   }
   // Tıklanan noktadaki en üst metin (kaba kutu: ölçümsüz tahmin, editör gerçeği gösterir).
   const textAt = (x: number, y: number): TextItem | null => {
@@ -2171,12 +2145,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     const pressureFactor = 0.4 + 0.6 * Math.min(Math.max(avg, 0), 1)
     const w = base * (1 + (pressureFactor - 1) * Math.min(pressureSensitivity.value, 2))
     return Math.max(w, 0.5)
-  }
-
-  // Şekil uç noktaları: ilk + son nokta (ara noktalar serbest çizim artığıdır).
-  const shapeEndpoints = (pts: Point[]): [Point, Point] | null => {
-    if (pts.length === 0) return null
-    return [pts[0]!, pts[pts.length - 1]!]
   }
 
   // Primitif path kurar (stroke çağrılmaz — stiller üstte hazırdır).
