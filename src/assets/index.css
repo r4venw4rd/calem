@@ -39,3 +39,12 @@ select option {
   background-color: var(--chrome-bg-solid);
   color: var(--chrome-title);
 }
+
+/* Scrollbar gizleme yardımcısı */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
