@@ -2574,6 +2574,12 @@ const endDraw = (e?: PointerEvent) => {
     if (gesture && pointers.size < 2) gesture = null
     return
   }
+  // Aktif pointer kilidini pahalı commit'ten ÖNCE bırak: stopDrawing (snapshotDoc
+  // tam-klon + base'e işleme) bitmeden gelen pointerdown temiz görsün, yoksa
+  // isDrawing/pointerId kapılarına takılıp ilk vuruş sessizce yutuluyordu.
+  // Alt dalların (selectUp/panUp/...) pointerId guard'ı null'da geçişlidir,
+  // pinch kilidi yukarıda aynen korunur.
+  activePointerId = null
   if (selActive || store.currentTool === 'select') {
     selectUp(e)
     return
@@ -2590,12 +2596,8 @@ const endDraw = (e?: PointerEvent) => {
     imageUp(e)
     return
   }
-  if (!store.isDrawing) {
-    activePointerId = null
-    return
-  }
-  if (e && activePointerId !== null && e.pointerId !== activePointerId) return
-  activePointerId = null
+  if (!store.isDrawing) return
+  // isDrawing tek gerçek kapı (startDrawing zaten isDrawing'deyken reddeder).
   if (rafId !== 0) {
     cancelAnimationFrame(rafId)
     rafId = 0
