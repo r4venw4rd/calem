@@ -2411,6 +2411,9 @@ const delActiveImage = () => {
 let spacePan = false
 let panActive = false
 let panLast: { x: number; y: number } | null = null
+let panDx = 0
+let panDy = 0
+let panRaf = 0
 
 const panDown = (e: PointerEvent) => {
   try {
@@ -2427,19 +2430,48 @@ const panMove = (e: PointerEvent) => {
   // Space sonradan basılırsa devralınmaz (mürekkep gasp edilmesin) — önce Space, sonra bas.
   if (!panActive || e.pointerId !== activePointerId) return
   if (e.buttons === 0 && e.pointerType === 'mouse') return
-  const cur = ptrPos(e)
-  if (!panLast) {
+  // Delta biriktir, boyayı rAF'e bırak: her move'da tam sahne boyası (repaintBase)
+  // mobil GPU'da kasıyordu. Kalem yolundaki scheduleRender deseninin aynısı.
+  for (const ev of coalescedOf(e)) {
+    const cur = ptrPos(ev)
+    if (!panLast) {
+      panLast = cur
+      continue
+    }
+    panDx += cur.x - panLast.x
+    panDy += cur.y - panLast.y
     panLast = cur
-    return
   }
-  store.panBy(cur.x - panLast.x, cur.y - panLast.y)
-  panLast = cur
-  drawSelectionOverlay()
-  updateHud()
+  schedulePan()
+}
+
+// Birikmiş pan deltayı frame başına tek boyayla işler.
+const schedulePan = () => {
+  if (panRaf !== 0) return
+  panRaf = requestAnimationFrame(() => {
+    panRaf = 0
+    if (panDx !== 0 || panDy !== 0) {
+      store.panBy(panDx, panDy)
+      panDx = 0
+      panDy = 0
+      drawSelectionOverlay()
+      updateHud()
+    }
+  })
 }
 
 const panUp = (e?: PointerEvent) => {
   if (e && activePointerId !== null && e.pointerId !== activePointerId) return
+  if (panRaf !== 0) {
+    cancelAnimationFrame(panRaf)
+    panRaf = 0
+  }
+  // Kuyrukta kalan deltayı çöpe atma — bırakıştaki son milimetre kaybolmasın.
+  if (panDx !== 0 || panDy !== 0) {
+    store.panBy(panDx, panDy)
+    panDx = 0
+    panDy = 0
+  }
   panActive = false
   panLast = null
   activePointerId = null
@@ -2447,6 +2479,12 @@ const panUp = (e?: PointerEvent) => {
 }
 
 const cancelPan = () => {
+  if (panRaf !== 0) {
+    cancelAnimationFrame(panRaf)
+    panRaf = 0
+  }
+  panDx = 0
+  panDy = 0
   panActive = false
   panLast = null
 }
