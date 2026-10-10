@@ -135,16 +135,14 @@ See [BACKEND.md](BACKEND.md) for detailed architecture and cloud plans.
 
 ## License
 
-This project is licensed under the **Apache License 2.0** — you retain full ownership and copyright. Others can use, modify, and distribute the software freely, but your authorship and copyright are preserved.
+Calem is licensed under the **Apache License 2.0**. Copyright ownership and authorship remain with r4venw4rd. Others can use, modify, and distribute the software freely, but the original copyright must be preserved.
 
 See [LICENSE](LICENSE) for details.
 
----
+## Support
 
-**Made with ❤️ for offline-first note-taking** — privacy, speed, and zero bloat.
-
-- 📖 **Documentation** — See [BACKEND.md](BACKEND.md) for architecture
-- 🧪 **Tests** — See [TEST.md](TEST.md) for testing docs
+- 📖 **Documentation** — See [BACKEND.md](BACKEND.md) for architecture details
+- 🧪 **Tests** — See [TEST.md](TEST.md) for testing guide
 - 🐛 **Issues** — Found a bug? [Open an issue](https://github.com/r4venw4rd/calem/issues)
 
 ---
