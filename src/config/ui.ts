@@ -9,6 +9,7 @@ export const SLIDERS = {
   pressure: { min: 0, max: 2, step: 0.1 },
   smoothing: { min: 0, max: 0.9, step: 0.05 },
   imageWidth: { min: 32, max: 1200, step: 4 },
+  uiScale: { min: 0.8, max: 1.4, step: 0.05 },
 } as const
 
 export type SliderKey = keyof typeof SLIDERS

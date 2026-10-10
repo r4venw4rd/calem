@@ -51,6 +51,7 @@ import {
   PALETTE_MAX_COUNT,
 } from '../config/palettes'
 import { DEFAULT_LOCALE, isLocale, type Locale } from '../config/locale'
+import { SLIDERS } from '../config/ui'
 
 export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text' | 'image' | 'hand'
 export type ShapeTool = 'line' | 'rect' | 'ellipse' | 'arrow'
@@ -147,6 +148,7 @@ export interface AppSettings {
   customH: number
   uiTheme: UiTheme
   locale?: Locale
+  uiScale?: number
 }
 
 // .calem aktarım dosyası: vektör belge + ayar + gömülü bytes (base64).
@@ -327,6 +329,25 @@ export const useDrawingStore = defineStore('drawing', () => {
     void persistSettings()
   }
 
+  // Arayüz ölçeği: Tailwind rem tabanlı olduğundan kök font-size tüm chrome'u
+  // orantılı büyütür/küçültür; canvas piksel matematiği etkilenmez.
+  const uiScale = ref(1)
+  const cleanUiScale = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isFinite(v)
+      ? Math.min(SLIDERS.uiScale.max, Math.max(SLIDERS.uiScale.min, Math.round(v * 20) / 20))
+      : null
+  const applyUiScale = () => {
+    if (typeof document === 'undefined' || !document.documentElement) return
+    document.documentElement.style.fontSize = `${16 * uiScale.value}px`
+  }
+  const setUiScale = (v: number) => {
+    const c = cleanUiScale(v)
+    if (c === null || c === uiScale.value) return
+    uiScale.value = c
+    applyUiScale()
+    void persistSettings()
+  }
+
   // Eski toolbar dizilimini yeni varsayılana göçürür: el silginin sağına.
   // v5 öncesi kayıtlarda el en sondadır; kullanıcının gizlilik/sıra tercihini
   // bozmadan sadece elin konumunu düzeltir.
@@ -364,6 +385,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         customH: customH.value,
         uiTheme: uiTheme.value,
         locale: locale.value,
+        uiScale: uiScale.value,
       }
       await storage.setKey(SETTINGS_KEY, doc)
     } catch {
@@ -387,8 +409,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       orientation: pageOrientation.value,
       customW: customW.value,
       customH: customH.value,
-      uiTheme: uiTheme.value,
-      locale: locale.value,
+        uiTheme: uiTheme.value,
+        locale: locale.value,
+        uiScale: uiScale.value,
     }
     return JSON.stringify(doc)
   }
@@ -483,9 +506,15 @@ export const useDrawingStore = defineStore('drawing', () => {
       locale.value = r.locale
       applied = true
     }
+    const sc = cleanUiScale(r.uiScale)
+    if (sc !== null) {
+      uiScale.value = sc
+      applied = true
+    }
     if (!applied) return false
     applyUiTheme()
     applyLocale()
+    applyUiScale()
     await persistSettings()
     if (canvasRef.value) {
       repaintBase()
@@ -495,11 +524,16 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   const loadSettings = async (): Promise<void> => {    try {
+      // IDB beklenmeden önce eldeki değerleri uygula: flaş yok, her ortamda deterministik.
+      applyUiTheme()
+      applyLocale()
+      applyUiScale()
       const raw = await storage.getKey<AppSettings>(SETTINGS_KEY)
       // Kayıt yoksa bile temayı/dili uygula: data-theme + lang hep yazılır.
       if (!raw || (raw.v !== 1 && raw.v !== 2 && raw.v !== 3 && raw.v !== 4 && raw.v !== 5 && raw.v !== 6)) {
         applyUiTheme()
         applyLocale()
+        applyUiScale()
         return
       }
       if (typeof raw.paper === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw.paper)) {
@@ -561,8 +595,13 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (isLocale(raw.locale)) {
         locale.value = raw.locale
       }
+      const rawScale = cleanUiScale(raw.uiScale)
+      if (rawScale !== null) {
+        uiScale.value = rawScale
+      }
       applyUiTheme()
       applyLocale()
+      applyUiScale()
     } catch {
       /* varsayılanlar */
     }
@@ -2959,6 +2998,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         customH: customH.value,
         uiTheme: uiTheme.value,
         locale: locale.value,
+        uiScale: uiScale.value,
       }
       const out: CalemFile = {
         app: 'calem',
@@ -3870,6 +3910,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     setUiTheme,
     locale,
     setLocale,
+    uiScale,
+    setUiScale,
     exportSettingsJSON,
     importSettingsJSON,
     strokeWidth,
