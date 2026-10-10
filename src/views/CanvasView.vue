@@ -1,5 +1,8 @@
 <template>
-  <div class="h-screen h-dvh flex flex-col bg-[var(--page-bg)] overflow-hidden">
+  <div
+    class="h-screen h-dvh flex flex-col bg-[var(--page-bg)] overflow-hidden"
+    :style="appHeightPx ? { height: `${appHeightPx}px` } : undefined"
+  >
     <header
       v-if="!presenting"
       :class="isMobile
@@ -3123,6 +3126,13 @@ const sizeCanvas = () => {
   drawSelectionOverlay()
 }
 
+// Görünür alan yüksekliği (px). visualViewport pinch içermez (zoom kapalı), en doğru ölçüdür.
+const appHeightPx = ref<number | null>(null)
+const syncAppHeight = () => {
+  const h = window.visualViewport?.height ?? window.innerHeight
+  if (Number.isFinite(h) && h > 0) appHeightPx.value = Math.round(h)
+}
+
 // Aktif slotu aktif bloğun üstüne oturtur (ölçüler bloktan, eşleşme birebir).
 const positionSlot = () => {
   if (!scrollMode.value || !scrollBox.value || !activeSlot.value) return
@@ -3328,6 +3338,11 @@ onMounted(() => {
   window.addEventListener('resize', sizeCanvas)
   // Mobil URL barı açılıp kapanınca window.resize ateşlenmez; visualViewport yakalar.
   window.visualViewport?.addEventListener('resize', sizeCanvas)
+  // Kök yükseklik: dvh desteksiz tarayıcıda 100vh fold altına taşar, alt bar kaybolur.
+  // innerHeight/visualViewport her yerde doğru ölçer; mount sonrası JS devralır.
+  syncAppHeight()
+  window.addEventListener('resize', syncAppHeight)
+  window.visualViewport?.addEventListener('resize', syncAppHeight)
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
   document.addEventListener('fullscreenchange', onFullscreenChange)
@@ -3435,6 +3450,8 @@ onUnmounted(() => {
   narrowMq = null
   window.removeEventListener('resize', sizeCanvas)
   window.visualViewport?.removeEventListener('resize', sizeCanvas)
+  window.removeEventListener('resize', syncAppHeight)
+  window.visualViewport?.removeEventListener('resize', syncAppHeight)
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
