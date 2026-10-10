@@ -97,8 +97,8 @@ describe('tools', () => {
   it('katalog tam ve sirali', () => {
     expect(ALL_TOOLS).toEqual([
       'pen',
-      'highlighter',
       'eraser',
+      'highlighter',
       'hand',
       'select',
       'line',
