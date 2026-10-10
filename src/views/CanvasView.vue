@@ -1,26 +1,37 @@
 <template>
-  <div class="h-screen flex flex-col bg-[var(--page-bg)] overflow-hidden">
-    <header v-if="!presenting" class="relative z-10 shrink-0 h-13 flex items-center justify-between gap-2 px-3 bg-[var(--chrome-bg)] border-b border-[var(--chrome-border)] select-none whitespace-nowrap">
-      <div class="flex items-center gap-1.5 shrink-0">
+  <div class="h-screen h-dvh flex flex-col bg-[var(--page-bg)] overflow-hidden">
+    <header
+      v-if="!presenting"
+      :class="isMobile
+        ? 'relative z-10 flex h-13 w-full shrink-0 items-center justify-between gap-2 border-b border-[var(--chrome-border)] bg-[var(--chrome-bg)] px-3 select-none'
+        : 'absolute left-1/2 top-3 z-20 w-max max-w-[calc(100%-1rem)] -translate-x-1/2 select-none'"
+    >
+      <div :class="isMobile ? 'contents' : 'flex max-w-full items-center gap-1 overflow-x-auto no-scrollbar whitespace-nowrap rounded-2xl border border-[var(--chrome-border-strong)] bg-[var(--float-bg)] px-2 py-1.5 shadow-xl backdrop-blur'">
+      <div class="flex items-center gap-1 shrink-0">
         <img
+        v-if="isMobile"
         src="/icon-192.png"
         alt="Calem"
         title="Calem"
         class="h-7 w-7 rounded-md select-none"
         draggable="false"
       />
-      <div ref="fileMenu" class="relative">
+      <div ref="fileMenu" class="relative shrink-0">
         <button
-          @click="showFile = !showFile"
-          class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
+          @click="showFile = !showFile; showLayers = false; showStyle = false; showMore = false"
+          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
           :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showFile }"
           :title="t('fileOps')"
         >
-          {{ t('file') }}
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+          </svg>
         </button>
+        <Teleport to="body">
         <div
           v-if="showFile"
-          class="absolute left-0 top-full mt-1 z-20 w-56 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-1.5 text-xs shadow-xl"
+          ref="filePanel"
+          class="fixed left-1/2 top-[68px] z-30 w-56 -translate-x-1/2 rounded-xl bg-[var(--float-bg)] border border-[var(--chrome-border-strong)] p-1.5 text-xs shadow-xl backdrop-blur"
           role="menu"
           :aria-label="t('file')"
         >
@@ -118,33 +129,43 @@
             </span>
           </div>
         </div>
+        </Teleport>
       </div>
 
-      <div ref="settingsBtn" class="relative">
+      <div ref="settingsBtn" class="relative shrink-0">
         <button
-          @click="showSettings = !showSettings; showLayers = false"
-          class="px-3 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
+          @click="showSettings = !showSettings; showLayers = false; showStyle = false; showMore = false"
+          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
           :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showSettings }"
           :title="t('settings')"
         >
-          {{ t('settings') }}
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+            <path d="M4 8h10M18 8h2M4 16h4M12 16h8" />
+            <circle cx="16" cy="8" r="2.2" />
+            <circle cx="10" cy="16" r="2.2" />
+          </svg>
         </button>
       </div>
 
-      <div ref="layersBtn" class="relative">
+      <div ref="layersBtn" class="relative shrink-0">
         <button
-          @click="showLayers = !showLayers; showSettings = false"
-          class="px-2.5 py-1 rounded text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
+          @click="showLayers = !showLayers; showSettings = false; showStyle = false; showMore = false"
+          class="relative w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
           :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showLayers }"
           :title="t('layersTitle')"
         >
-          {{ t('layers') }} ({{ store.activePage.layers.length }})
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3l9 5-9 5-9-5 9-5z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 13l9 5 9-5" />
+          </svg>
+          <span class="absolute -top-1 -right-1 min-w-4 h-4 px-0.5 rounded-full bg-indigo-600 text-white text-[9px] leading-4 text-center font-mono">{{ store.activePage.layers.length }}</span>
         </button>
 
+        <Teleport to="body">
         <div
           ref="layersPanel"
           v-if="showLayers"
-          class="absolute left-0 top-full mt-1 z-20 w-64 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
+          class="fixed left-1/2 top-[68px] z-30 w-64 max-w-[calc(100vw-1rem)] -translate-x-1/2 rounded-xl bg-[var(--float-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl backdrop-blur"
           role="dialog"
           :aria-label="t('layersDialog')"
         >
@@ -217,18 +238,19 @@
             {{ t('newLayer') }}
           </button>
         </div>
+        </Teleport>
       </div>
 
       <span v-if="store.pdfBusy" class="text-[10px] text-yellow-400/80 font-mono ml-1">{{ t('processing') }}</span>
       <span v-if="pdfError" class="text-[10px] text-red-400 font-mono ml-1">{{ pdfError }}</span>
     </div>
 
-    <!-- ORTA: Desktop Araçları & Seçili Araç Ayarları -->
-    <div v-if="!isMobile" class="flex items-center gap-1.5 shrink-0">
+    <span v-if="!isMobile" class="w-px h-5 bg-[var(--chrome-border)] shrink-0"></span>
+    <!-- ORTA: Desktop dock -->
       <!-- Araç Dock'u -->
-      <div class="flex items-center gap-0.5 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]" role="toolbar" :aria-label="t('tools')">
+      <div v-if="!isMobile" class="flex shrink-0 items-center gap-0.5" role="toolbar" :aria-label="t('tools')">
         <button
-          v-for="tool in visibleTools"
+          v-for="tool in (isNarrow && !isMobile ? visibleTools.slice(0, 6) : visibleTools)"
           :key="tool"
           @click="store.setTool(tool)"
           :class="store.currentTool === tool ? (TOOL_META[tool].active + ' shadow-xs') : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)]'"
@@ -236,48 +258,164 @@
           :title="locTools[tool].title"
           :aria-label="locTools[tool].label"
         >
-          <svg v-if="TOOL_META[tool].icon === 'pen'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          <ToolIcon :icon="TOOL_META[tool].icon" />
+        </button>
+      </div>
+      <span v-if="!isMobile" class="w-px h-5 bg-[var(--chrome-border)] shrink-0"></span>
+      <div v-if="!isMobile" ref="styleBtn" class="relative shrink-0 min-[1440px]:hidden">
+        <button
+          @click="showStyle = !showStyle; showFile = false; showLayers = false; showMore = false"
+          class="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
+          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showStyle }"
+          :title="t('palette')"
+        >
+          <span
+            v-if="store.currentTool !== 'select' && store.currentTool !== 'hand'"
+            class="w-4 h-4 rounded-full border border-[var(--chrome-border-strong)]"
+            :style="{ background: store.color }"
+          ></span>
+          <span
+            v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'"
+            class="text-[11px] font-mono"
+          >{{ store.strokeWidth }}</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+            <path d="M4 8h10M18 8h2M4 16h4M12 16h8" />
+            <circle cx="16" cy="8" r="2.2" />
+            <circle cx="10" cy="16" r="2.2" />
           </svg>
-          <svg v-else-if="TOOL_META[tool].icon === 'hl'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 11l3 3m-2.5-2.5L4 17l5-1.5L19.5 5 15 3.5 9.5 8.5z M4 20l4-1" />
+        </button>
+      </div>
+      <!-- Geniş ekran satır-içi ayarları (renk + kalınlık + opaklık). Dar ekranda popover'da. -->
+      <div v-if="!isMobile" class="hidden min-[1440px]:flex shrink-0 items-center gap-1.5">
+        <div
+          v-if="store.currentTool !== 'select' && store.currentTool !== 'hand'"
+          class="flex items-center gap-1 shrink-0"
+          role="toolbar"
+          :aria-label="t('palette')"
+        >
+          <button
+            v-for="hex in store.activePalette.colors"
+            :key="hex"
+            @click="store.setColor(hex)"
+            :title="hex"
+            class="w-5 h-5 rounded-full border transition block shrink-0"
+            :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110 ring-2 ring-indigo-500/60' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
+            :style="{ background: hex }"
+          ></button>
+        </div>
+        <span
+          v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'"
+          class="flex items-center gap-1.5"
+        >
+          <span class="text-xs text-[var(--chrome-muted)] whitespace-nowrap">{{ t('width') }}</span>
+          <input
+            type="range"
+            :min="store.widthMin"
+            :max="store.widthMax"
+            :value="store.strokeWidth"
+            @input="store.setStrokeWidth(Number(($event.target as HTMLInputElement).value))"
+            class="w-18 accent-indigo-600 cursor-pointer"
+          />
+          <span class="text-xs text-[var(--chrome-text)] w-5 text-right font-mono">{{ store.strokeWidth }}</span>
+          <template v-if="['pen', 'line', 'rect', 'ellipse', 'arrow'].includes(store.currentTool)">
+            <select
+              :value="store.strokeDash"
+              @change="store.setStrokeDash(($event.target as HTMLSelectElement).value)"
+              class="px-1.5 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)] focus:outline-none"
+              :title="t('lineStyle')"
+            >
+              <option value="solid">{{ t('solid') }}</option>
+              <option value="dash">{{ t('dashed') }}</option>
+              <option value="dot">{{ t('dotted') }}</option>
+            </select>
+            <input
+              type="range"
+              :min="SLIDERS.opacity.min"
+              :max="SLIDERS.opacity.max"
+              :step="SLIDERS.opacity.step"
+              :value="store.strokeOpacity"
+              @input="store.setStrokeOpacity(Number(($event.target as HTMLInputElement).value))"
+              class="w-14 accent-indigo-600 cursor-pointer"
+              :title="t('opacity')"
+            />
+            <span class="text-xs text-[var(--chrome-text)] w-7 text-right font-mono">{{ Math.round(store.strokeOpacity * 100) }}%</span>
+          </template>
+        </span>
+      </div>
+      <span v-if="!isMobile" class="w-px h-5 bg-[var(--chrome-border)] shrink-0"></span>
+      <div v-if="!isMobile" class="flex shrink-0 items-center gap-0.5">
+        <button
+          @click="undo"
+          :disabled="store.undoStack.length === 0"
+          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-30 disabled:cursor-not-allowed"
+          :title="t('undoTitle')"
+          aria-label="Geri al"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2M3 10l5-5M3 10l5 5" />
           </svg>
-          <svg v-else-if="TOOL_META[tool].icon === 'eraser'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10M5.5 14.5L14 6l4.5 4.5-8.5 8.5H5.5v-4.5z" />
+        </button>
+        <button
+          @click="redo"
+          :disabled="store.redoStack.length === 0"
+          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-30 disabled:cursor-not-allowed"
+          :title="t('redoTitle')"
+          aria-label="Yinele"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10H11a5 5 0 00-5 5v2M21 10l-5-5M21 10l-5 5" />
           </svg>
-          <svg v-else-if="TOOL_META[tool].icon === 'hand'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11V7a2 2 0 014 0v4m0-2a2 2 0 014 0v3m0-2a2 2 0 014 0v5a7 7 0 01-14 0V9a2 2 0 014 0v3" />
+        </button>
+        <button
+          @click="askClearCanvas"
+          class="w-8 h-8 rounded-lg flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 transition"
+          :title="t('clearTitle')"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m5 0V4a1 1 0 011-1h6a1 1 0 011 1v3M9 11v6m6-6v6" />
           </svg>
-          <svg v-else-if="TOOL_META[tool].icon === 'select'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 7-6 2-2 6-6-15z" />
+        </button>
+        <button
+          @click="togglePresent"
+          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
+          :title="t('presentTitle')"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="2" y="3" width="20" height="14" rx="2" stroke-width="2" stroke="currentColor" fill="none" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 21h8m-4-4v4" />
           </svg>
-          <svg v-else-if="TOOL_META[tool].icon === 'line'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 20L20 4" />
-          </svg>
-          <svg v-else-if="TOOL_META[tool].icon === 'rect'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <rect x="4" y="4" width="16" height="16" rx="2" stroke-width="2" stroke="currentColor" />
-          </svg>
-          <svg v-else-if="TOOL_META[tool].icon === 'ellipse'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="8" stroke-width="2" stroke="currentColor" />
-          </svg>
-          <svg v-else-if="TOOL_META[tool].icon === 'arrow'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19L19 5M19 5v8M19 5H11" />
-          </svg>
-          <svg v-else-if="TOOL_META[tool].icon === 'text'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M12 6v14" />
-          </svg>
-          <svg v-else-if="TOOL_META[tool].icon === 'image'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2" stroke="currentColor" />
-            <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15l-5-5L5 21" />
+        </button>
+      </div>
+      <div v-if="!isMobile && isNarrow && visibleTools.length > 6" ref="moreBtn" class="relative shrink-0">
+        <button
+          @click="showMore = !showMore; showFile = false; showLayers = false; showStyle = false"
+          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
+          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showMore }"
+          :title="t('moreTitle')"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9l6 6 6-6" />
           </svg>
         </button>
       </div>
 
+      <!-- Detay ayarlar popover'ı: barı tek satırda tutar -->
+      <Teleport to="body">
+      <div
+        ref="stylePanel"
+        v-if="showStyle"
+        class="fixed left-1/2 top-[68px] z-30 w-72 max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-90px)] overflow-y-auto -translate-x-1/2 rounded-2xl border border-[var(--chrome-border-strong)] bg-[var(--float-bg)] p-3 text-xs text-[var(--chrome-text)] shadow-xl backdrop-blur"
+        role="dialog"
+        :aria-label="t('palette')"
+      >
+        <div class="flex items-center justify-between mb-2">
+          <span class="font-medium text-[var(--chrome-title)]">{{ locTools[store.currentTool].label }}</span>
+          <button @click="showStyle = false" class="px-2 py-1 rounded hover:bg-[var(--chrome-bg-soft)]">{{ t('done') }}</button>
+        </div>
       <!-- Seçim İşlemleri (Select aktifken) -->
       <div
         v-if="store.currentTool === 'select'"
-        class="flex items-center gap-1 p-1 rounded-lg bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border)]"
+        class="flex flex-wrap items-center gap-1"
         role="toolbar"
         :aria-label="t('selOps')"
       >
@@ -334,7 +472,7 @@
       <!-- Renk Paleti (Tek Satır: Hazır Palet + Renkler + Damlalık + Custom Renkler) -->
       <div
         v-if="store.currentTool !== 'select' && store.currentTool !== 'hand'"
-        class="flex items-center gap-1.5"
+        class="flex flex-wrap items-center gap-2"
         role="toolbar"
         :aria-label="t('palette')"
       >
@@ -430,7 +568,7 @@
       <!-- Kalınlık, Çizgi Stili, Opaklık ve Silgi Modu -->
       <div
         v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'"
-        class="flex items-center gap-1.5"
+        class="flex flex-wrap items-center gap-x-1.5 gap-y-2"
       >
         <span class="w-px h-4 bg-[var(--chrome-border)] mx-0.5"></span>
         <span class="text-xs text-[var(--chrome-muted)] whitespace-nowrap">{{ t('width') }}</span>
@@ -492,7 +630,7 @@
       </div>
 
       <!-- Metin Boyutu -->
-      <div v-if="store.currentTool === 'text'" class="flex items-center gap-1.5">
+      <div v-if="store.currentTool === 'text'" class="flex flex-wrap items-center gap-1.5">
         <span class="w-px h-4 bg-[var(--chrome-border)] mx-0.5"></span>
         <span class="text-xs text-[var(--chrome-muted)] whitespace-nowrap">{{ t('textLabel') }}</span>
         <input
@@ -507,39 +645,33 @@
         />
         <span class="text-xs text-[var(--chrome-text)] w-5 text-right font-mono">{{ store.textSize }}</span>
       </div>
-    </div>
+      </div>
+      </Teleport>
 
-    <!-- SAĞ: Undo / Redo / Temizle / Sunum -->
-    <div class="flex items-center gap-1 shrink-0 ml-auto">
-      <template v-if="!isMobile">
-        <!-- Geri al (Undo) -->
+      <!-- Taşma menüsü (dar masaüstü): bara sığmayan son araçlar -->
+      <Teleport to="body">
+      <div
+        ref="morePanel"
+        v-if="showMore"
+        class="fixed left-1/2 top-[68px] z-30 w-56 max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-90px)] overflow-y-auto -translate-x-1/2 rounded-2xl border border-[var(--chrome-border-strong)] bg-[var(--float-bg)] p-1.5 text-xs shadow-xl backdrop-blur"
+        role="menu"
+        :aria-label="t('moreTitle')"
+      >
         <button
-          @click="undo"
-          :disabled="store.undoStack.length === 0"
-          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-30 disabled:cursor-not-allowed"
-          :title="t('undoTitle')"
-          aria-label="Geri al"
+          v-for="tool in visibleTools.slice(6)"
+          :key="tool"
+          @click="store.setTool(tool); showMore = false"
+          class="flex w-full items-center gap-2 px-3 py-1.5 rounded text-left transition"
+          :class="store.currentTool === tool ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)]'"
+          :title="locTools[tool].title"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2M3 10l5-5M3 10l5 5" />
-          </svg>
+          <span class="font-medium">{{ locTools[tool].label }}</span>
         </button>
+      </div>
+      </Teleport>
 
-        <!-- Yinele (Redo) -->
-        <button
-          @click="redo"
-          :disabled="store.redoStack.length === 0"
-          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-30 disabled:cursor-not-allowed"
-          :title="t('redoTitle')"
-          aria-label="Yinele"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10H11a5 5 0 00-5 5v2M21 10l-5-5M21 10l-5 5" />
-          </svg>
-        </button>
-
-        <span class="w-px h-5 bg-[var(--chrome-border)] mx-0.5"></span>
-      </template>
+    <!-- SAĞ (yalnızca mobil üst şerit): Temizle / Sunum -->
+    <div v-if="isMobile" class="flex items-center gap-1 shrink-0 ml-auto">
 
       <!-- Temizle (Clear Canvas) -->
       <button
@@ -550,7 +682,6 @@
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m5 0V4a1 1 0 011-1h6a1 1 0 011 1v3M9 11v6m6-6v6" />
         </svg>
-        <span class="hidden xl:inline">{{ t('clear') }}</span>
       </button>
 
       <!-- Sunum (Present) -->
@@ -563,9 +694,9 @@
           <rect x="2" y="3" width="20" height="14" rx="2" stroke-width="2" stroke="currentColor" fill="none" />
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 21h8m-4-4v4" />
         </svg>
-        <span class="hidden xl:inline">{{ t('present') }}</span>
       </button>
     </div>
+      </div>
   </header>
 
       <div
@@ -1180,7 +1311,8 @@
       <div
         v-if="!presenting"
         ref="hud"
-        class="absolute bottom-2 right-2 text-[10px] leading-tight text-[var(--chrome-faint)] bg-[var(--chrome-bg)] rounded px-1.5 py-0.5 pointer-events-none font-mono"
+        class="absolute right-2 text-[10px] leading-tight text-[var(--chrome-faint)] bg-[var(--chrome-bg)] rounded px-1.5 py-0.5 pointer-events-none font-mono"
+        :class="isNarrow && !isMobile ? 'top-[68px]' : 'top-2'"
       ></div>
 
       <div
@@ -1243,23 +1375,24 @@
       </div>
     </div>
 
-    <!-- MOBİL ALT ARAÇ ÇUBUĞU (başparmak bölgesi, <900px) -->
+    <!-- MOBİL YÜZEN ARAÇ ÇUBUĞU (başparmak bölgesi, <640px) -->
     <div
       v-if="!presenting && isMobile"
-      class="relative z-10 shrink-0 flex items-center gap-1 px-1 py-1 bg-[var(--chrome-bg)] border-t border-[var(--chrome-border)]"
+      class="relative z-10 shrink-0 mx-2 mb-[max(0.5rem,env(safe-area-inset-bottom))] flex items-center gap-1 rounded-2xl border border-[var(--chrome-border-strong)] bg-[var(--float-bg)] px-2 py-1.5 shadow-xl backdrop-blur"
       role="toolbar"
       :aria-label="t('tools')"
     >
-      <div class="flex-1 min-w-0 overflow-x-auto flex items-center gap-1">
+      <div class="flex-1 min-w-0 overflow-x-auto no-scrollbar flex items-center gap-1">
         <button
           v-for="tool in visibleTools"
           :key="tool"
           @click="store.setTool(tool)"
-          :class="store.currentTool === tool ? TOOL_META[tool].active : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-          class="shrink-0 min-w-[3.25rem] px-2 py-1.5 rounded-lg text-[11px] font-medium transition text-center"
+          :class="store.currentTool === tool ? (TOOL_META[tool].active + ' shadow-xs') : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          class="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition"
           :title="locTools[tool].title"
+          :aria-label="locTools[tool].label"
         >
-          {{ locTools[tool].label }}
+          <ToolIcon :icon="TOOL_META[tool].icon" />
         </button>
       </div>
       <span class="w-px h-6 bg-[var(--chrome-border)] shrink-0"></span>
@@ -1277,18 +1410,24 @@
       <button
         @click="undo"
         :disabled="store.undoStack.length === 0"
-        class="shrink-0 w-9 h-9 rounded-lg hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+        class="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed transition"
         :title="t('undoTitle')"
+        aria-label="Geri al"
       >
-        ↶
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2M3 10l5-5M3 10l5 5" />
+        </svg>
       </button>
       <button
         @click="redo"
         :disabled="store.redoStack.length === 0"
-        class="shrink-0 w-9 h-9 rounded-lg hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
+        class="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed transition"
         :title="t('redoTitle')"
+        aria-label="Yinele"
       >
-        ↷
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10H11a5 5 0 00-5 5v2M21 10l-5-5M21 10l-5 5" />
+        </svg>
       </button>
     </div>
 
@@ -1302,7 +1441,7 @@
       @pointerdown.self="mobileOptions = false"
     >
       <div
-        class="w-full max-h-[70vh] overflow-y-auto rounded-t-2xl bg-[var(--chrome-bg)] border-t border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-2xl"
+        class="w-full max-h-[70vh] overflow-y-auto rounded-t-2xl bg-[var(--chrome-bg)] border-t border-[var(--chrome-border-strong)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs text-[var(--chrome-text)] shadow-2xl"
       >
         <div class="flex items-center justify-between mb-2">
           <span class="font-medium text-[var(--chrome-title)]">{{ t('palette') }}</span>
@@ -1472,6 +1611,7 @@ import {
   settingsBackupName,
 } from '@/config/files'
 import { selectionBBox, coalescedOf } from '@/lib/select'
+import ToolIcon from '@/components/ToolIcon.vue'
 
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
@@ -1480,13 +1620,19 @@ const pdfError = ref('')
 const showSettings = ref(false)
 const showFile = ref(false)
 const showLayers = ref(false)
+const showStyle = ref(false)
+const showMore = ref(false)
 const presenting = ref(false)
 // Mobil layout (< 900px): araclar alta iner, header sadeleşir. matchMedia ile izlenir.
 const isMobile = ref(false)
 const mobileOptions = ref(false)
+// Dar masaüstü (640-899px): dock kuyruğu "v" taşma menüsüne girer.
+const isNarrow = ref(false)
 let mobileMq: MediaQueryList | null = null
+let narrowMq: MediaQueryList | null = null
 const syncIsMobile = () => {
   isMobile.value = !!mobileMq?.matches
+  isNarrow.value = !!narrowMq?.matches
   if (!isMobile.value) mobileOptions.value = false
 }
 // Kaydırmalı mod: sayfalar alt alta statik bloklar, canlı canvas aktif slotta yüzer.
@@ -1504,6 +1650,11 @@ const settingsBtn = ref<HTMLElement | null>(null)
 const settingsPanel = ref<HTMLElement | null>(null)
 const layersBtn = ref<HTMLElement | null>(null)
 const layersPanel = ref<HTMLElement | null>(null)
+const styleBtn = ref<HTMLElement | null>(null)
+const stylePanel = ref<HTMLElement | null>(null)
+const filePanel = ref<HTMLElement | null>(null)
+const moreBtn = ref<HTMLElement | null>(null)
+const morePanel = ref<HTMLElement | null>(null)
 const store = useDrawingStore()
 
 // --- Uygulama-içi onay/soru diyaloğu ---
@@ -2415,7 +2566,7 @@ const onKeyDown = (e: KeyboardEvent) => {
     }
   }
   // Açık bir diyalog/panel varken araç kısayolları arkada tetiklenmesin (scrim altında state değişmesin).
-  if (showFile.value || showSettings.value || showLayers.value || dialogOpen.value) return
+  if (showFile.value || showSettings.value || showLayers.value || showStyle.value || showMore.value || dialogOpen.value) return
   // Sayfa gezinme: PageDown/PageUp her araçta çalışır.
   if (!mod && !e.altKey && (e.key === 'PageDown' || e.key === 'PageUp')) {
     e.preventDefault()
@@ -2681,6 +2832,14 @@ const closeMenus = (): boolean => {
     showLayers.value = false
     closed = true
   }
+  if (showStyle.value) {
+    showStyle.value = false
+    closed = true
+  }
+  if (showMore.value) {
+    showMore.value = false
+    closed = true
+  }
   return closed
 }
 
@@ -2688,12 +2847,18 @@ const onDocPointerDown = (e: PointerEvent) => {
   const t = e.target as Node | null
   if (!t || !(t instanceof Node)) return
   const inside = (el: HTMLElement | null) => !!el && el.contains(t)
-  if (showFile.value && !inside(fileMenu.value)) showFile.value = false
+  if (showFile.value && !inside(fileMenu.value) && !inside(filePanel.value)) showFile.value = false
   if (showSettings.value && !inside(settingsBtn.value) && !inside(settingsPanel.value)) {
     showSettings.value = false
   }
   if (showLayers.value && !inside(layersBtn.value) && !inside(layersPanel.value)) {
     showLayers.value = false
+  }
+  if (showStyle.value && !inside(styleBtn.value) && !inside(stylePanel.value)) {
+    showStyle.value = false
+  }
+  if (showMore.value && !inside(moreBtn.value) && !inside(morePanel.value)) {
+    showMore.value = false
   }
 }
 
@@ -2967,9 +3132,11 @@ onMounted(() => {
     })
   updateHud(true)
 
-  mobileMq = window.matchMedia('(max-width: 899px)')
+  mobileMq = window.matchMedia('(max-width: 639px)')
+  narrowMq = window.matchMedia('(max-width: 899px)')
   syncIsMobile()
   mobileMq.addEventListener('change', syncIsMobile)
+  narrowMq.addEventListener('change', syncIsMobile)
   window.addEventListener('resize', sizeCanvas)
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
@@ -3065,6 +3232,8 @@ onUnmounted(() => {
   blockEls.clear()
   mobileMq?.removeEventListener('change', syncIsMobile)
   mobileMq = null
+  narrowMq?.removeEventListener('change', syncIsMobile)
+  narrowMq = null
   window.removeEventListener('resize', sizeCanvas)
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)

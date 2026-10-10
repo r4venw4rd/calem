@@ -17,6 +17,7 @@
   --chrome-faint: #6b7280;
   --chrome-title: #f3f4f6;
   --page-bg: #030712;
+  --float-bg: rgb(17 24 39 / 0.9);
 }
 
 :root[data-theme='acik'] {
@@ -31,6 +32,7 @@
   --chrome-faint: #9ca3af;
   --chrome-title: #111827;
   --page-bg: #e5e7eb;
+  --float-bg: rgb(255 255 255 / 0.92);
 }
 
 /* Native açılır listeler (select option): UA varsayılanı temayı takmaz,
