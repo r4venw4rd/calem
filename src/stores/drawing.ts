@@ -18,6 +18,7 @@ import {
   strokeBBox,
 } from '../lib/select'
 import { dropTinyRuns, splitRunsOutside } from '../lib/erase'
+import { newStrokeId, snapshotImage, snapshotLayer, snapshotStroke, snapshotText } from '../persist/snapshot'
 import { dashFor, effectiveWidth, paintStroke } from '../render/strokes'
 import { wrapTextToWidth } from '../lib/text'
 import { estimateLines, textBBoxOf } from '../lib/text'
@@ -604,10 +605,6 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Stroke'lar sayfalarda durur; tüm çizim op'ları AKTİF sayfaya işler.
   const newPageId = () =>
     `p-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
-  // Stroke kimliği: seçim/taşıma/kopyala'nın zemini. Sayfa id'sinden bağımsız sayaçlı.
-  let strokeSeq = 0
-  const newStrokeId = () =>
-    `s-${Date.now().toString(36)}-${(strokeSeq++).toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
   const blankPage = (): Page => {
     const layerId = newStrokeId()
     return { id: newPageId(), layers: [{ id: layerId, name: 'Katman 1', visible: true, strokes: [] }], activeLayerId: layerId, texts: [], images: [], size: defaultPageSize() }
@@ -3146,43 +3143,6 @@ export const useDrawingStore = defineStore('drawing', () => {
       hour: '2-digit',
       minute: '2-digit',
     })
-
-  // Reactive proxy'leri düz veriye çevir — IDB structured-clone'a temiz girer.
-  const snapshotStroke = (s: Stroke): Stroke => ({
-    id: typeof s.id === 'string' && s.id ? s.id : newStrokeId(),
-    tool: s.tool,
-    color: s.color,
-    width: s.width,
-    dash: s.dash,
-    opacity: s.opacity,
-    points: s.points.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
-  })
-
-  const snapshotText = (t: TextItem): TextItem => ({
-    id: t.id,
-    x: t.x,
-    y: t.y,
-    text: t.text,
-    color: t.color,
-    size: t.size,
-    ...(t.w !== undefined ? { w: t.w } : {}),
-  })
-
-  const snapshotImage = (t: ImageItem): ImageItem => ({
-    id: t.id,
-    x: t.x,
-    y: t.y,
-    w: t.w,
-    h: t.h,
-    fileId: t.fileId,
-  })
-
-  const snapshotLayer = (l: Layer): Layer => ({
-    id: l.id,
-    name: l.name,
-    visible: l.visible,
-    strokes: l.strokes.map(snapshotStroke),
-  })
 
   const persistNow = async (): Promise<void> => {
     try {
