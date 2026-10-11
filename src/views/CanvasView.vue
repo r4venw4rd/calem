@@ -496,22 +496,30 @@
         @change="onImageFile"
       />
 
+      <!-- Inline metin editörü ve altındaki kayan araç çubuğu -->
       <div
-        v-if="store.currentTool === 'text' && store.activeTextId && !presenting"
-        class="absolute top-3 left-1/2 -translate-x-1/2 z-10 w-80 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
+        v-if="store.currentTool === 'text' && store.activeTextId && !presenting && activeTextScreenRect"
+        class="absolute pointer-events-auto flex flex-col"
+        :style="textEditorContainerStyle"
         role="dialog"
         :aria-label="t('textEditor')"
       >
         <textarea
           ref="textArea"
-          rows="3"
+          rows="2"
           :value="store.activeText()?.text ?? ''"
           @input="onTextInput"
           @keydown.escape="closeTextEditor"
           :placeholder="t('textPlaceholder')"
-          class="w-full px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)] resize-y"
+          class="w-full min-h-[44px] px-2.5 py-1.5 rounded-lg border-2 border-dashed border-indigo-500 bg-[var(--chrome-bg)]/90 text-[var(--chrome-title)] shadow-xl focus:outline-none focus:border-indigo-400 resize-y backdrop-blur-sm"
+          :style="{
+            color: store.activeText()?.color ?? store.color,
+            fontSize: `${activeTextScreenRect.fontPx}px`,
+            lineHeight: 1.25,
+          }"
         ></textarea>
-        <div class="flex items-center gap-2 mt-2">
+        <!-- Text altında floating şekilde duran kontrol çubuğu -->
+        <div class="mt-1.5 flex items-center gap-2 p-1.5 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] shadow-xl backdrop-blur select-none w-max max-w-[calc(100vw-2rem)]">
           <input
             type="range"
             :min="SLIDERS.textSize.min"
@@ -519,26 +527,29 @@
             :step="SLIDERS.textSize.step"
             :value="store.activeText()?.size ?? store.textSize"
             @input="onTextSizeInput(Number(($event.target as HTMLInputElement).value))"
-            class="flex-1 accent-indigo-600"
+            class="w-20 accent-indigo-600"
             :title="t('textSizeShort')"
           />
+          <span class="text-[11px] font-mono text-[var(--chrome-text)] w-5 text-right">
+            {{ store.activeText()?.size ?? store.textSize }}
+          </span>
           <input
             type="color"
             :value="store.activeText()?.color ?? store.color"
             @input="onTextColorInput(($event.target as HTMLInputElement).value)"
-            class="w-7 h-7 rounded bg-transparent border border-[var(--chrome-border-strong)] cursor-pointer p-0.5"
+            class="w-6 h-6 rounded bg-transparent border border-[var(--chrome-border-strong)] cursor-pointer p-0.5"
             :title="t('textColor')"
           />
           <button
             @click="delActiveText"
-            class="px-2 py-1 rounded hover:bg-red-600/40 text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
-            :title="t('delText')"
+            class="px-2 py-0.5 rounded text-xs hover:bg-red-600/30 text-red-400 transition"
+            :title="t('delete')"
           >
             {{ t('delete') }}
           </button>
           <button
             @click="closeTextEditor"
-            class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
+            class="px-2.5 py-0.5 rounded text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition shadow-sm"
             :title="t('doneTitle')"
           >
             {{ t('done') }}
@@ -546,19 +557,15 @@
         </div>
       </div>
 
+      <!-- Resim altında floating şekilde duran kontrol çubuğu -->
       <div
-        v-if="store.currentTool === 'image' && store.activeImageId && !presenting"
-        class="absolute top-3 left-1/2 -translate-x-1/2 z-10 w-72 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-3 text-xs text-[var(--chrome-text)] shadow-xl"
+        v-if="store.currentTool === 'image' && store.activeImageId && !presenting && activeImageScreenRect"
+        class="absolute rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-2 text-xs text-[var(--chrome-text)] shadow-xl select-none flex items-center gap-2.5 backdrop-blur"
+        :style="imageEditorContainerStyle"
         role="dialog"
         :aria-label="t('imageEditor')"
       >
-        <div class="flex items-center justify-between mb-2">
-          <span class="font-medium text-[var(--chrome-title)] font-mono">
-            {{ t('imgLabel') }} {{ store.activeImage()?.w }}×{{ store.activeImage()?.h }}
-          </span>
-          <span v-if="store.imgBusy" class="text-[10px] text-yellow-400/80 font-mono">{{ t('processing') }}</span>
-        </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5">
           <span class="text-[var(--chrome-faint)] whitespace-nowrap">{{ t('imgSize') }}</span>
           <input
             type="range"
@@ -567,26 +574,24 @@
             :step="SLIDERS.imageWidth.step"
             :value="store.activeImage()?.w ?? 200"
             @input="onImgWidth(Number(($event.target as HTMLInputElement).value))"
-            class="flex-1 accent-indigo-600"
+            class="w-24 accent-indigo-600"
             :title="t('imgSizeTitle')"
           />
         </div>
-        <div class="flex items-center gap-2 mt-2">
-          <button
-            @click="delActiveImage"
-            class="px-2 py-1 rounded hover:bg-red-600/40 text-[var(--chrome-text)] hover:text-[var(--chrome-title)] transition"
-            :title="t('delImage')"
-          >
-            {{ t('delete') }}
-          </button>
-          <button
-            @click="store.activeImageId = null"
-            class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
-            :title="t('doneTitle')"
-          >
-            {{ t('done') }}
-          </button>
-        </div>
+        <button
+          @click="delActiveImage"
+          class="px-2 py-0.5 rounded hover:bg-red-600/30 text-red-400 transition"
+          :title="t('delImage')"
+        >
+          {{ t('delete') }}
+        </button>
+        <button
+          @click="store.activeImageId = null"
+          class="px-2.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
+          :title="t('doneTitle')"
+        >
+          {{ t('done') }}
+        </button>
       </div>
 
       <div
@@ -1008,6 +1013,9 @@ const setBlockRef = (el: unknown, id: string) => {
   if (el instanceof HTMLElement) blockEls.set(id, el)
   else blockEls.delete(id)
 }
+// Görünüm (pan / zoom / sürükleme) değiştikçe ekran koordinatlarını tetikleyen sayaç
+const viewTransformTick = ref(0)
+
 // Menü kapsayıcıları (dışarı-tıkla kapatma için; paneller v-if'li, butonlar ayrı div'de).
 const fileMenu = ref<HTMLElement | null>(null)
 const settingsBtn = ref<HTMLElement | null>(null)
@@ -1135,6 +1143,7 @@ const cancelSelGesture = () => {
 }
 
 const drawSelectionOverlay = () => {
+  viewTransformTick.value++
   const c = overlayCanvas.value
   if (!c) return
   const ctx = c.getContext('2d')
@@ -1342,6 +1351,12 @@ const textDown = (e: PointerEvent) => {
   ps.setActive(e.pointerId)
   const p = store.eventToPage(e)
   const hit = store.textAt(p.x, p.y)
+
+  // Farklı bir yere tıklandıysa veya boş alana basıldıysa açık metin editörünü bitir
+  if (store.activeTextId && (!hit || hit.id !== store.activeTextId)) {
+    closeTextEditor()
+  }
+
   textDownPos = p
   textDownHit = hit ? hit.id : null
   textMoving = false
@@ -1438,6 +1453,75 @@ const delActiveText = () => {
   updateHud(true)
 }
 
+const activeTextScreenRect = computed(() => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  viewTransformTick.value
+  const item = store.activeText()
+  if (!item) return null
+  const vt = store.getViewTransform()
+  const sx = item.x * vt.scale + vt.ox
+  const sy = item.y * vt.scale + vt.oy
+  const fontPx = Math.max(12, Math.round(item.size * vt.scale))
+  const w = item.w ?? 0
+  const boxW = Math.max(180, w > 0 ? w * vt.scale : 260)
+  return {
+    left: sx,
+    top: sy,
+    width: boxW,
+    fontPx,
+  }
+})
+
+const textEditorContainerStyle = computed(() => {
+  const r = activeTextScreenRect.value
+  if (!r) return {}
+  const pad = 12
+  const maxW = typeof window !== 'undefined' ? window.innerWidth - pad * 2 : 600
+  const width = Math.min(r.width, maxW)
+  const left = Math.max(pad, Math.min(r.left, typeof window !== 'undefined' ? window.innerWidth - width - pad : r.left))
+  // Üst menü çubuğunun (toolbar) altına girmemesi için desktop'ta en az 72px pay
+  const top = Math.max(76, r.top)
+  return {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${width}px`,
+    zIndex: 35,
+  }
+})
+
+const activeImageScreenRect = computed(() => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  viewTransformTick.value
+  const item = store.activeImage()
+  if (!item) return null
+  const vt = store.getViewTransform()
+  const sx = item.x * vt.scale + vt.ox
+  const sy = item.y * vt.scale + vt.oy
+  const sw = item.w * vt.scale
+  const sh = item.h * vt.scale
+  return {
+    left: sx,
+    top: sy,
+    bottom: sy + sh,
+    width: sw,
+    height: sh,
+  }
+})
+
+const imageEditorContainerStyle = computed(() => {
+  const r = activeImageScreenRect.value
+  if (!r) return {}
+  const pad = 12
+  const left = Math.max(pad, r.left)
+  // Resmin hemen altında dursun; üst toolbar'ın altına kaçmasın (>= 76px)
+  const top = Math.max(76, r.bottom + 8)
+  return {
+    left: `${left}px`,
+    top: `${top}px`,
+    zIndex: 35,
+  }
+})
+
 // --- Resim jesti (image aracı): boşa tıkla-ekle, resme tıkla-seç, sürükle-taşı ---
 const imgInput = ref<HTMLInputElement | null>(null)
 let imgPending: { x: number; y: number } | null = null
@@ -1470,7 +1554,11 @@ const imageDown = (e: PointerEvent) => {
   imgMoving = false
   imgMoveId = null
   imgMoveLast = null
-  if (hit) store.activeImageId = hit.id
+  if (hit) {
+    store.activeImageId = hit.id
+  } else {
+    store.activeImageId = null
+  }
 }
 
 const imageMove = (e: PointerEvent) => {

@@ -1068,7 +1068,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     return activePage.value.texts.find((t) => t.id === activeTextId.value) ?? null
   }
   const clearActiveText = () => {
-    activeTextId.value = null
+    if (activeTextId.value) {
+      activeTextId.value = null
+      repaintBase()
+    }
   }
   // Tıklanan noktadaki en üst metin (kaba kutu: ölçümsüz tahmin, editör gerçeği gösterir).
   const textAt = (x: number, y: number): TextItem | null => {
@@ -2550,6 +2553,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     ctx.textBaseline = 'top'
     for (const t of items) {
       if (!t.text) continue
+      if (t.id === activeTextId.value) continue
       ctx.fillStyle = t.color
       ctx.font = `${t.size}px sans-serif`
       const lh = t.size * 1.25
