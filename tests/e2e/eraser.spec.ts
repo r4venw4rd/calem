@@ -334,6 +334,141 @@ test('kes-silgi: önizleme kâğıt dışına taşmaz (kenardan süpürme)', asy
   expect(errors, 'konsol/sayfa hatası yok').toEqual([])
 })
 
+// Kâğıdın gördüğü letterbox eksenini bulur: kenar başına sayfa dışı kalınlık.
+type Box = { x0: number; y0: number; x1: number; y1: number }
+const letterbox = (pb: Box, canvas: { width: number; height: number }) => ({
+  left: pb.x0,
+  right: canvas.width - 1 - pb.x1,
+  top: pb.y0,
+  bottom: canvas.height - 1 - pb.y1,
+})
+
+// Verilen doğru boyunca süpürme yapar ve: sayfa dışı şeridin alfasını (sürükleme
+// sırasında + bırakışta), şerit içindeki mürekkebin sürükleme sırasındaki değerini
+// döner. bandInk, "önizleme gerçekten boyadı mı" kanıtıdır (sessiz no-op testini önler).
+async function sweepLine(
+  page: Page,
+  info: { rect: { left: number; top: number }; scale: number },
+  from: [number, number],
+  to: [number, number],
+  outside: Rect,
+  bandInk: Rect,
+) {
+  const sx = (x: number) => info.rect.left + x / info.scale
+  const sy = (y: number) => info.rect.top + y / info.scale
+  const before = await meanAlpha(page, outside)
+  const inkBefore = await meanLuma(page, bandInk)
+  await page.mouse.move(sx(from[0]), sy(from[1]))
+  await page.mouse.down()
+  await page.mouse.move(sx(to[0]), sy(to[1]), { steps: 16 })
+  const during = await meanAlpha(page, outside)
+  const inkDuring = await meanLuma(page, bandInk)
+  await page.mouse.up()
+  const after = await meanAlpha(page, outside)
+  return { before, during, after, inkBefore, inkDuring }
+}
+
+test('kes-silgi: her kenarda ve köşede sayfa dışına tek piksel taşmaz (yatay + dikey letterbox)', async ({
+  page,
+}) => {
+  const { info, errors } = await boot(page)
+  const pb = info.bounds
+  const w = pb.x1 - pb.x0
+  const h = pb.y1 - pb.y0
+  const sx = (x: number) => info.rect.left + x / info.scale
+  const sy = (y: number) => info.rect.top + y / info.scale
+  // Viewport'un tepesindeki toolbar bir KATMAN: süpürmeyi altından başlat, yoksa
+  // pointer olaylarını başlık yutar ve test sessizce hiçbir şey ölçmez.
+  const safe = 140
+
+  expect(letterbox(pb, info).left, 'yatayda sol letterbox var').toBeGreaterThan(20)
+
+  // --- Sol kenar (yatay letterbox): şeridi kesen mürekkep + kenar boyunca süpürme ---
+  const yMid = Math.round(pb.y0 + h * 0.5)
+  await page.mouse.move(sx(pb.x0 + 2), sy(yMid))
+  await page.mouse.down()
+  await page.mouse.move(sx(pb.x0 + 220), sy(yMid), { steps: 12 })
+  await page.mouse.up()
+  await expect.poll(async () => parseHud(await hudText(page)).strokes).toBe(1)
+
+  const leftInk: Rect = { x: pb.x0 + 1, y: yMid - 6, w: 12, h: 12 }
+  const leftStrip: Rect = { x: pb.x0 - 30, y: pb.y0 + safe, w: 26, h: h - safe * 2 }
+  await page.keyboard.press('e')
+  const left = await sweepLine(page, info, [pb.x0 + 4, pb.y0 + safe], [pb.x0 + 4, pb.y1 - safe], leftStrip, leftInk)
+  expect(left.inkBefore, 'sol: şeritte mürekkep var').toBeGreaterThan(60)
+  expect(left.inkDuring, 'sol: önizleme şeridi örttü').toBeLessThan(left.inkBefore - 40)
+  expect(left.before, 'sol: öncesi temiz').toBe(0)
+  expect(left.during, 'sol: sürükleme sırasında taşma yok').toBe(0)
+  expect(left.after, 'sol: bırakış sonrası taşma yok').toBe(0)
+
+  // --- Sol-alt köşe (başlığın uzağında): çapraz süpürme + köşe mürekkebi ---
+  const cornerY = pb.y1 - 90
+  const beforeCorner = parseHud(await hudText(page)).strokes
+  await page.keyboard.press('p') // mürekkep eklemek için kalem (silgi seçili kalmasın)
+  await page.mouse.move(sx(pb.x0 + 2), sy(cornerY))
+  await page.mouse.down()
+  await page.mouse.move(sx(pb.x0 + 200), sy(cornerY), { steps: 12 })
+  await page.mouse.up()
+  await expect.poll(async () => parseHud(await hudText(page)).strokes).toBe(beforeCorner + 1)
+
+  const cornerInk: Rect = { x: pb.x0 + 1, y: cornerY - 6, w: 12, h: 12 }
+  const cornerStrip: Rect = { x: pb.x0 - 30, y: pb.y1 - 90, w: 26, h: 60 }
+  await page.keyboard.press('e') // süpürmeden önce silgiye dön
+  const corner = await sweepLine(
+    page,
+    info,
+    [pb.x0 + 6, pb.y1 - 90],
+    [pb.x0 + 90, pb.y1 - 6],
+    cornerStrip,
+    cornerInk,
+  )
+  expect(corner.inkBefore, 'köşe: mürekkep var').toBeGreaterThan(60)
+  expect(corner.inkDuring, 'köşe: önizleme örttü').toBeLessThan(corner.inkBefore - 40)
+  expect(corner.during, 'köşe: sürükleme sırasında taşma yok').toBe(0)
+  expect(corner.after, 'köşe: bırakış sonrası taşma yok').toBe(0)
+
+  // --- Üst kenar (tablet/portre: letterbox dikeyde) ---
+  // Ölçüm bölgesi (üst letterbox) başlık katmanının ALTINDA kalmalı: yeterince dar
+  // ve uzun bir viewport seç ki dikey letterbox ~200px olsun.
+  await page.setViewportSize({ width: 700, height: 1400 })
+  await page.waitForTimeout(400)
+  const info2 = await canvasInfo(page)
+  const pb2 = info2.bounds
+  const w2 = pb2.x1 - pb2.x0
+  const lb2 = letterbox(pb2, info2)
+  expect(lb2.top, 'portrede üst letterbox başlığın altına sığacak kadar geniş').toBeGreaterThan(safe + 30)
+
+  // Şeridi kesen DİKEY çizgi (üst banttan geçsin).
+  const xMid = Math.round(pb2.x0 + w2 * 0.5)
+  const sx2 = (x: number) => info2.rect.left + x / info2.scale
+  const sy2 = (y: number) => info2.rect.top + y / info2.scale
+  const beforeTop = parseHud(await hudText(page)).strokes
+  await page.keyboard.press('p')
+  await page.mouse.move(sx2(xMid), sy2(pb2.y0 + 2))
+  await page.mouse.down()
+  await page.mouse.move(sx2(xMid), sy2(pb2.y0 + 220), { steps: 12 })
+  await page.mouse.up()
+  await expect.poll(async () => parseHud(await hudText(page)).strokes).toBe(beforeTop + 1)
+  await page.keyboard.press('e')
+
+  const topInk: Rect = { x: xMid - 6, y: pb2.y0 + 2, w: 12, h: 12 }
+  const topStrip: Rect = { x: pb2.x0 + 40, y: pb2.y0 - 26, w: w2 - 80, h: 22 }
+  const top = await sweepLine(
+    page,
+    info2,
+    [pb2.x0 + w2 * 0.25, pb2.y0 + 4],
+    [pb2.x0 + w2 * 0.75, pb2.y0 + 4],
+    topStrip,
+    topInk,
+  )
+  expect(top.inkBefore, 'üst: şeritte mürekkep var').toBeGreaterThan(60)
+  expect(top.inkDuring, 'üst: önizleme şeridi örttü').toBeLessThan(top.inkBefore - 40)
+  expect(top.during, 'üst: sürükleme sırasında taşma yok').toBe(0)
+  expect(top.after, 'üst: bırakış sonrası taşma yok').toBe(0)
+
+  expect(errors, 'konsol/sayfa hatası yok').toEqual([])
+})
+
 test('kes-silgi: desenli kâğıtta önizleme deseni korur (bant sonradan "kaybolmaz")', async ({
   page,
 }) => {
