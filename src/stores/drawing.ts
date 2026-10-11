@@ -37,7 +37,7 @@ import {
   unionRect,
   type NormRect,
 } from '../lib/select'
-import { dropTinyRuns, polylineHitsCircle, splitRunsOutside } from '../lib/erase'
+import { dropTinyRuns, polylineHitsCircle, splitPolylineOutsideSweep, splitRunsOutside } from '../lib/erase'
 import { cachedStrokeBBox, invalidateStrokeBBox } from '../lib/strokeBounds'
 import { capBackingScale } from '../lib/canvasLimits'
 import {
@@ -2192,43 +2192,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       const bb = cachedStrokeBBox(s)
       if (!bb) continue
       if (!rectsOverlap(bb, sweep)) continue
-      let runs: Point[][] = [s.points]
-      let hitAny = false
-      const gx0 = Math.floor(bb.x0 / cell)
-      const gx1 = Math.floor(bb.x1 / cell)
-      const gy0 = Math.floor(bb.y0 / cell)
-      const gy1 = Math.floor(bb.y1 / cell)
-      for (let gy = gy0; gy <= gy1; gy++) {
-        for (let gx = gx0; gx <= gx1; gx++) {
-          const bucket = grid.get(`${gx}:${gy}`)
-          if (!bucket) continue
-          for (const c of bucket) {
-            const cRect: NormRect = {
-              x0: c.x - radius,
-              y0: c.y - radius,
-              x1: c.x + radius,
-              y1: c.y + radius,
-            }
-            if (!rectsOverlap(bb, cRect)) continue
-            let hitCircle = false
-            const next: Point[][] = []
-            for (const run of runs) {
-              if (polylineHitsCircle(run, c.x, c.y, radius)) {
-                hitCircle = true
-                for (const piece of splitRunsOutside(run, c.x, c.y, radius)) next.push(piece)
-              } else {
-                next.push(run)
-              }
-            }
-            if (!hitCircle) continue
-            hitAny = true
-            runs = next
-            // Daire + atılan kırıntı uzantısı + kalınlık taşması tek kutuda toplanır.
-            brushDirtyAround(c.x, c.y, radius * 2 + s.width)
-          }
-        }
-      }
-      if (!hitAny) continue
+      const runs = splitPolylineOutsideSweep(s.points, path, radius)
+      if (runs.length === 1 && runs[0] === s.points) continue
+      brushDirty(expandRect(sweep, radius + s.width))
       touch()
       layer.strokes.splice(i, 1)
       const pieces: Stroke[] = []

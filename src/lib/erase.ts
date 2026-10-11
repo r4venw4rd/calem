@@ -130,3 +130,67 @@ export const splitRunsOutside = (pts: Point[], cx: number, cy: number, r: number
   if (cur.length > 0) runs.push(cur)
   return runs
 }
+
+// Cut a sampled circular eraser sweep in one pass per stroke segment.
+export const splitPolylineOutsideSweep = (
+  pts: Point[], path: { x: number; y: number }[], radius: number,
+): Point[][] => {
+  if (!pts.length || !path.length || !(radius > 0)) return pts.length ? [pts] : []
+  const cell = Math.max(radius * 2, 1)
+  const grid = new Map<string, { x: number; y: number }[]>()
+  for (const p of path) {
+    const key = `${Math.floor(p.x / cell)}:${Math.floor(p.y / cell)}`
+    const bucket = grid.get(key)
+    if (bucket) bucket.push(p)
+    else grid.set(key, [p])
+  }
+  const candidatesFor = (a: Point, b: Point) => {
+    const out: { x: number; y: number }[] = []
+    const seen = new Set<{ x: number; y: number }>()
+    for (let y = Math.floor((Math.min(a.y, b.y) - radius) / cell); y <= Math.floor((Math.max(a.y, b.y) + radius) / cell); y++) {
+      for (let x = Math.floor((Math.min(a.x, b.x) - radius) / cell); x <= Math.floor((Math.max(a.x, b.x) + radius) / cell); x++) {
+        for (const p of grid.get(`${x}:${y}`) ?? []) if (!seen.has(p)) { seen.add(p); out.push(p) }
+      }
+    }
+    return out
+  }
+  const out: Point[][] = []
+  let run: Point[] = []
+  let changed = false
+  const end = () => { if (run.length) out.push(run); run = [] }
+  if (pts.length === 1) return polylineHitsCircle(path, pts[0]!.x, pts[0]!.y, radius) ? [] : [pts]
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!
+    const b = pts[i]!
+    const candidates = candidatesFor(a, b)
+    const ts = [0, 1]
+    for (const c of candidates) ts.push(...segmentCircleTs(a.x, a.y, b.x, b.y, c.x, c.y, radius))
+    ts.sort((x, y) => x - y)
+    const cuts = ts.filter((t, j) => j === 0 || t - ts[j - 1]! > 1e-9)
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    const pointAt = (t: number): Point => ({
+      x: a.x + dx * t,
+      y: a.y + dy * t,
+      ...((a.pressure !== undefined || b.pressure !== undefined)
+        ? { pressure: (a.pressure ?? 1) + ((b.pressure ?? 1) - (a.pressure ?? 1)) * t }
+        : {}),
+    })
+    for (let j = 0; j + 1 < cuts.length; j++) {
+      const lo = cuts[j]!
+      const hi = cuts[j + 1]!
+      const mid = pointAt((lo + hi) / 2)
+      const erased = candidates.some((c) => (mid.x - c.x) ** 2 + (mid.y - c.y) ** 2 < radius * radius)
+      if (erased) {
+        if (run.length) run.push(pointAt(lo))
+        end()
+        changed = true
+      } else {
+        if (!run.length) run.push(pointAt(lo))
+        run.push(pointAt(hi))
+      }
+    }
+  }
+  end()
+  return changed ? out : [pts]
+}

@@ -4,6 +4,7 @@ import {
   polylineHitsCircle,
   runLength,
   segmentCircleTs,
+  splitPolylineOutsideSweep,
   splitRunsOutside,
 } from '../src/lib/erase'
 
@@ -75,6 +76,24 @@ describe('polylineHitsCircle', () => {
       const changed = !(runs.length === 1 && runs[0].length === pts.length)
       expect(polylineHitsCircle(pts, cx, cy, r)).toBe(changed)
     }
+  })
+})
+
+describe('splitPolylineOutsideSweep', () => {
+  it('swept disk cuts a long stroke in one sweep and keeps both outside runs', () => {
+    const pts = Array.from({ length: 101 }, (_, i) => P(i, 0))
+    const runs = splitPolylineOutsideSweep(pts, Array.from({ length: 11 }, (_, i) => P(40 + i * 2, 0)), 3)
+    expect(runs).toHaveLength(2)
+    expect(runs[0]!.at(-1)!.x).toBeCloseTo(37, 5)
+    expect(runs[1]![0]!.x).toBeCloseTo(63, 5)
+    expect(runs[0]!.every((p) => p.pressure === undefined)).toBe(true)
+  })
+
+  it('returns the original run when the sweep misses', () => {
+    const pts = [P(0, 0), P(10, 0)]
+    const runs = splitPolylineOutsideSweep(pts, [P(0, 20), P(10, 20)], 2)
+    expect(runs).toHaveLength(1)
+    expect(runs[0]).toBe(pts)
   })
 })
 
