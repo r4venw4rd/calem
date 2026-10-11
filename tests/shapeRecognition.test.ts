@@ -174,4 +174,37 @@ describe('shapeRecognition', () => {
       expect(res).toBeNull()
     })
   })
+
+  describe('detectArrow', () => {
+    it('recognizes a straight horizontal stroke ending with an arrowhead hook', () => {
+      const pts: Point[] = [
+        // Shaft (left to right)
+        { x: 20, y: 100 },
+        { x: 50, y: 100 },
+        { x: 80, y: 100 },
+        { x: 120, y: 100 },
+        { x: 150, y: 100 },
+        // Barb (turning back towards top-left)
+        { x: 140, y: 90 },
+        { x: 130, y: 80 },
+      ]
+      const res = recognizeShape(pts)
+      expect(res).not.toBeNull()
+      expect(res?.tool).toBe('arrow')
+      expect(res?.points[0]).toEqual({ x: 20, y: 100, pressure: undefined })
+      expect(res?.points[1].x).toBe(150)
+      expect(res?.points[1].y).toBe(100)
+    })
+
+    it('distinguishes a pure line from an arrow', () => {
+      const linePts: Point[] = [
+        { x: 20, y: 100 },
+        { x: 80, y: 100 },
+        { x: 140, y: 100 },
+      ]
+      const res = recognizeShape(linePts)
+      expect(res?.tool).toBe('line')
+    })
+  })
 })
+

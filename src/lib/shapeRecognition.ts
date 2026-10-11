@@ -111,6 +111,70 @@ export const detectLine = (pts: Point[], opts: Required<ShapeRecognitionOptions>
   }
 }
 
+/** Ok (Arrow) tanıyıcı: Ana gövdesi düz çizgi olan ve sonunda ok başı (V-şekli veya geri dönüş) bulunan çizimler */
+export const detectArrow = (pts: Point[], opts: Required<ShapeRecognitionOptions>): RecognizedShape | null => {
+  if (pts.length < 5) return null
+  const p0 = pts[0]!
+  const pEnd = pts[pts.length - 1]!
+  const chord = dist(p0, pEnd)
+  if (chord < opts.minDimension) return null
+
+  // Ok çiziminin ilk %70-80'i gövdedir
+  const stemCutIndex = Math.floor(pts.length * 0.75)
+  const stemPts = pts.slice(0, stemCutIndex)
+  if (stemPts.length < 2) return null
+
+  const pStemEnd = stemPts[stemPts.length - 1]!
+  const stemChord = dist(p0, pStemEnd)
+  if (stemChord < opts.minDimension * 0.7) return null
+
+  const stemLen = pathLength(stemPts)
+  const stemStraightness = stemChord / (stemLen || 1)
+  if (stemStraightness < 0.85) return null
+
+  // Son %25'lik kısım: ok başı (başlangıç noktasına doğru geri dönüş veya kanat)
+  const tipPts = pts.slice(stemCutIndex)
+  let hasTurnBack = false
+  const stemDirX = (pStemEnd.x - p0.x) / stemChord
+  const stemDirY = (pStemEnd.y - p0.y) / stemChord
+
+  for (let i = 1; i < tipPts.length; i++) {
+    const prev = tipPts[i - 1]!
+    const curr = tipPts[i]!
+    const segDx = curr.x - prev.x
+    const segDy = curr.y - prev.y
+    const dot = segDx * stemDirX + segDy * stemDirY
+    // Gövde yönünün tersine hareket (ok kanadı çizerken geri yönelim)
+    if (dot < -0.3) {
+      hasTurnBack = true
+      break
+    }
+  }
+
+  if (!hasTurnBack) return null
+
+  let endX = pStemEnd.x
+  let endY = pStemEnd.y
+
+  if (opts.snapAngles) {
+    const dx = pStemEnd.x - p0.x
+    const dy = pStemEnd.y - p0.y
+    const angle = Math.atan2(dy, dx)
+    const threshold = 0.12 // ~7 derece
+    if (Math.abs(angle) < threshold || Math.abs(Math.abs(angle) - Math.PI) < threshold) {
+      endY = p0.y
+    } else if (Math.abs(Math.abs(angle) - Math.PI / 2) < threshold) {
+      endX = p0.x
+    }
+  }
+
+  return {
+    tool: 'arrow',
+    points: [{ x: p0.x, y: p0.y, pressure: p0.pressure }, { x: endX, y: endY, pressure: pStemEnd.pressure }],
+    confidence: stemStraightness,
+  }
+}
+
 /** Elips / Daire tanıyıcı */
 export const detectEllipse = (pts: Point[], opts: Required<ShapeRecognitionOptions>): RecognizedShape | null => {
   if (pts.length < 8) return null
@@ -230,15 +294,19 @@ export const recognizeShape = (
   if (pts.length < 2) return null
   const opts = { ...DEFAULT_OPTIONS, ...options }
 
-  // 1. Önce düz çizgi kontrolü (en hızlı ve yaygın hareket)
+  // 1. Ok (Arrow) kontrolü: gövde + ok ucu hareketi
+  const arrow = detectArrow(pts, opts)
+  if (arrow) return arrow
+
+  // 2. Düz çizgi kontrolü (en hızlı ve yaygın hareket)
   const line = detectLine(pts, opts)
   if (line) return line
 
-  // 2. Daire / Elips kontrolü
+  // 3. Daire / Elips kontrolü
   const ellipse = detectEllipse(pts, opts)
   if (ellipse && ellipse.confidence > 0.85) return ellipse
 
-  // 3. Dikdörtgen kontrolü
+  // 4. Dikdörtgen kontrolü
   const rect = detectRectangle(pts, opts)
   if (rect && (!ellipse || rect.confidence >= ellipse.confidence)) return rect
 
