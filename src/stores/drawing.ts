@@ -829,7 +829,12 @@ export const useDrawingStore = defineStore('drawing', () => {
   const redoStack = ref<DocSnap[]>([])
   // Derinlik: config/engine (HISTORY_CAP).
 
-  const snapshotDoc = (): DocSnap => makeSnapshotDoc(pages.value, activePageIndex.value)
+  const snapshotDoc = (): DocSnap => {
+    const started = performance.now()
+    const result = makeSnapshotDoc(pages.value, activePageIndex.value)
+    drawingPerf.snapshotMs = performance.now() - started
+    return result
+  }
 
   const restoreDoc = (s: DocSnap) => {
     const res = restoreDocSnapshot(s)
@@ -1800,6 +1805,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // başına en çok bir raster, pan yolundaki schedulePan deseninin aynısı).
   const flushEraseRepaint = () => {
     eraseRaf = 0
+    drawingPerf.repaintPoints = 0
     const d = eraseDirty
     eraseDirty = null
     if (!d) return
@@ -2745,6 +2751,7 @@ export const useDrawingStore = defineStore('drawing', () => {
           // Sayfa-kaplayan dev stroke'u her frame baştan tessellate etme: yalnız kirli
           // kutuya yakın nokta koşularını çiz (şekiller uç-noktalı, onlar tam kalır).
           if (!isShapeTool(s.tool)) {
+            drawingPerf.repaintPoints += s.points.length
             const runs = subRunsInRect(s.points, dirty, DIRTY_STROKE_MARGIN)
             if (runs.length === 0) continue
             // Genişlik TÜM noktalardan hesaplanır (basınç ortalaması) — koşuya bölününce

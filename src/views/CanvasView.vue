@@ -706,6 +706,7 @@ const updateHud = (force = false) => {
     `${drawingPerf.emaMs.toFixed(1)}/${drawingPerf.frameMs.toFixed(0)}ms` +
     ` e${drawingPerf.eraseMs.toFixed(1)}` +
     ` c${drawingPerf.cutMs.toFixed(1)}` +
+    ` p${fmtPts(drawingPerf.repaintPoints)} s${drawingPerf.snapshotMs.toFixed(1)}` +
     ` · ${store.drawingCount} ${t('lines')}` +
     ` · ${fmtPts(store.activePoints())}+${fmtPts(drawingPerf.totalPoints)}`
 }
