@@ -1848,6 +1848,22 @@ export const useDrawingStore = defineStore('drawing', () => {
     return { x: Math.min(s.w, Math.max(0, p.x)), y: Math.min(s.h, Math.max(0, p.y)) }
   }
 
+  // Süpürme bandını KIRPMA bölgesi yapar (kapsül: iki yuvarlak uç). Deseni yalnız
+  // bandın içine çizmek için gerekir.
+  const clipToEraseBand = (
+    ctx: CanvasRenderingContext2D,
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+    radius: number,
+  ) => {
+    const ang = Math.atan2(b.y - a.y, b.x - a.x)
+    ctx.beginPath()
+    ctx.arc(a.x, a.y, radius, ang + Math.PI / 2, ang - Math.PI / 2)
+    ctx.arc(b.x, b.y, radius, ang - Math.PI / 2, ang + Math.PI / 2)
+    ctx.closePath()
+    ctx.clip()
+  }
+
   // Önizleme boyaması: base'e kâğıt rengi kalın çizgi/nokta (veri değişmez, repaint yok).
   const paintFastErase = (
     a: { x: number; y: number } | null,
@@ -1861,8 +1877,15 @@ export const useDrawingStore = defineStore('drawing', () => {
     // Bırakışta bu bandı kısmi repaint ile geri yükle (desen/resim/alt katman doğru dönsün).
     brushDirty(rectAround(b.x, b.y, radius + 2))
     if (a) brushDirty(rectAround(a.x, a.y, radius + 2))
+    const page = activePage.value
     applyView(ctx, () => {
       ctx.save()
+      // 1) Boyama SAYFAYA kırpılır: fırça yarıçapı kenarı taşır, aksi halde kâğıt
+      //    dışına (letterbox) leke sürüp bırakış repaint'ine kadar orada kalırdı.
+      ctx.beginPath()
+      ctx.rect(0, 0, page.size.w, page.size.h)
+      ctx.clip()
+      // 2) Bandı kâğıt rengiyle boya (asıl önizleme).
       ctx.globalCompositeOperation = 'source-over'
       ctx.strokeStyle = paperHex
       ctx.fillStyle = paperHex
@@ -1877,6 +1900,22 @@ export const useDrawingStore = defineStore('drawing', () => {
       } else {
         ctx.arc(b.x, b.y, radius, 0, Math.PI * 2)
         ctx.fill()
+      }
+      // 3) Desen/marjin varsa bandın İÇİNE onu da çiz: önizleme nihai görüntüyle
+      //    aynı olmalı, yoksa sürükleme boyunca desen silinip bırakışta geri gelir
+      //    ("önce boyuyor sonra kayboluyor" görüntüsü).
+      const bg = paperBackground.value
+      if (bg.type !== 'blank' || bg.margin) {
+        ctx.save()
+        if (a) {
+          clipToEraseBand(ctx, a, b, radius)
+        } else {
+          ctx.beginPath()
+          ctx.arc(b.x, b.y, radius, 0, Math.PI * 2)
+          ctx.clip()
+        }
+        paintPaperPattern(ctx, page, bg)
+        ctx.restore()
       }
       ctx.restore()
     })
