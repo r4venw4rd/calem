@@ -2211,9 +2211,33 @@ const onCalemFile = async (e: Event) => {
 }
 
 const xoppInput = ref<HTMLInputElement | null>(null)
-const openXoppDoc = () => {
+const openXoppDoc = async () => {
   showFile.value = false
-  xoppInput.value?.click()
+  if (store.hasInk && !(await askConfirm(t('calemReplace')))) return
+  const w = window as unknown as {
+    showOpenFilePicker?: (opts: {
+      types?: { description?: string; accept: Record<string, string[]> }[]
+      multiple?: boolean
+    }) => Promise<{ getFile: () => Promise<File> }[]>
+  }
+  if (typeof w.showOpenFilePicker === 'function') {
+    try {
+      const [handle] = await w.showOpenFilePicker({
+        types: [{ description: 'Xournal++ belgesi', accept: { 'application/x-xopp': ['.xopp'] } }],
+        multiple: false,
+      })
+      if (!handle) return
+      const res = await store.importXopp(await handle.getFile())
+      if ('error' in res) showPdfError(res.error)
+      updateHud(true)
+      refreshThumbs()
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      showPdfError(`açılamadı (${err instanceof Error ? err.message : 'bilinmiyor'})`)
+    }
+  } else {
+    xoppInput.value?.click()
+  }
 }
 
 const onXoppFile = async (e: Event) => {
