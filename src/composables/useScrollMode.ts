@@ -171,7 +171,9 @@ export function useScrollMode(opts: ScrollModeOptions) {
     box.scrollTop = Math.min(maxTop, Math.max(0, el.offsetTop + a.fracY * el.offsetHeight - a.viewY))
     box.scrollLeft = Math.min(maxLeft, Math.max(0, el.offsetLeft + a.fracX * el.offsetWidth - a.viewX))
     // Programatik yerleşme: spy ara sayfaya takılmasın (viewport-update ≠ navigation).
-    suppressSpyUntil = Date.now() + 700
+    // Pencere kısa (150ms spy debounce + pay): inişler artık anlık, 700ms'lik körlük
+    // zoom sonrası kullanıcı kaydırmasını yutup sonra aniden sayfa atlatıyordu.
+    suppressSpyUntil = Date.now() + 250
   }
 
   // Bloğa tıklama = o sayfada çalışmaya başla. Kaydırmayı bozmamak için

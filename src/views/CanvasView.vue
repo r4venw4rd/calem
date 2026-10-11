@@ -349,7 +349,7 @@
           @contextmenu.prevent
         ></canvas>
       </template>
-      <div v-else ref="scrollBox" class="absolute inset-0 overflow-y-auto" @scroll.passive="onScrollBox"
+      <div v-else ref="scrollBox" class="absolute inset-0 overflow-y-auto overscroll-contain" @scroll.passive="onScrollBox"
         @pointerdown="onScrollBoxPointerDown" @pointermove="onScrollBoxPointerMove"
         @pointerup="onScrollBoxPointerUp" @pointercancel="onScrollBoxPointerCancel">
         <div class="mx-auto w-full max-w-[860px] px-3 pt-3 pb-28 flex flex-col gap-4">
