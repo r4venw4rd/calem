@@ -1554,6 +1554,7 @@ let offLaunch: (() => void) | null = null
 
 // Sayfa şeridi: düşük çözünürlüklü önbellek, tick+sayfa-değişiminde debounce'lu tazelenir.
 const thumbs = ref<string[]>([])
+const thumbCache = new Map<string, { page: object; revision: number; url: string }>()
 let thumbTimer: ReturnType<typeof setTimeout> | undefined
 let stopThumbWatch: (() => void) | null = null
 const refreshThumbs = () => {
@@ -1581,9 +1582,16 @@ const refreshThumbs = () => {
       return
     }
     try {
+      const alive = new Set(store.pages.map((p) => p.id))
+      for (const id of thumbCache.keys()) if (!alive.has(id)) thumbCache.delete(id)
       thumbs.value = store.pages.map((p) => {
+        const revision = store.thumbRevision(p)
+        const cached = thumbCache.get(p.id)
+        if (cached?.page === p && cached.revision === revision) return cached.url
         const c = store.exportPageToCanvas(p, p.size.w > 0 ? 96 / p.size.w : 0.15)
-        return c ? c.toDataURL() : ''
+        const url = c ? c.toDataURL() : ''
+        thumbCache.set(p.id, { page: p, revision, url })
+        return url
       })
     } catch {
       /* boş şerit */

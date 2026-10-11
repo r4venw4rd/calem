@@ -72,6 +72,29 @@ export const snapshotDoc = (pages: Page[], activePageIndex: number): DocSnap => 
   activePageIndex,
 })
 
+export const createPageSnapshotCache = () => {
+  const versions = new WeakMap<Page, number>()
+  const snapshots = new WeakMap<Page, { version: number; page: Page }>()
+  const revision = (page: Page) => versions.get(page) ?? 0
+  return {
+    revision,
+    invalidate(page: Page) { versions.set(page, revision(page) + 1) },
+    snapshot(pages: Page[], activePageIndex: number): DocSnap {
+      return {
+        pages: pages.map((page) => {
+          const version = revision(page)
+          const cached = snapshots.get(page)
+          if (cached?.version === version) return cached.page
+          const copy = snapshotDoc([page], 0).pages[0]!
+          snapshots.set(page, { version, page: copy })
+          return copy
+        }),
+        activePageIndex,
+      }
+    },
+  }
+}
+
 export const restoreDocSnapshot = (s: DocSnap): { pages: Page[]; activePageIndex: number } => ({
   pages: s.pages.map((p) => ({
     id: p.id,

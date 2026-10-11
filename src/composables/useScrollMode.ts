@@ -109,6 +109,7 @@ export function useScrollMode(opts: ScrollModeOptions) {
   const onScrollBox = () => {
     if (scrollTimer) clearTimeout(scrollTimer)
     scrollTimer = setTimeout(runSpy, 150)
+    refreshBlocks()
   }
 
   // Görünüm-çapalı zoom (Xournal++ usulü): imleç altındaki layout noktası
@@ -207,14 +208,22 @@ export function useScrollMode(opts: ScrollModeOptions) {
         refreshBlocks()
         return
       }
+      let more = false
       try {
         const activeId = store.pages[store.activePageIndex]?.id
         // Statik resim zoom'u takip eder (bitmap tavanlı, canlı ile aynı ölçek hissi).
         const z = Math.min(2.5, Math.max(0.5, store.zoomFactor))
-        for (const p of store.pages) {
-          if (p.id === activeId) continue
+        const pages = store.pages.filter((p) => p.id !== activeId && blockEls.has(p.id))
+        const box = scrollBox.value?.getBoundingClientRect()
+        const visible = box ? pages.filter((p) => {
+          const r = blockEls.get(p.id)?.getBoundingClientRect()
+          return Boolean(r && r.bottom >= box.top - box.height && r.top <= box.bottom + box.height)
+        }) : pages
+        const needsRender = visible.filter((p) => blockRenderKey.get(p.id) !== `${z.toFixed(3)}:${p.size.w}x${p.size.h}`)
+        const batch = needsRender.slice(0, 2)
+        more = needsRender.length > batch.length
+        for (const p of batch) {
           const key = `${z.toFixed(3)}:${p.size.w}x${p.size.h}`
-          if (blockRenderKey.get(p.id) === key) continue
           const el = blockEls.get(p.id)
           if (!el) continue
           const c = store.exportPageToCanvas(p, p.size.w > 0 ? (860 / p.size.w) * z : 0.5)
@@ -231,6 +240,7 @@ export function useScrollMode(opts: ScrollModeOptions) {
       } catch {
         /* boş blok */
       }
+      if (more) refreshBlocks()
     }, 350)
   }
 

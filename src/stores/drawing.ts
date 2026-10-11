@@ -47,7 +47,7 @@ import {
   snapshotLayer,
   snapshotStroke,
   snapshotText,
-  snapshotDoc as makeSnapshotDoc,
+  createPageSnapshotCache,
   restoreDocSnapshot,
   type DocSnap,
 } from '../persist/snapshot'
@@ -180,6 +180,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Aktif çizginin kirli kutusu (SAYFA uzayında) — overlay fullscreen değil, bu kutu temizlenir.
   let bb: { x0: number; y0: number; x1: number; y1: number } | null = null
   let renderedActivePoints = 0
+  let renderedActiveStyle = ''
   // Silgi kirli kutusu (SAYFA uzayı): hareket boyunca birikir, rAF'te tek KISMİ repaint'e
   // dönüşür. Tam-sayfa repaint yerine yalnız değişen bölge raster'lanır (darboğaz buradaydı).
   let eraseDirty: NormRect | null = null
@@ -828,11 +829,12 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   const undoStack = ref<DocSnap[]>([])
   const redoStack = ref<DocSnap[]>([])
+  const pageSnapshotCache = createPageSnapshotCache()
   // Derinlik: config/engine (HISTORY_CAP).
 
   const snapshotDoc = (): DocSnap => {
     const started = performance.now()
-    const result = makeSnapshotDoc(pages.value, activePageIndex.value)
+    const result = pageSnapshotCache.snapshot(pages.value, activePageIndex.value)
     drawingPerf.snapshotMs = performance.now() - started
     return result
   }
@@ -2493,6 +2495,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     const ctx = getCtx(overlayRef.value)
     if (!ctx) return
     renderedActivePoints = 0
+    renderedActiveStyle = ''
     if (!bb || activeShapeSnap.value) {
       clearLayer(ctx)
       return
@@ -2813,12 +2816,14 @@ export const useDrawingStore = defineStore('drawing', () => {
             opacity: strokeOpacity.value,
             points: points.value,
           }
+      const styleKey = `${currentTool.value}:${color.value}:${strokeWidth.value}:${strokeDash.value}:${strokeOpacity.value}:${pressureSensitivity.value}:${paperHex}`
       // Pressure averaged over the whole stroke changes its width while drawing;
       // dashed strokes also need a continuous dash phase. Keep those on full redraw.
-      if (activeShapeSnap.value || pressureSensitivity.value > 0 || strokeDash.value !== 'solid') {
+      if (activeShapeSnap.value || pressureSensitivity.value > 0 || strokeDash.value !== 'solid' || renderedActiveStyle !== styleKey) {
         clearOverlay()
         applyView(ctx, () => paintStroke(ctx, strokeToPaint, paperHex, pressureSensitivity.value))
         renderedActivePoints = points.value.length
+        renderedActiveStyle = styleKey
       } else if (points.value.length !== renderedActivePoints) {
         const start = Math.max(0, renderedActivePoints - 2)
         const tailBox: NormRect = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }
@@ -2832,6 +2837,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         clearOverlayRect(ctx, tailBox, Math.max(strokeWidth.value * 2, DIRTY_PAD_SCREEN / (effScale() || 1)))
         applyView(ctx, () => paintStrokeTail(ctx, strokeToPaint, paperHex, 0, start, 1))
         renderedActivePoints = points.value.length
+        renderedActiveStyle = styleKey
       }
     }
     const dt = performance.now() - t0
@@ -3577,11 +3583,13 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // Thumbnail serit sürümü: her içerik mutasyonunda artar (component debounce'lu okur).
   const thumbTick = ref(0)
+  const thumbRevision = pageSnapshotCache.revision
 
   const scheduleSave = () => {
     if (saveTimer) clearTimeout(saveTimer)
     saveRevision += 1
     pendingSave.value = true
+    pageSnapshotCache.invalidate(activePage.value)
     saveTimer = setTimeout(() => {
       saveTimer = undefined
       void persistNow()
@@ -3878,6 +3886,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     clearPageBackground,
     exportPageToCanvas,
     thumbTick,
+    thumbRevision,
     zoomLabel,
     zoomFactor,
     setScrollLive,
