@@ -33,6 +33,59 @@
             :style="{ background: hex }"
           ></button>
         </div>
+        <!-- Custom renkler & damlalık (desktop StylePanel ile aynı mantık) -->
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            ref="customPicker"
+            type="color"
+            :value="store.color"
+            @input="onCustomInput(($event.target as HTMLInputElement).value)"
+            @cancel="pickerArmed = false"
+            class="w-9 h-9 rounded-full appearance-none bg-transparent border-2 border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0 shrink-0"
+            :title="t('customColor')"
+          />
+          <span
+            v-for="i in CUSTOM_SLOT_COUNT"
+            :key="'c' + i"
+            class="relative shrink-0"
+          >
+            <button
+              v-if="store.customColors[i - 1]"
+              @click="store.setColor(store.customColors[i - 1]!); editingCustom = null"
+              :title="`${store.customColors[i - 1]} ${t('editCustomSuffix')}`"
+              class="w-9 h-9 rounded-full border-2 transition block"
+              :class="[
+                store.color.toLowerCase() === store.customColors[i - 1] ? 'border-[var(--chrome-title)] scale-105 ring-2 ring-indigo-500/60' : 'border-[var(--chrome-border-strong)]',
+                editingCustom === i - 1 ? 'ring-2 ring-indigo-500' : '',
+              ]"
+              :style="{ background: store.customColors[i - 1] }"
+            ></button>
+            <button
+              v-else-if="i === firstEmptySlot"
+              @click="pickCustom()"
+              :title="t('openPicker')"
+              class="w-9 h-9 rounded-full border-2 border-dashed border-[var(--chrome-border-strong)] text-lg text-[var(--chrome-text)] font-mono flex items-center justify-center leading-none"
+            >
+              +
+            </button>
+            <button
+              v-if="store.customColors[i - 1]"
+              @click="store.removeCustomColor(store.customColors[i - 1]!)"
+              :title="t('removeCustom')"
+              class="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[11px] leading-none text-[var(--chrome-text)]"
+            >
+              ×
+            </button>
+            <button
+              v-if="store.customColors[i - 1]"
+              @click="editingCustom = i - 1"
+              :title="t('editCustom')"
+              class="absolute -bottom-1.5 -right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-[var(--chrome-bg-solid)] border border-[var(--chrome-border-strong)] text-[11px] leading-none text-[var(--chrome-text)]"
+            >
+              ✎
+            </button>
+          </span>
+        </div>
       </template>
 
       <div
@@ -120,8 +173,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { useDrawingStore } from '@/stores/drawing'
 import { useLocale } from '@/composables/useLocale'
+import { CUSTOM_SLOT_COUNT } from '@/config/palettes'
 import { SLIDERS } from '@/config/ui'
 
 defineProps<{
@@ -140,4 +195,41 @@ const emit = defineEmits<{
 
 const store = useDrawingStore()
 const { t } = useLocale()
+
+// Custom satır (desktop StylePanel ile birebir): ilk boş slot "+", damlalık
+// normalde rengi seçer, "+" sonrası veya ✎ ile silahlanmış slotu düzenler/ekler.
+const firstEmptySlot = computed<number | null>(() =>
+  store.customColors.length < CUSTOM_SLOT_COUNT ? store.customColors.length + 1 : null,
+)
+const customPicker = ref<HTMLInputElement | null>(null)
+const editingCustom = ref<number | null>(null)
+let pickerArmed = false
+const onCustomInput = (hex: string) => {
+  if (pickerArmed) {
+    pickerArmed = false
+    store.addCustomColor(hex)
+    return
+  }
+  if (editingCustom.value !== null) {
+    const i = editingCustom.value
+    editingCustom.value = null
+    store.setCustomSlot(i, hex)
+    return
+  }
+  store.setColor(hex)
+}
+const pickCustom = () => {
+  const picker = customPicker.value
+  pickerArmed = false
+  if (picker && typeof picker.showPicker === 'function') {
+    try {
+      pickerArmed = true
+      picker.showPicker()
+      return
+    } catch {
+      pickerArmed = false
+    }
+  }
+  store.addCustomColor()
+}
 </script>
