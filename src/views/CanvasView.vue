@@ -683,6 +683,10 @@ const visibleTools = computed(() => {
 })
 // Her pointermove'da overlay redraw yapma — frame başına en fazla 1 (rAF throttle).
 let rafId = 0
+// Kaydırmalı-mod zoom yerleşimi de kare başına en fazla 1: burst'te her adım
+// backing-store realloc + tam sayfa boyası demekti (kasma). Bekleyen kare varsa
+// yeni istek atlanır; rAF güncel state'i okuyup tek seferde işler.
+let zoomRaf = 0
 let lastHudAt = 0
 let lastFrameAt = 0
 
@@ -1524,14 +1528,19 @@ onMounted(() => {
     () => store.zoomLabel,
     () => {
       if (!scrollMode.value) return
-      nextTick(() => {
-        positionSlot()
-        // resizeCanvas: taze layout + bekleyen zoom çapası + boya (tek seferde).
-        store.resizeCanvas()
-        refreshBlocks()
-        drawSelectionOverlay()
-        // Bilerek kaydırma YOK: slot kökeni zoom'da sabittir, çapa boyayı
-        // imleçte tutar; scrollIntoView her adımda görünümü zıplatıyordu.
+      if (zoomRaf !== 0) return
+      zoomRaf = requestAnimationFrame(() => {
+        zoomRaf = 0
+        if (!scrollMode.value) return
+        nextTick(() => {
+          positionSlot()
+          // resizeCanvas: taze layout + bekleyen zoom çapası + boya (tek seferde).
+          store.resizeCanvas()
+          refreshBlocks()
+          drawSelectionOverlay()
+          // Bilerek kaydırma YOK: slot kökeni zoom'da sabittir, çapa boyayı
+          // imleçte tutar; scrollIntoView her adımda görünümü zıplatıyordu.
+        })
       })
     },
   )
@@ -1557,6 +1566,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (rafId !== 0) cancelAnimationFrame(rafId)
+  if (zoomRaf !== 0) cancelAnimationFrame(zoomRaf)
+  zoomRaf = 0
   ps.clearActive()
   cancelSelGesture()
   cancelTextGesture()

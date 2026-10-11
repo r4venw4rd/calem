@@ -128,6 +128,9 @@ export function useScrollMode(opts: ScrollModeOptions) {
   }
 
   // Pasif sayfaların statik resmi (aktif sayfa canlı canvas'la gelir, atlanır).
+  // Taze damgası: zoom+boyut anahtarıyla hangi bloğun güncel olduğu hatırlanır —
+  // sayfa geçişlerinde TÜM pasifler değil, yalnızca bayat olan boyanır.
+  const blockRenderKey = new Map<string, string>()
   let blockTimer: ReturnType<typeof setTimeout> | undefined
   const refreshBlocks = () => {
     if (!scrollMode.value) return
@@ -141,16 +144,24 @@ export function useScrollMode(opts: ScrollModeOptions) {
       }
       try {
         const activeId = store.pages[store.activePageIndex]?.id
+        // Statik resim zoom'u takip eder (bitmap tavanlı, canlı ile aynı ölçek hissi).
+        const z = Math.min(2.5, Math.max(0.5, store.zoomFactor))
         for (const p of store.pages) {
           if (p.id === activeId) continue
+          const key = `${z.toFixed(3)}:${p.size.w}x${p.size.h}`
+          if (blockRenderKey.get(p.id) === key) continue
           const el = blockEls.get(p.id)
           if (!el) continue
-          // Statik resim zoom'u takip eder (bitmap tavanlı, canlı ile aynı ölçek hissi).
-          const z = Math.min(2.5, Math.max(0.5, store.zoomFactor))
           const c = store.exportPageToCanvas(p, p.size.w > 0 ? (860 / p.size.w) * z : 0.5)
           if (!c) continue
           c.className = 'block w-full h-auto'
           el.replaceChildren(c)
+          blockRenderKey.set(p.id, key)
+        }
+        // Ölü id'leri temizle (silinen sayfalar).
+        if (blockRenderKey.size > store.pages.length) {
+          const alive = new Set(store.pages.map((pg) => pg.id))
+          for (const k of [...blockRenderKey.keys()]) if (!alive.has(k)) blockRenderKey.delete(k)
         }
       } catch {
         /* boş blok */
@@ -167,6 +178,8 @@ export function useScrollMode(opts: ScrollModeOptions) {
     await nextTick()
     bindCanvases()
     if (scrollMode.value) {
+      // Taze DOM: eski damgalar geçersiz, tüm pasifler ilk kez boyanır.
+      blockRenderKey.clear()
       refreshBlocks()
       positionSlot()
       scrollActiveIntoView()
@@ -186,9 +199,16 @@ export function useScrollMode(opts: ScrollModeOptions) {
     if (scrollTimer) clearTimeout(scrollTimer)
     scrollTimer = undefined
     blockEls.clear()
+    blockRenderKey.clear()
   }
 
-  const stopBlockWatch = watch(() => store.thumbTick, refreshBlocks)
+  // Mürekkep yalnızca aktif sayfada değişir: pasif damgalar taze kalır,
+  // yalnız aktif sayfanın damgası silinir (pasife düşünce boyanır).
+  const stopBlockWatch = watch(() => store.thumbTick, () => {
+    const activeId = store.pages[store.activePageIndex]?.id
+    if (activeId) blockRenderKey.delete(activeId)
+    refreshBlocks()
+  })
 
   onUnmounted(() => {
     stopBlockWatch()
