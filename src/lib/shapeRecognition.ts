@@ -26,6 +26,18 @@ const DEFAULT_OPTIONS: Required<ShapeRecognitionOptions> = {
 
 const dist = (a: Point, b: Point): number => Math.hypot(b.x - a.x, b.y - a.y)
 
+/** Noktaların sınırladığı poligonun alanını hesaplar (Shoelace formülü). */
+export const polygonArea = (pts: Point[]): number => {
+  const n = pts.length
+  if (n < 3) return 0
+  let area = 0
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n
+    area += pts[i]!.x * pts[j]!.y - pts[j]!.x * pts[i]!.y
+  }
+  return Math.abs(area) / 2
+}
+
 /** Noktaların toplam yol uzunluğunu hesaplar. */
 export const pathLength = (pts: Point[]): number => {
   let len = 0
@@ -188,6 +200,16 @@ export const detectEllipse = (pts: Point[], opts: Required<ShapeRecognitionOptio
   // Döngü kapanma oranı (baş ve son nokta birbirine yeterince yakın olmalı)
   if (gap / perimeterApprox > 0.28) return null
 
+  // Alan kontrolü: Daire/elips alanı, sınırlayıcı kutu alanının ~%78'i (pi/4) kadardır.
+  // Kareler ~%95-100, üçgenler ise ~%40-55 civarındadır.
+  const bboxArea = bbox.w * bbox.h
+  if (bboxArea <= 0) return null
+  const realArea = polygonArea(pts)
+  const areaRatio = realArea / bboxArea
+  // Eğer alan oranı %88'in üzerindeyse bu kesinlikle bir kutu/karedir, daire olamaz!
+  // Eğer %64'ün altındaysa bu bir üçgen veya yıldızdır, daire olamaz!
+  if (areaRatio > 0.88 || areaRatio < 0.64) return null
+
   const cx = bbox.minX + bbox.w / 2
   const cy = bbox.minY + bbox.h / 2
   const rx = bbox.w / 2
@@ -201,7 +223,8 @@ export const detectEllipse = (pts: Point[], opts: Required<ShapeRecognitionOptio
     sumErr += Math.abs(q - 1)
   }
   const meanErr = sumErr / pts.length
-  if (meanErr > 0.18) return null
+  // Daire için hata toleransı sıkılaştırıldı (0.18 yerine 0.14)
+  if (meanErr > 0.14) return null
 
   let minX = bbox.minX
   let minY = bbox.minY
@@ -240,6 +263,14 @@ export const detectRectangle = (pts: Point[], opts: Required<ShapeRecognitionOpt
   const gap = dist(p0, pEnd)
   if (gap / perimeter > 0.28) return null
 
+  // Alan kontrolü: Dikdörtgen/kare alanı bbox'ın en az %78'ini doldurmalıdır!
+  // Üçgenler (~%50) ve dar şekiller bu filtreyi geçemez, üçgen kare olamaz.
+  const bboxArea = bbox.w * bbox.h
+  if (bboxArea <= 0) return null
+  const realArea = polygonArea(pts)
+  const areaRatio = realArea / bboxArea
+  if (areaRatio < 0.76) return null
+
   // 4 kenara da noktaların düşüp düşmediğini kontrol et
   let nearLeft = 0
   let nearRight = 0
@@ -273,8 +304,29 @@ export const detectRectangle = (pts: Point[], opts: Required<ShapeRecognitionOpt
     return null
   }
 
+  // Köşe doluluk kontrolü: Gerçek dikdörtgen/kutuların 4 köşesine de yakın noktaları olur!
+  // Elipslerde köşeler boştur (köşelere olan min mesafe min(w, h)'nin %25'inden büyüktür).
+  const corners = [
+    { x: bbox.minX, y: bbox.minY },
+    { x: bbox.maxX, y: bbox.minY },
+    { x: bbox.minX, y: bbox.maxY },
+    { x: bbox.maxX, y: bbox.maxY },
+  ]
+  const cornerDistLimit = Math.max(10, Math.min(bbox.w, bbox.h) * 0.24)
+  for (const c of corners) {
+    let minDistToCorner = Infinity
+    for (const p of pts) {
+      const d = dist(p, c)
+      if (d < minDistToCorner) minDistToCorner = d
+    }
+    // Köşelerden birine bile hiç yaklaşılmamışsa bu elipstir, kutu olamaz!
+    if (minDistToCorner > cornerDistLimit) {
+      return null
+    }
+  }
+
   const meanEdgeDist = sumEdgeDist / pts.length
-  if (meanEdgeDist / Math.min(bbox.w, bbox.h) > 0.18) return null
+  if (meanEdgeDist / Math.min(bbox.w, bbox.h) > 0.16) return null
 
   return {
     tool: 'rect',
@@ -285,7 +337,7 @@ export const detectRectangle = (pts: Point[], opts: Required<ShapeRecognitionOpt
 
 /**
  * Verilen serbest çizim noktalarından geometrik primitifi tanır.
- * Öncelik sırası: Çizgi -> Daire/Elips -> Dikdörtgen.
+ * Öncelik sırası: Ok -> Düz Çizgi -> Dikdörtgen/Kutu -> Daire/Elips.
  */
 export const recognizeShape = (
   pts: Point[],
@@ -302,13 +354,13 @@ export const recognizeShape = (
   const line = detectLine(pts, opts)
   if (line) return line
 
-  // 3. Daire / Elips kontrolü
-  const ellipse = detectEllipse(pts, opts)
-  if (ellipse && ellipse.confidence > 0.85) return ellipse
-
-  // 4. Dikdörtgen kontrolü
+  // 3. Dikdörtgen kontrolü (önce kutu: kutuların daireye yanlış yuvarlanmasını önler)
   const rect = detectRectangle(pts, opts)
-  if (rect && (!ellipse || rect.confidence >= ellipse.confidence)) return rect
+  if (rect) return rect
 
-  return ellipse
+  // 4. Daire / Elips kontrolü
+  const ellipse = detectEllipse(pts, opts)
+  if (ellipse) return ellipse
+
+  return null
 }

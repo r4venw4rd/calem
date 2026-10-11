@@ -160,17 +160,27 @@ describe('shapeRecognition', () => {
       expect(b.y).toBeCloseTo(110, 0)
     })
 
-    it('rejects random squiggles and handwriting', () => {
-      // Wave / squiggle
-      const pts: Point[] = [
-        { x: 10, y: 50 },
-        { x: 20, y: 30 },
-        { x: 30, y: 70 },
-        { x: 40, y: 20 },
-        { x: 50, y: 60 },
-        { x: 60, y: 30 },
-      ]
+    it('rejects a drawn triangle from being recognized as rectangle or ellipse', () => {
+      // Equilateral-like triangle (3 sharp sides)
+      const pts: Point[] = []
+      // Top (50, 10) to bottom-right (100, 90)
+      for (let i = 0; i <= 10; i++) {
+        const t = i / 10
+        pts.push({ x: 50 + 50 * t, y: 10 + 80 * t })
+      }
+      // Bottom-right to bottom-left (0, 90)
+      for (let i = 1; i <= 10; i++) {
+        const t = i / 10
+        pts.push({ x: 100 - 100 * t, y: 90 })
+      }
+      // Bottom-left to top (50, 10)
+      for (let i = 1; i <= 10; i++) {
+        const t = i / 10
+        pts.push({ x: 0 + 50 * t, y: 90 - 80 * t })
+      }
       const res = recognizeShape(pts)
+      // Şimdilik üçgen henüz ayrı bir primitif aracı olarak çizilmediği için
+      // kesinlikle kareye veya daireye dönüştürülmemelidir!
       expect(res).toBeNull()
     })
   })
