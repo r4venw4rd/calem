@@ -127,4 +127,86 @@ test.describe('Kaydırmalı görünüm (Scroll Mode)', () => {
     expect(await strokes()).toBe(0)
     await expect(page.locator('[aria-label="Sayfalar"] span.font-mono')).toHaveText('2 / 2')
   })
+
+  test('pasif blok üzerinde ctrl+tekerlek app zoom yapar (tarayıcı-zoom yok)', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('button[title*="scroll view"], button[title*="kaydırma"]').first().click()
+    await page.waitForTimeout(800)
+    await page.locator('button[title*="New page"], button[title*="Yeni sayfa"]').first().click()
+    await page.waitForTimeout(1000)
+
+    const state = () =>
+      page.evaluate(() => {
+        const nav = document.querySelector('[aria-label="Sayfalar"]')
+        const zoom =
+          nav?.querySelectorAll('button.font-mono')[2]?.textContent?.trim() ?? '?'
+        const blocks = [...document.querySelectorAll('div[style*="aspect-ratio"]')] as HTMLElement[]
+        return {
+          zoom,
+          widths: blocks.map((b) => b.offsetWidth),
+        }
+      })
+    const before = await state()
+    expect(before.widths[0]).toBeLessThan(900)
+
+    // İmleç PASİF blok (sayfa 1) üzerindeyken ctrl+tekerlek (tek basışta tut)
+    const pt = await page.evaluate(() => {
+      const blocks = [...document.querySelectorAll('div[style*="aspect-ratio"]')] as HTMLElement[]
+      const r = blocks[0]!.getBoundingClientRect()
+      return { x: r.left + r.width / 2, y: Math.max(120, r.top + 120) }
+    })
+    await page.mouse.move(pt.x, pt.y)
+    await page.keyboard.down('Control')
+    for (let i = 0; i < 3; i++) {
+      await page.mouse.wheel(0, -240)
+      await page.waitForTimeout(250)
+    }
+    await page.keyboard.up('Control')
+    await page.waitForTimeout(600)
+
+    const after = await state()
+    // App zoom çalıştı (bloklar büyüdü), aktif sayfa değişmedi
+    expect(after.widths[0]).toBeGreaterThan(before.widths[0]! + 200)
+    await expect(page.locator('[aria-label="Sayfalar"] span.font-mono')).toHaveText('2 / 2')
+  })
+
+  test('sayfa-arası zoomda imleç altındaki nokta sabit kalır', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('button[title*="scroll view"], button[title*="kaydırma"]').first().click()
+    await page.waitForTimeout(800)
+    await page.locator('button[title*="New page"], button[title*="Yeni sayfa"]').first().click()
+    await page.waitForTimeout(1000)
+
+    // İmleci pasif blok içine koy, blok-içi oranı kaydet
+    const cursorY = 450
+    const before = await page.evaluate((cy) => {
+      const blocks = [...document.querySelectorAll('div[style*="aspect-ratio"]')] as HTMLElement[]
+      const b = blocks[0]!
+      const r = b.getBoundingClientRect()
+      return { frac: (cy - r.top) / r.height, top: r.top, h: r.height }
+    }, cursorY)
+    const blk = await page.evaluate(() => {
+      const blocks = [...document.querySelectorAll('div[style*="aspect-ratio"]')] as HTMLElement[]
+      const r = blocks[0]!.getBoundingClientRect()
+      return { x: r.left + r.width / 2 }
+    })
+    await page.mouse.move(blk.x, cursorY)
+    await page.keyboard.down('Control')
+    await page.mouse.wheel(0, -240)
+    await page.mouse.wheel(0, -240)
+    await page.keyboard.up('Control')
+    await page.waitForTimeout(800)
+
+    // Aynı layout noktası hâlâ imleç altında olmalı (±40px hoşgörü)
+    const drift = await page.evaluate(
+      ([cy, frac]) => {
+        const blocks = [...document.querySelectorAll('div[style*="aspect-ratio"]')] as HTMLElement[]
+        const b = blocks[0]!
+        const r = b.getBoundingClientRect()
+        return Math.abs(r.top + frac * r.height - cy)
+      },
+      [cursorY, before.frac] as const,
+    )
+    expect(drift).toBeLessThan(40)
+  })
 })

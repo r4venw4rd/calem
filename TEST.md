@@ -71,6 +71,7 @@ Everything below is a manual/E2E checklist. Each row states the **expected resul
 | 7.4 | Turn on scroll mode | Pages stack vertically, drawing works on the active one, the wheel scrolls |
 | 7.5 | Hand tool + Space-drag | Pans without smearing ink |
 | 7.6 | Pinch / Ctrl+wheel | Cursor-anchored zoom, the % label updates |
+| 7.7 | Ctrl+wheel / pinch over passive page or gap (scroll mode) | App zooms around the cursor, counter stable, no browser zoom |
 
 ## 8. Undo / redo
 | # | Step | Expected |
