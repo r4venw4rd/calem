@@ -137,4 +137,59 @@ describe('xopp adapter', () => {
       { x: 200, y: 100 },
     ])
   })
+
+  it('exports Calem primitive shapes (rect, ellipse, arrow) into valid Xournal++ stroke paths', () => {
+    const pages: Page[] = [
+      {
+        id: 'p1',
+        size: { w: 500, h: 500 },
+        activeLayerId: 'l1',
+        layers: [
+          {
+            id: 'l1',
+            name: 'Shapes',
+            visible: true,
+            strokes: [
+              {
+                id: 's_rect',
+                tool: 'rect',
+                color: '#ef4444',
+                width: 2,
+                dash: 'solid',
+                opacity: 1,
+                points: [{ x: 10, y: 10 }, { x: 110, y: 80 }],
+              },
+              {
+                id: 's_ellipse',
+                tool: 'ellipse',
+                color: '#3b82f6',
+                width: 2,
+                dash: 'solid',
+                opacity: 1,
+                points: [{ x: 50, y: 50 }, { x: 150, y: 150 }],
+              },
+              {
+                id: 's_arrow',
+                tool: 'arrow',
+                color: '#10b981',
+                width: 2,
+                dash: 'solid',
+                opacity: 1,
+                points: [{ x: 20, y: 20 }, { x: 120, y: 20 }],
+              },
+            ],
+          },
+        ],
+        texts: [],
+        images: [],
+      },
+    ]
+
+    const xml = serializeXoppXml(pages)
+    // 3 şekil de <stroke tool="pen" ...> olarak XML'e düşmeli
+    expect(xml).toContain('10.00 10.00 110.00 10.00 110.00 80.00 10.00 80.00 10.00 10.00')
+    const strokeCount = (xml.match(/<stroke /g) || []).length
+    expect(strokeCount).toBe(3)
+  })
 })
+

@@ -48,6 +48,62 @@ export const fromXoppColor = (colorStr: string): { color: string; opacity: numbe
   return { color: '#000000', opacity: 1 }
 }
 
+/**
+ * Calem primitif şekillerini (rect, ellipse, arrow) Xournal++'ın anlayacağı
+ * çoklu-nokta sürekli çizgi vektörüne genişletir.
+ */
+export const shapeToXoppStrokePoints = (stroke: Stroke): Point[] => {
+  const pts = stroke.points
+  if (pts.length < 2) return pts
+  const [a, b] = pts as [Point, Point]
+
+  if (stroke.tool === 'rect') {
+    const x0 = Math.min(a.x, b.x)
+    const y0 = Math.min(a.y, b.y)
+    const x1 = Math.max(a.x, b.x)
+    const y1 = Math.max(a.y, b.y)
+    return [
+      { x: x0, y: y0 },
+      { x: x1, y: y0 },
+      { x: x1, y: y1 },
+      { x: x0, y: y1 },
+      { x: x0, y: y0 },
+    ]
+  }
+
+  if (stroke.tool === 'ellipse') {
+    const cx = (a.x + b.x) / 2
+    const cy = (a.y + b.y) / 2
+    const rx = Math.abs(b.x - a.x) / 2
+    const ry = Math.abs(b.y - a.y) / 2
+    const segs = 36
+    const out: Point[] = []
+    for (let i = 0; i <= segs; i++) {
+      const theta = (i / segs) * 2 * Math.PI
+      out.push({
+        x: cx + rx * Math.cos(theta),
+        y: cy + ry * Math.sin(theta),
+      })
+    }
+    return out
+  }
+
+  if (stroke.tool === 'arrow') {
+    const ang = Math.atan2(b.y - a.y, b.x - a.x)
+    const len = Math.max(8, stroke.width * 4)
+    const spread = Math.PI / 7
+    return [
+      { x: a.x, y: a.y },
+      { x: b.x, y: b.y },
+      { x: b.x - len * Math.cos(ang - spread), y: b.y - len * Math.sin(ang - spread) },
+      { x: b.x, y: b.y },
+      { x: b.x - len * Math.cos(ang + spread), y: b.y - len * Math.sin(ang + spread) },
+    ]
+  }
+
+  return pts
+}
+
 /** Calem belgesini Xournal++ XML dizgisine dönüştürür. */
 export const serializeXoppXml = (pages: Page[], paperHex = '#ffffff'): string => {
   const lines: string[] = [
@@ -63,14 +119,15 @@ export const serializeXoppXml = (pages: Page[], paperHex = '#ffffff'): string =>
     for (const layer of page.layers) {
       lines.push(`    <layer name="${escapeXml(layer.name)}">`)
 
-      // Çizgileri yaz
+      // Çizgileri ve şekilleri yaz
       for (const stroke of layer.strokes) {
         if (stroke.points.length === 0) continue
         const toolName = stroke.tool === 'highlighter' ? 'highlighter' : stroke.tool === 'eraser' ? 'eraser' : 'pen'
         const colorStr = toXoppColor(stroke.color, stroke.opacity)
         const widthVal = stroke.width.toFixed(2)
 
-        const coords = stroke.points.map((p) => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ')
+        const strokePoints = shapeToXoppStrokePoints(stroke)
+        const coords = strokePoints.map((p) => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ')
         lines.push(`      <stroke tool="${toolName}" color="${colorStr}" width="${widthVal}">`)
         lines.push(`        ${coords}`)
         lines.push('      </stroke>')
