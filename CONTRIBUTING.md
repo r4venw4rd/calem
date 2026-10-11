@@ -1,36 +1,25 @@
-# Contributing Guide
+# Contributing to Calem
 
-Welcome to Calem. An offline-first, zero-latency drawing app — speed and simplicity come before everything else.
+Thank you for contributing! We welcome community contributions.
 
-## Quick Start
+## Development Workflow
 
-```sh
-npm install
-npm run dev        # http://localhost:5173
-npm test           # vitest, everything must be green
-npm run type-check # required before a PR
-npm run test:e2e   # Playwright against the system Chrome (starts its own dev server)
-```
+1. Fork the repo and create a branch (`feature/<name>` or `fix/<name>`).
+2. Install dependencies: `npm install`
+3. Run dev server: `npm run dev` (or `npm run dev:fast`)
+4. Run tests: `npm run test` (E2E: `npm run test:e2e`)
+5. Type check and build: `npm run build`
 
-## Rules
+## Guidelines
 
-1. **Never break tests for free:** `npm test` (117 tests) and `npm run type-check` are green on every commit.
-2. **New logic = new test:** pure functions (`src/lib/`) come with a unit test in `tests/`. UI behaviour is added as a row in the manual checklist in `TEST.md`.
-3. **Config is the single source of truth:** if a limit, constant or UI range changes, touch `src/config/`; `tests/config.test.ts` locks it down.
-4. **Small PRs:** one PR, one job. Before adding to a god file (`stores/drawing.ts`, `views/CanvasView.vue`) read `ARCHITECTURE.md` — find out where your change belongs.
-5. **Performance:** never add synchronous painting to the draw path (`pointermove` → paint); keep the rAF pattern. When in doubt, check `emaMs/frameMs` in the HUD.
+- **Write tests for new logic**: All core additions must include unit or E2E tests.
+- **Maintain performance**: Calem is local-first and performance-critical; avoid regressions.
+- **PR Checklist**:
+  - [ ] `npm run test` passes without errors
+  - [ ] `npm run build` succeeds (type-check + bundle)
+  - [ ] Clean, descriptive git commit messages
 
-## Branch + Commit
+## Licensing & Agreements
 
-- Branch: `feature/short-name`, `fix/short-name`
-- Commit: `type(scope): short description` — e.g. `fix(eraser): ...`, `feat(pan): ...`, `perf(draw): ...`, `test: ...`, `docs: ...`
-
-## PR Checklist
-
-- [ ] `npm test` green
-- [ ] `npm run type-check` clean
-- [ ] Touch the canvas/erase/undo path? `npm run test:e2e` green too
-- [ ] New logic tested / manual checklist updated
-- [ ] No synchronous painting on a millisecond-critical path
-
-Something wrong? Open an issue — device + browser + a step-by-step reproduction is enough.
+All contributions are accepted under the **GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)**.
+By contributing, you agree that your work will be licensed under AGPL-3.0. Contributors may later be asked to sign a Contributor License Agreement (CLA) or Developer Certificate of Origin (DCO) sign-off.
