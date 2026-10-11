@@ -13,6 +13,7 @@ export const segmentCircleTs = (
   cy: number,
   r: number,
 ): number[] => {
+  if (!(r > 0)) return []
   const dx = bx - ax
   const dy = by - ay
   const fx = ax - cx
@@ -55,6 +56,7 @@ export const polylineHitsCircle = (
 ): boolean => {
   const n = pts.length
   if (n === 0) return false
+  if (!(r > 0)) return false
   if (n === 1) return inside(pts[0]!, cx, cy, r)
   if (inside(pts[0]!, cx, cy, r)) return true
   for (let i = 1; i < n; i++) {
@@ -87,6 +89,7 @@ export const dropTinyRuns = (runs: Point[][], minLen: number): Point[][] =>
 // Dokunulmadıysa [orijinal dizi] (aynı referans değil, içerik aynı).
 export const splitRunsOutside = (pts: Point[], cx: number, cy: number, r: number): Point[][] => {
   if (pts.length === 0) return []
+  if (!(r > 0)) return [pts.map(copyPt)]
   if (pts.length === 1) return inside(pts[0]!, cx, cy, r) ? [] : [pts.map(copyPt)]
   const runs: Point[][] = []
   let cur: Point[] = []
