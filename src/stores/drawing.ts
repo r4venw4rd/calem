@@ -33,12 +33,12 @@ import {
   normRect,
   selectByLasso as selByLasso,
   selectByRect as selByRect,
-  subRunsInRect,
   unionRect,
   type NormRect,
 } from '../lib/select'
 import { dropTinyRuns, polylineHitsCircle, splitPolylineOutsideSweep, splitRunsOutside } from '../lib/erase'
 import { cachedStrokeBBox, invalidateStrokeBBox } from '../lib/strokeBounds'
+import { indexedSubRunsInRect, invalidateStrokeSpatialIndex } from '../lib/strokeSpatialIndex'
 import { capBackingScale } from '../lib/canvasLimits'
 import {
   newStrokeId,
@@ -76,7 +76,7 @@ import {
   pageSizeOf,
   type RawPage,
 } from '../persist/pageSanitizer'
-import { dashFor, effectiveWidth, paintStroke } from '../render/strokes'
+import { dashFor, effectiveWidth, paintStroke, paintStrokeTail } from '../render/strokes'
 import { wrapTextToWidth } from '../lib/text'
 import { estimateLines, textBBoxOf } from '../lib/text'
 import { fitContain, needsPdfRerender, shapeEndpoints } from '../lib/geometry'
@@ -179,6 +179,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   let smoothPt: { x: number; y: number } | null = null
   // Aktif çizginin kirli kutusu (SAYFA uzayında) — overlay fullscreen değil, bu kutu temizlenir.
   let bb: { x0: number; y0: number; x1: number; y1: number } | null = null
+  let renderedActivePoints = 0
   // Silgi kirli kutusu (SAYFA uzayı): hareket boyunca birikir, rAF'te tek KISMİ repaint'e
   // dönüşür. Tam-sayfa repaint yerine yalnız değişen bölge raster'lanır (darboğaz buradaydı).
   let eraseDirty: NormRect | null = null
@@ -1020,6 +1021,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         p.y += dy
       }
       invalidateStrokeBBox(s)
+      invalidateStrokeSpatialIndex(s)
     }
     for (const img of movedImages) {
       img.x += dx
@@ -2490,6 +2492,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const clearOverlay = () => {
     const ctx = getCtx(overlayRef.value)
     if (!ctx) return
+    renderedActivePoints = 0
     if (!bb || activeShapeSnap.value) {
       clearLayer(ctx)
       return
@@ -2500,6 +2503,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     applyView(ctx, () => {
       ctx.clearRect(box.x0 - pad, box.y0 - pad, box.x1 - box.x0 + pad * 2, box.y1 - box.y0 + pad * 2)
     })
+  }
+
+  const clearOverlayRect = (ctx: CanvasRenderingContext2D, box: NormRect, pad: number) => {
+    applyView(ctx, () => ctx.clearRect(box.x0 - pad, box.y0 - pad, box.x1 - box.x0 + pad * 2, box.y1 - box.y0 + pad * 2))
   }
 
   // Base katmanını geçmişten baştan çiz — sadece undo/clear/resize/setup/sayfa geçişinde (nadir).
@@ -2718,7 +2725,7 @@ export const useDrawingStore = defineStore('drawing', () => {
           // kutuya yakın nokta koşularını çiz (şekiller uç-noktalı, onlar tam kalır).
           if (!isShapeTool(s.tool)) {
             drawingPerf.repaintPoints += s.points.length
-            const runs = subRunsInRect(s.points, dirty, DIRTY_STROKE_MARGIN)
+            const runs = indexedSubRunsInRect(s, dirty, DIRTY_STROKE_MARGIN)
             if (runs.length === 0) continue
             // Genişlik TÜM noktalardan hesaplanır (basınç ortalaması) — koşuya bölününce
             // değişmesin diye tam genişliği geçir, hassasiyeti 0 ver.
@@ -2782,8 +2789,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     const t0 = performance.now()
     const ctx = getCtx(overlayRef.value)
     if (!ctx) return
-    clearOverlay()
-    if (isDrawing.value && points.value.length > 0) {
+    if (!isDrawing.value || points.value.length === 0) {
+      clearLayer(ctx)
+      renderedActivePoints = 0
+    } else {
       const paperHex = paperFor(activePage.value)
       const strokeToPaint: Stroke = activeShapeSnap.value
         ? {
@@ -2804,14 +2813,26 @@ export const useDrawingStore = defineStore('drawing', () => {
             opacity: strokeOpacity.value,
             points: points.value,
           }
-      applyView(ctx, () => {
-        paintStroke(
-          ctx,
-          strokeToPaint,
-          paperHex,
-          pressureSensitivity.value,
-        )
-      })
+      // Pressure averaged over the whole stroke changes its width while drawing;
+      // dashed strokes also need a continuous dash phase. Keep those on full redraw.
+      if (activeShapeSnap.value || pressureSensitivity.value > 0 || strokeDash.value !== 'solid') {
+        clearOverlay()
+        applyView(ctx, () => paintStroke(ctx, strokeToPaint, paperHex, pressureSensitivity.value))
+        renderedActivePoints = points.value.length
+      } else if (points.value.length !== renderedActivePoints) {
+        const start = Math.max(0, renderedActivePoints - 2)
+        const tailBox: NormRect = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }
+        for (let i = Math.max(0, start - 1); i < points.value.length; i++) {
+          const p = points.value[i]!
+          tailBox.x0 = Math.min(tailBox.x0, p.x)
+          tailBox.y0 = Math.min(tailBox.y0, p.y)
+          tailBox.x1 = Math.max(tailBox.x1, p.x)
+          tailBox.y1 = Math.max(tailBox.y1, p.y)
+        }
+        clearOverlayRect(ctx, tailBox, Math.max(strokeWidth.value * 2, DIRTY_PAD_SCREEN / (effScale() || 1)))
+        applyView(ctx, () => paintStrokeTail(ctx, strokeToPaint, paperHex, 0, start, 1))
+        renderedActivePoints = points.value.length
+      }
     }
     const dt = performance.now() - t0
     drawingPerf.lastMs = dt

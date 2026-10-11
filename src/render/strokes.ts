@@ -195,3 +195,38 @@ export const paintStroke = (
   }
   ctx.restore()
 }
+
+export const paintStrokeTail = (
+  ctx: CanvasRenderingContext2D,
+  s: Pick<Stroke, 'tool' | 'color' | 'width' | 'dash' | 'opacity' | 'points'>,
+  paperHex: string | null,
+  sensitivity: number,
+  startSegment: number,
+  avgPressure: number,
+) => {
+  if (s.points.length < 2) return paintStroke(ctx, s, paperHex, sensitivity)
+  const w = s.tool === 'eraser' ? s.width : effectiveWidthFromAverage(s.width, sensitivity, avgPressure)
+  ctx.save()
+  applyStyleForStroke(ctx, s.tool, s.color, w, paperHex, s.opacity)
+  ctx.setLineDash(dashFor(s.tool, s.dash, w))
+  ctx.beginPath()
+  ctx.moveTo(s.points[startSegment]!.x, s.points[startSegment]!.y)
+  for (let i = startSegment; i < s.points.length - 1; i++) {
+    const p0 = s.points[Math.max(0, i - 1)]!
+    const p1 = s.points[i]!
+    const p2 = s.points[i + 1]!
+    const p3 = s.points[Math.min(s.points.length - 1, i + 2)]!
+    ctx.bezierCurveTo(
+      p1.x + ((p2.x - p0.x) / 12), p1.y + ((p2.y - p0.y) / 12),
+      p2.x - ((p3.x - p1.x) / 12), p2.y - ((p3.y - p1.y) / 12), p2.x, p2.y,
+    )
+  }
+  ctx.stroke()
+  ctx.restore()
+}
+
+export const effectiveWidthFromAverage = (base: number, sensitivity: number, avg: number): number => {
+  if (sensitivity <= 0) return base
+  const pressureFactor = 0.4 + 0.6 * Math.min(Math.max(avg, 0), 1)
+  return Math.max(base * (1 + (pressureFactor - 1) * Math.min(sensitivity, 2)), 0.5)
+}
