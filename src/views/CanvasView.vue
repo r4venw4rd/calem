@@ -359,11 +359,10 @@
           <div
             :ref="(el) => setBlockRef(el, p.id)"
             class="mx-auto rounded-sm overflow-hidden cursor-pointer scroll-mt-2 min-[640px]:scroll-mt-[72px]"
-            :style="{ width: `${store.zoomFactor * 100}%`, aspectRatio: `${p.size.w} / ${p.size.h}`, visibility: i === store.activePageIndex ? 'hidden' : 'visible' }"
+            :style="{ width: `${store.zoomFactor * 100}%`, aspectRatio: `${p.size.w} / ${p.size.h}`, visibility: i === store.activePageIndex ? 'hidden' : 'visible', touchAction: 'pan-x pan-y' }"
             @pointerdown.prevent="onBlockDown"
             @pointerup="onBlockUp($event, i)"
-            @touchstart.prevent
-            @touchmove.prevent
+            @pointercancel="resetBlockTap"
           ></div>
           </div>
         </div>
