@@ -30,133 +30,35 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
           </svg>
         </button>
-        <Teleport to="body">
-        <div
-          v-if="showFile"
-          ref="filePanel"
-          class="fixed left-1/2 top-[68px] z-30 w-56 -translate-x-1/2 rounded-xl bg-[var(--float-bg)] border border-[var(--chrome-border-strong)] p-1.5 text-xs shadow-xl backdrop-blur"
-          role="menu"
-          :aria-label="t('file')"
-        >
-          <button
-            @click="openCalemDoc"
-            :disabled="store.pdfBusy"
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
-            :title="t('openCalemTitle')"
-          >
-            {{ t('openCalem') }}
-          </button>
-          <input
-            ref="calemInput"
-            type="file"
-            :accept="CALEM_ACCEPT"
-            class="hidden"
-            @change="onCalemFile"
-          />
-          <button
-            @click="quickSaveDoc"
-            :disabled="store.pdfBusy"
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
-            :title="t('saveCalemTitle')"
-          >
-            {{ t('saveCalem') }}
-          </button>
-          <button
-            @click="openXoppDoc"
-            :disabled="store.pdfBusy"
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
-            :title="t('openXoppTitle')"
-          >
-            {{ t('openXopp') }}
-          </button>
-          <input
-            ref="xoppInput"
-            type="file"
-            :accept="XOPP_ACCEPT"
-            class="hidden"
-            @change="onXoppFile"
-          />
-          <button
-            @click="exportXoppDoc"
-            :disabled="store.pdfBusy"
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
-            :title="t('exportXoppTitle')"
-          >
-            {{ t('exportXopp') }}
-          </button>
-          <div class="my-1 border-t border-[var(--chrome-border)]"></div>
-          <label
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer"
-            :class="{ 'opacity-40 pointer-events-none': store.pdfBusy }"
-            :title="t('openPdfTitle')"
-          >
-            {{ t('openPdf') }}
-            <input
-              type="file"
-              :accept="PDF_ACCEPT"
-              class="hidden"
-              :disabled="store.pdfBusy"
-              @change="onPdfFile"
-            />
-          </label>
-          <button
-            @click="exportPdfDoc"
-            :disabled="store.pdfBusy"
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
-            :title="t('writePdfTitle')"
-          >
-            {{ t('writePdf') }}
-          </button>
-          <button
-            @click="exportPng"
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
-            :title="t('downloadPngTitle')"
-          >
-            {{ t('downloadPng') }}
-          </button>
-          <div class="my-1 border-t border-[var(--chrome-border)]"></div>
-          <div class="px-3 pt-1 text-[10px] text-[var(--chrome-faint)] font-mono">{{ t('page') }}</div>
-          <button
-            @click="dupPage"
-            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
-            :title="t('dupPageTitle')"
-          >
-            {{ t('dupPage') }}
-          </button>
-          <div class="flex gap-1 px-3 pb-1">
-            <button
-              @click="movePageL"
-              :disabled="store.activePageIndex === 0"
-              class="flex-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed font-mono"
-              :title="t('moveLeft')"
-            >
-              ←
-            </button>
-            <button
-              @click="movePageR"
-              :disabled="store.activePageIndex >= store.pages.length - 1"
-              class="flex-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed font-mono"
-              :title="t('moveRight')"
-            >
-              →
-            </button>
-          </div>
-          <div
-            v-if="store.pdfName || store.lastSavedAt"
-            class="mt-1 pt-1 border-t border-[var(--chrome-border)] px-3 py-1 text-[10px] text-[var(--chrome-faint)] font-mono truncate"
-          >
-            <span v-if="store.pdfName" :title="store.pdfName">
-              {{ store.pdfName }}
-              <button @click="askClosePdf" class="text-[var(--chrome-muted)] hover:text-[var(--chrome-title)] underline" :title="t('closePdf')">
-                {{ t('close') }}
-              </button>
-            </span>
-            <span v-if="store.lastSavedAt" :title="t('autosave')">
-              {{ store.pdfName ? ' · ' : '' }}{{ t('saved') }} {{ store.lastSavedAt }}
-            </span>
-          </div>
-        </div>
-        </Teleport>
+        <FileMenuPanel
+          :open="showFile"
+          ref="filePanelRef"
+          @open-calem="openCalemDoc"
+          @save-calem="quickSaveDoc"
+          @open-xopp="openXoppDoc"
+          @export-xopp="exportXoppDoc"
+          @pdf-file="onPdfFile"
+          @export-pdf="exportPdfDoc"
+          @export-png="exportPng"
+          @dup-page="dupPage"
+          @move-page-l="movePageL"
+          @move-page-r="movePageR"
+          @close-pdf="askClosePdf"
+        />
+        <input
+          ref="calemInput"
+          type="file"
+          :accept="CALEM_ACCEPT"
+          class="hidden"
+          @change="onCalemFile"
+        />
+        <input
+          ref="xoppInput"
+          type="file"
+          :accept="XOPP_ACCEPT"
+          class="hidden"
+          @change="onXoppFile"
+        />
       </div>
 
       <div ref="settingsBtn" class="relative shrink-0">
@@ -497,187 +399,39 @@
       />
 
       <!-- Inline metin editörü ve altındaki kayan araç çubuğu -->
-      <div
-        v-if="store.currentTool === 'text' && store.activeTextId && !presenting && activeTextScreenRect"
-        class="absolute pointer-events-auto flex flex-col"
-        :style="textEditorContainerStyle"
-        role="dialog"
-        :aria-label="t('textEditor')"
-      >
-        <textarea
-          ref="textArea"
-          rows="2"
-          :value="store.activeText()?.text ?? ''"
-          @input="onTextInput"
-          @keydown.escape="closeTextEditor"
-          :placeholder="t('textPlaceholder')"
-          class="w-full min-h-[44px] px-2.5 py-1.5 rounded-lg border-2 border-dashed border-indigo-500 bg-[var(--chrome-bg)]/90 text-[var(--chrome-title)] shadow-xl focus:outline-none focus:border-indigo-400 resize-y backdrop-blur-sm"
-          :style="{
-            color: store.activeText()?.color ?? store.color,
-            fontSize: `${activeTextScreenRect.fontPx}px`,
-            lineHeight: 1.25,
-          }"
-        ></textarea>
-        <!-- Text altında floating şekilde duran kontrol çubuğu -->
-        <div class="mt-1.5 flex items-center gap-2 p-1.5 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] shadow-xl backdrop-blur select-none w-max max-w-[calc(100vw-2rem)]">
-          <input
-            type="range"
-            :min="SLIDERS.textSize.min"
-            :max="SLIDERS.textSize.max"
-            :step="SLIDERS.textSize.step"
-            :value="store.activeText()?.size ?? store.textSize"
-            @input="onTextSizeInput(Number(($event.target as HTMLInputElement).value))"
-            class="w-20 accent-indigo-600"
-            :title="t('textSizeShort')"
-          />
-          <span class="text-[11px] font-mono text-[var(--chrome-text)] w-5 text-right">
-            {{ store.activeText()?.size ?? store.textSize }}
-          </span>
-          <input
-            type="color"
-            :value="store.activeText()?.color ?? store.color"
-            @input="onTextColorInput(($event.target as HTMLInputElement).value)"
-            class="w-6 h-6 rounded bg-transparent border border-[var(--chrome-border-strong)] cursor-pointer p-0.5"
-            :title="t('textColor')"
-          />
-          <button
-            @click="delActiveText"
-            class="px-2 py-0.5 rounded text-xs hover:bg-red-600/30 text-red-400 transition"
-            :title="t('delete')"
-          >
-            {{ t('delete') }}
-          </button>
-          <button
-            @click="closeTextEditor"
-            class="px-2.5 py-0.5 rounded text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition shadow-sm"
-            :title="t('doneTitle')"
-          >
-            {{ t('done') }}
-          </button>
-        </div>
-      </div>
+      <TextEditorOverlay
+        ref="textOverlayRef"
+        :presenting="presenting"
+        :active-text-screen-rect="activeTextScreenRect"
+        :container-style="textEditorContainerStyle"
+        @input="onTextInput"
+        @size-input="onTextSizeInput"
+        @color-input="onTextColorInput"
+        @delete="delActiveText"
+        @close="closeTextEditor"
+      />
 
       <!-- Resim altında floating şekilde duran kontrol çubuğu -->
-      <div
-        v-if="store.currentTool === 'image' && store.activeImageId && !presenting && activeImageScreenRect"
-        class="absolute rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] p-2 text-xs text-[var(--chrome-text)] shadow-xl select-none flex items-center gap-2.5 backdrop-blur"
-        :style="imageEditorContainerStyle"
-        role="dialog"
-        :aria-label="t('imageEditor')"
-      >
-        <div class="flex items-center gap-1.5">
-          <span class="text-[var(--chrome-faint)] whitespace-nowrap">{{ t('imgSize') }}</span>
-          <input
-            type="range"
-            :min="SLIDERS.imageWidth.min"
-            :max="SLIDERS.imageWidth.max"
-            :step="SLIDERS.imageWidth.step"
-            :value="store.activeImage()?.w ?? 200"
-            @input="onImgWidth(Number(($event.target as HTMLInputElement).value))"
-            class="w-24 accent-indigo-600"
-            :title="t('imgSizeTitle')"
-          />
-        </div>
-        <button
-          @click="delActiveImage"
-          class="px-2 py-0.5 rounded hover:bg-red-600/30 text-red-400 transition"
-          :title="t('delImage')"
-        >
-          {{ t('delete') }}
-        </button>
-        <button
-          @click="store.activeImageId = null"
-          class="px-2.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
-          :title="t('doneTitle')"
-        >
-          {{ t('done') }}
-        </button>
-      </div>
+      <ImageEditorOverlay
+        :presenting="presenting"
+        :active-image-screen-rect="activeImageScreenRect"
+        :container-style="imageEditorContainerStyle"
+        @resize="onImgWidth"
+        @delete="delActiveImage"
+        @close="store.activeImageId = null"
+      />
 
-      <div
-        class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border)] text-xs text-[var(--chrome-text)] select-none"
-        role="navigation"
-        aria-label="Sayfalar"
-      >
-        <button
-          v-if="store.pages.length > 1"
-          @click="store.setPageStripOpen(!store.pageStripOpen)"
-          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] transition"
-          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': store.pageStripOpen }"
-          :title="t('pageStrip')"
-        >
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <rect x="7" y="7" width="14" height="14" rx="2" />
-            <path stroke-linecap="round" d="M3 17V5a2 2 0 012-2h12" />
-          </svg>
-        </button>
-        <span v-if="store.pages.length > 1" class="w-px h-4 bg-[var(--chrome-border)]"></span>
-        <button
-          @click="prevPage"
-          :disabled="store.activePageIndex === 0"
-          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
-          :title="t('prevPage')"
-        >
-          ‹
-        </button>
-        <span class="font-mono w-12 text-center text-[var(--chrome-title)]">
-          {{ store.activePageIndex + 1 }} / {{ store.pages.length }}
-        </span>
-        <button
-          @click="nextPage"
-          :disabled="store.activePageIndex >= store.pages.length - 1"
-          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] disabled:opacity-30 disabled:cursor-not-allowed font-mono"
-          :title="t('nextPage')"
-        >
-          ›
-        </button>
-        <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
-        <button
-          @click="addPage"
-          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] font-mono"
-          :title="t('newPage')"
-        >
-          +
-        </button>
-        <button
-          @click="askDeletePage"
-          :disabled="store.pages.length <= 1"
-          class="px-2 py-0.5 rounded hover:bg-red-600/40 disabled:opacity-30 disabled:cursor-not-allowed"
-          :title="t('delPage')"
-        >
-          {{ t('delete') }}
-        </button>
-        <button
-          @click="toggleScroll"
-          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] font-mono"
-          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': scrollMode }"
-          :title="t('scrollViewTitle')"
-        >
-          {{ t('scrollView') }}
-        </button>
-        <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
-        <button
-          @click="zoomOut"
-          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] font-mono"
-          :title="t('zoomOut')"
-        >
-          −
-        </button>
-        <button
-          @click="resetZoom"
-          class="font-mono w-12 text-center text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] rounded py-0.5"
-          :title="`${store.zoomLabel} (${t('zoomResetTitle')})`"
-        >
-          {{ store.zoomLabel }}
-        </button>
-        <button
-          @click="zoomIn"
-          class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] font-mono"
-          :title="t('zoomIn')"
-        >
-          +
-        </button>
-      </div>
+      <PageNavBar
+        :scroll-mode="scrollMode"
+        @prev-page="prevPage"
+        @next-page="nextPage"
+        @add-page="addPage"
+        @delete-page="askDeletePage"
+        @toggle-scroll="toggleScroll"
+        @zoom-in="zoomIn"
+        @zoom-out="zoomOut"
+        @reset-zoom="resetZoom"
+      />
       <!-- Perf HUD: reaktivite dışı güncellenir (kendisi render tetiklemez) -->
       <div
         v-if="!presenting"
@@ -803,164 +557,19 @@
     </div>
 
     <!-- MOBİL SEÇENEKLER: renk / kalınlık / çizgi stili (alt sheet) -->
-    <div
-      v-if="mobileOptions"
-      class="fixed inset-0 z-40 flex items-end bg-black/50"
-      role="dialog"
-      aria-modal="true"
-      :aria-label="t('palette')"
-      @pointerdown.self="mobileOptions = false"
-    >
-      <div
-        class="w-full max-h-[70vh] overflow-y-auto rounded-t-2xl bg-[var(--chrome-bg)] border-t border-[var(--chrome-border-strong)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs text-[var(--chrome-text)] shadow-2xl"
-      >
-        <div class="flex items-center justify-between mb-2">
-          <span class="font-medium text-[var(--chrome-title)]">{{ t('palette') }}</span>
-          <button @click="mobileOptions = false" class="px-2 py-1 rounded hover:bg-[var(--chrome-bg-soft)]">{{ t('done') }}</button>
-        </div>
+    <MobileOptionsSheet
+      :open="mobileOptions"
+      @close="mobileOptions = false"
+      @select-all="selAll"
+      @select-copy="selCopy"
+      @select-paste="selPaste"
+      @select-delete="selDelete"
+      @clear="askClearCanvas"
+      @present="togglePresent"
+    />
 
-        <template v-if="store.currentTool !== 'select' && store.currentTool !== 'hand' && store.currentTool !== 'eraser'">
-          <select
-            :value="store.activePaletteId"
-            @change="store.setActivePalette(($event.target as HTMLSelectElement).value)"
-            class="w-full mb-2 px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
-          >
-            <option v-for="p in store.palettes" :key="p.id" :value="p.id">{{ p.name }}</option>
-          </select>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="hex in store.activePalette.colors"
-              :key="hex"
-              @click="store.setColor(hex)"
-              class="w-9 h-9 rounded-full border-2"
-              :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-105' : 'border-[var(--chrome-border-strong)]'"
-              :style="{ background: hex }"
-            ></button>
-          </div>
-        </template>
-
-        <div
-          v-if="['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow'].includes(store.currentTool)"
-          class="mt-3"
-        >
-          <div class="mb-1 text-[var(--chrome-muted)]">{{ t('width') }} <span class="font-mono">{{ store.strokeWidth }}</span></div>
-          <input
-            type="range"
-            :min="store.widthMin"
-            :max="store.widthMax"
-            :value="store.strokeWidth"
-            @input="store.setStrokeWidth(Number(($event.target as HTMLInputElement).value))"
-            class="w-full accent-indigo-600"
-          />
-        </div>
-
-        <div v-if="['pen', 'line', 'rect', 'ellipse', 'arrow'].includes(store.currentTool)" class="mt-3 flex items-center gap-2">
-          <select
-            :value="store.strokeDash"
-            @change="store.setStrokeDash(($event.target as HTMLSelectElement).value)"
-            class="px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
-          >
-            <option value="solid">{{ t('solid') }}</option>
-            <option value="dash">{{ t('dashed') }}</option>
-            <option value="dot">{{ t('dotted') }}</option>
-          </select>
-          <input
-            type="range"
-            :min="SLIDERS.opacity.min"
-            :max="SLIDERS.opacity.max"
-            :step="SLIDERS.opacity.step"
-            :value="store.strokeOpacity"
-            @input="store.setStrokeOpacity(Number(($event.target as HTMLInputElement).value))"
-            class="flex-1 accent-indigo-600"
-          />
-          <span class="font-mono w-10 text-right">{{ Math.round(store.strokeOpacity * 100) }}%</span>
-        </div>
-
-        <div v-if="store.currentTool === 'eraser'" class="mt-3 flex gap-1">
-          <button
-            @click="store.setEraserMode('standard')"
-            :class="store.eraserMode === 'standard' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)]'"
-            class="flex-1 px-2 py-1.5 rounded font-medium transition"
-          >
-            {{ t('eraserStandard') }}
-          </button>
-          <button
-            @click="store.setEraserMode('stroke')"
-            :class="store.eraserMode === 'stroke' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)]'"
-            class="flex-1 px-2 py-1.5 rounded font-medium transition"
-          >
-            {{ t('eraserStroke') }}
-          </button>
-        </div>
-
-        <div v-if="store.currentTool === 'text'" class="mt-3">
-          <div class="mb-1 text-[var(--chrome-muted)]">{{ t('textSizeShort') }} <span class="font-mono">{{ store.textSize }}</span></div>
-          <input
-            type="range"
-            :min="SLIDERS.textSize.min"
-            :max="SLIDERS.textSize.max"
-            :step="SLIDERS.textSize.step"
-            :value="store.textSize"
-            @input="store.setTextSize(Number(($event.target as HTMLInputElement).value))"
-            class="w-full accent-indigo-600"
-          />
-        </div>
-
-        <div v-if="store.currentTool === 'select'" class="flex flex-wrap gap-1">
-          <button @click="store.setSelectMode('rect')" :class="store.selectMode === 'rect' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)]'" class="px-3 py-1.5 rounded font-medium transition">{{ t('rectSel') }}</button>
-          <button @click="store.setSelectMode('lasso')" :class="store.selectMode === 'lasso' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)]'" class="px-3 py-1.5 rounded font-medium transition">{{ t('lassoSel') }}</button>
-          <button @click="selAll" class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)]">{{ t('selectAll') }}</button>
-          <button @click="selCopy" :disabled="store.selectionCount === 0" class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)] disabled:opacity-30">{{ t('copy') }}</button>
-          <button @click="selPaste" :disabled="store.clipboardCount === 0" class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)] disabled:opacity-30">{{ t('paste') }}</button>
-          <button @click="selDelete" :disabled="store.selectionCount === 0" class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)] disabled:opacity-30">{{ t('delSel') }}</button>
-        </div>
-
-        <div class="mt-3 pt-2 border-t border-[var(--chrome-border)] flex gap-1">
-          <button @click="askClearCanvas" class="flex-1 px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] text-red-400 transition">{{ t('clear') }}</button>
-          <button @click="togglePresent" class="flex-1 px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] transition">{{ t('present') }}</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Uygulama-içi onay / ad-sor diyaloğu (native confirm/prompt yerine) -->
-    <div
-      v-if="dialogOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-      role="dialog"
-      aria-modal="true"
-      :aria-label="dialogTitle"
-      @pointerdown.self="dialogCancel"
-    >
-      <div
-        ref="dialogPanel"
-        class="w-[min(92vw,360px)] rounded-xl bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-text)] shadow-2xl p-3"
-        @keydown.tab="trapDialogFocus"
-      >
-        <div class="font-medium text-[var(--chrome-title)] mb-1">{{ dialogTitle }}</div>
-        <div v-if="dialogMessage" class="text-[var(--chrome-muted)] mb-2">{{ dialogMessage }}</div>
-        <input
-          v-if="dialogKind === 'prompt'"
-          ref="dialogInput"
-          v-model="dialogText"
-          class="w-full mb-2 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
-          @keydown.enter.prevent="dialogOk"
-        />
-        <div class="flex justify-end gap-1">
-          <button
-            @click="dialogCancel"
-            class="px-2 py-1 rounded hover:bg-[var(--chrome-bg-soft)]"
-          >
-            {{ t('cancel') }}
-          </button>
-          <button
-            @click="dialogOk"
-            class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
-          >
-            {{ t('ok') }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Uygulama-içi onay / ad-sor diyaloğu -->
+    <AppDialog />
   </div>
 </template>
 
@@ -972,15 +581,21 @@ import { useDialogs } from '@/composables/useDialogs'
 import { useLocale } from '@/composables/useLocale'
 import { usePointerState } from '@/composables/usePointerState'
 import { useSelectionOps } from '@/composables/useSelectionOps'
+import AppDialog from '@/components/AppDialog.vue'
+import FileMenuPanel from '@/components/FileMenuPanel.vue'
+import ImageEditorOverlay from '@/components/ImageEditorOverlay.vue'
 import LayersPanel from '@/components/LayersPanel.vue'
+import MobileOptionsSheet from '@/components/MobileOptionsSheet.vue'
+import PageNavBar from '@/components/PageNavBar.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import StylePanel from '@/components/StylePanel.vue'
+import TextEditorOverlay from '@/components/TextEditorOverlay.vue'
+import ToolIcon from '@/components/ToolIcon.vue'
 import { TOOL_META } from '@/config/tools'
 import { SLIDERS } from '@/config/ui'
 import { CALEM_ACCEPT, IMAGE_ACCEPT, PDF_ACCEPT, XOPP_ACCEPT, pngFileName } from '@/config/files'
 import { selectionBBox, coalescedOf, strokeAtPoint, pointNearStroke } from '@/lib/select'
 import { takeLaunchHandle, onLaunchHandle, type LaunchHandle } from '@/lib/launchFile'
-import ToolIcon from '@/components/ToolIcon.vue'
 
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
@@ -1040,7 +655,7 @@ const { selAll, selCopy, selPaste, selDelete } = useSelectionOps(() => {
   drawSelectionOverlay()
   updateHud(true)
 })
-const filePanel = ref<HTMLElement | null>(null)
+const filePanelRef = ref<InstanceType<typeof FileMenuPanel> | null>(null)
 const moreBtn = ref<HTMLElement | null>(null)
 const morePanel = ref<HTMLElement | null>(null)
 const store = useDrawingStore()
@@ -1301,7 +916,7 @@ const selectUp = (e?: PointerEvent) => {
   updateHud(true)
 }
 
-const textArea = ref<HTMLTextAreaElement | null>(null)
+const textOverlayRef = ref<InstanceType<typeof TextEditorOverlay> | null>(null)
 
 // --- Metin jesti (text aracı): tıkla-oluştur/düzenle, sürükle-taşı ---
 // Düzenleme HTML panelde; canvas sadece konum + taşıma için.
@@ -2297,7 +1912,7 @@ const onDocPointerDown = (e: PointerEvent) => {
   const t = e.target as Node | null
   if (!t || !(t instanceof Node)) return
   const inside = (el: HTMLElement | null) => !!el && el.contains(t)
-  if (showFile.value && !inside(fileMenu.value) && !inside(filePanel.value)) showFile.value = false
+  if (showFile.value && !inside(fileMenu.value) && !inside(filePanelRef.value?.panelEl ?? null)) showFile.value = false
   if (showSettings.value && !inside(settingsBtn.value) && !inside(settingsPanelRef.value?.panelEl ?? null)) {
     showSettings.value = false
   }
@@ -2775,7 +2390,7 @@ onMounted(() => {
   stopTextWatch = watch(
     () => store.activeTextId,
     (id) => {
-      if (id) nextTick(() => textArea.value?.focus())
+      if (id) nextTick(() => textOverlayRef.value?.focus())
     },
   )
   stopThumbWatch = watch(
