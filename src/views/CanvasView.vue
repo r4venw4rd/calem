@@ -806,6 +806,21 @@ const { isPanActive, panDown, panMove, panUp, cancelPan } = usePanGesture({
   updateHud: (force) => updateHud(force),
 })
 
+// Kaydırmalı modda parmak: canvas touch-action:none tutulur (kalem çizsin diye),
+// parmak-sürükleme native scroll yerine MANUEL sürülür (scrollBox.scrollTop).
+// Tap (kımıldamayan parmak) replay ile normal araç akışına sokulur — tıkla-düzenle yaşar.
+interface PendingTouch {
+  e: PointerEvent
+  startX: number
+  startY: number
+  lastX: number
+  lastY: number
+  scrolled: boolean
+}
+let pendingTouch: PendingTouch | null = null
+let replayingTap = false
+const TAP_SLOP_SQ = 64 // 8px — blok tap eşiğiyle aynı
+
 const startDraw = (e: PointerEvent) => {
   // iPadOS ilk dokunuşu jest kararı için bekletmesin: olayı en başta sahiplen.
   // (touch-action:none ile birlikte; Apple Pencil hover'ı move tarafında zaten no-op.)
@@ -815,7 +830,9 @@ const startDraw = (e: PointerEvent) => {
   store.clearCachedRect()
   // Avuç reddi pinch'ten ÖNCE: parmak (touchPan kapalıyken) hiç işleme girmez; yoksa
   // dinlenen avuç ikinci pointer olup aktif kalem çizgisini iptal ediyordu.
-  if (e.pointerType === 'touch' && store.rejectTouch && !store.touchPan) return
+  // Kaydırmalı modda reddetme YOK: parmak scroll/pinch sayacı için izlenir, çizim
+  // zaten aşağıdaki scroll-adayı dalında engellenir.
+  if (e.pointerType === 'touch' && store.rejectTouch && !store.touchPan && !scrollMode.value) return
   ps.track(e.pointerId, ptrPos(e))
   if (ps.count() === 2) {
     store.cancelActiveStroke()
@@ -823,6 +840,7 @@ const startDraw = (e: PointerEvent) => {
     cancelTextGesture()
     cancelImageGesture()
     cancelPan()
+    pendingTouch = null
     if (rafId !== 0) {
       cancelAnimationFrame(rafId)
       rafId = 0
@@ -832,6 +850,26 @@ const startDraw = (e: PointerEvent) => {
     return
   }
   if (ps.count() !== 1 || ps.gestureLocked()) return
+  // Kaydırmalı modda parmak = scroll adayı: araçlara girmeden bekle, sürüklenirse
+  // manuel scroll sür (draw tarafı), kımıldamazsa endDraw replay ile tap işletir.
+  // Kalem/fare etkilenmez (sıfır-gecikme çizim korunur).
+  if (scrollMode.value && e.pointerType === 'touch' && !replayingTap) {
+    try {
+      overlayCanvas.value?.setPointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
+    }
+    ps.setActive(e.pointerId)
+    pendingTouch = {
+      e,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastX: e.clientX,
+      lastY: e.clientY,
+      scrolled: false,
+    }
+    return
+  }
   // Dokun-kaydır açıksa parmak her araçta kaydırır (kalem/fare etkilenmez).
   if (e.pointerType === 'touch' && store.touchPan) {
     panDown(e)
@@ -886,6 +924,28 @@ const draw = (e: PointerEvent) => {
     drawSelectionOverlay()
     return
   }
+  // Kaydırmalı modda parmak-sürükleme: mürekkep YOK, scrollBox manuel sürülür.
+  // Eşik altı kımıldama tap sayılır (bırakışta replay). Araç dallarından ÖNCE.
+  if (pendingTouch && e.pointerType === 'touch' && ps.isActive(e.pointerId)) {
+    const t = pendingTouch
+    const dx = e.clientX - t.lastX
+    const dy = e.clientY - t.lastY
+    t.lastX = e.clientX
+    t.lastY = e.clientY
+    if (!t.scrolled) {
+      const sx = e.clientX - t.startX
+      const sy = e.clientY - t.startY
+      if (sx * sx + sy * sy > TAP_SLOP_SQ) t.scrolled = true
+    }
+    if (t.scrolled) {
+      const box = scrollBox.value
+      if (box) {
+        box.scrollTop -= dy
+        box.scrollLeft -= dx
+      }
+    }
+    return
+  }
   if (store.currentTool === 'select') {
     selectMove(e)
     return
@@ -921,6 +981,26 @@ const endDraw = (e?: PointerEvent) => {
     return
   }
   if (rel.locked) return
+  // Kaydırmalı-mod parmak adayı: sürüklendiyse iş bitmiştir (scroll'du, çizim yok).
+  // Kımıldamadıysa tap'ti — down olayını replay ile normal araç akışına sok,
+  // aşağıdan standart commit yolu devam etsin (nokta/metin/seçim tıkı çalışır).
+  if (pendingTouch) {
+    const t = pendingTouch
+    pendingTouch = null
+    ps.clearActive()
+    if (t.scrolled) {
+      updateHud(true)
+      return
+    }
+    replayingTap = true
+    try {
+      startDraw(t.e)
+    } finally {
+      replayingTap = false
+    }
+    // Replay kilit kurduysa (ya da kuramadıysa) normal akışa düş: kurduysa commit,
+    // kuramadıysa isDrawing kapıları zaten kapalı, no-op.
+  }
   // Aktif pointer kilidini pahalı commit'ten ÖNCE bırak: stopDrawing (snapshotDoc
   // tam-klon + base'e işleme) bitmeden gelen pointerdown temiz görsün, yoksa
   // isDrawing/pointerId kapılarına takılıp ilk vuruş sessizce yutuluyordu.
