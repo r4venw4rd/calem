@@ -1,6 +1,17 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
-import { storage, SETTINGS_KEY, type ImageFileRecord, type PersistedDoc } from '../lib/idb'
+import { storage, type ImageFileRecord, type PersistedDoc } from '../lib/idb'
+import {
+  cleanCustomList,
+  cleanHexColor,
+  cleanPalettes,
+  cleanToolbar,
+  cleanUiScale,
+  loadStoredSettings,
+  migrateEraserFirst,
+  migrateToolbarHand,
+  saveStoredSettings,
+} from '../persist/settingsStorage'
 import {
   cleanPaperBackground,
   cornellLayout,
@@ -28,6 +39,15 @@ import {
 } from '../lib/select'
 import { dropTinyRuns, polylineHitsCircle, splitRunsOutside } from '../lib/erase'
 import { newStrokeId, snapshotImage, snapshotLayer, snapshotStroke, snapshotText } from '../persist/snapshot'
+import {
+  cleanImages,
+  cleanLayers,
+  cleanStrokes,
+  cleanTexts,
+  pageFromRaw as sanitizePageFromRaw,
+  pageSizeOf,
+  type RawPage,
+} from '../persist/pageSanitizer'
 import { dashFor, effectiveWidth, paintStroke } from '../render/strokes'
 import { wrapTextToWidth } from '../lib/text'
 import { estimateLines, textBBoxOf } from '../lib/text'
@@ -271,10 +291,6 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Arayüz ölçeği: Tailwind rem tabanlı olduğundan kök font-size tüm chrome'u
   // orantılı büyütür/küçültür; canvas piksel matematiği etkilenmez.
   const uiScale = ref(1)
-  const cleanUiScale = (v: unknown): number | null =>
-    typeof v === 'number' && Number.isFinite(v)
-      ? Math.min(SLIDERS.uiScale.max, Math.max(SLIDERS.uiScale.min, Math.round(v * 20) / 20))
-      : null
   const applyUiScale = () => {
     if (typeof document === 'undefined' || !document.documentElement) return
     document.documentElement.style.fontSize = `${16 * uiScale.value}px`
@@ -296,51 +312,32 @@ export const useDrawingStore = defineStore('drawing', () => {
     void persistSettings()
   }
 
-  // Eski toolbar dizilimini yeni varsayılana göçürür: el silginin sağına.
-  // v5 öncesi kayıtlarda el en sondadır; kullanıcının gizlilik/sıra tercihini
-  // bozmadan sadece elin konumunu düzeltir.
-  const migrateToolbarHand = (order: Tool[]): Tool[] => {
-    const next: Tool[] = order.filter((t) => t !== 'hand')
-    const ei = next.indexOf('eraser')
-    const at = ei === -1 ? Math.min(2, next.length) : ei + 1
-    next.splice(at, 0, 'hand')
-    return next
-  }
-
-  // v6: silgi vurgunun soluna. Çiftin yerini değiştirir, geri kalan sıra korunur.
-  const migrateEraserFirst = (order: Tool[]): Tool[] =>
-    order.map((t) => {
-      if (t === 'eraser') return 'highlighter'
-      if (t === 'highlighter') return 'eraser'
-      return t
-    })
+  // --- Toolbar konfigürasyonu: sıra + gizli araçlar ---
+  const toolbarOrder = ref<Tool[]>([...ALL_TOOLS])
+  const hiddenTools = ref<Tool[]>([])
 
   const persistSettings = async (): Promise<void> => {
-    try {
-      const doc: AppSettings = {
-        v: 6,
-        paper: paper.value,
-        background: { ...paperBackground.value },
-        eraserMode: eraserMode.value,
-        toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
-        smoothing: smoothing.value,
-        touchPan: touchPan.value,
-        palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors], customs: [...x.customs] })),
-        activePaletteId: activePaletteId.value,
-        format: pageFormat.value,
-        orientation: pageOrientation.value,
-        customW: customW.value,
-        customH: customH.value,
-        uiTheme: uiTheme.value,
-        locale: locale.value,
-        uiScale: uiScale.value,
-        pageStripOpen: pageStripOpen.value,
-        autoShapeSnap: autoShapeSnap.value,
-      }
-      await storage.setKey(SETTINGS_KEY, doc)
-    } catch {
-      /* sessiz */
+    const doc: AppSettings = {
+      v: 6,
+      paper: paper.value,
+      background: { ...paperBackground.value },
+      eraserMode: eraserMode.value,
+      toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
+      smoothing: smoothing.value,
+      touchPan: touchPan.value,
+      palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors], customs: [...x.customs] })),
+      activePaletteId: activePaletteId.value,
+      format: pageFormat.value,
+      orientation: pageOrientation.value,
+      customW: customW.value,
+      customH: customH.value,
+      uiTheme: uiTheme.value,
+      locale: locale.value,
+      uiScale: uiScale.value,
+      pageStripOpen: pageStripOpen.value,
+      autoShapeSnap: autoShapeSnap.value,
     }
+    await saveStoredSettings(doc)
   }
 
   // Ayar yedeği: indirilen JSON'u başka cihaza/tarayıcıya taşımak için.
@@ -479,14 +476,15 @@ export const useDrawingStore = defineStore('drawing', () => {
     return true
   }
 
-  const loadSettings = async (): Promise<void> => {    try {
+  const loadSettings = async (): Promise<void> => {
+    try {
       // IDB beklenmeden önce eldeki değerleri uygula: flaş yok, her ortamda deterministik.
       applyUiTheme()
       applyLocale()
       applyUiScale()
-      const raw = await storage.getKey<AppSettings>(SETTINGS_KEY)
+      const raw = await loadStoredSettings()
       // Kayıt yoksa bile temayı/dili uygula: data-theme + lang hep yazılır.
-      if (!raw || (raw.v !== 1 && raw.v !== 2 && raw.v !== 3 && raw.v !== 4 && raw.v !== 5 && raw.v !== 6)) {
+      if (!raw) {
         applyUiTheme()
         applyLocale()
         applyUiScale()
@@ -542,8 +540,8 @@ export const useDrawingStore = defineStore('drawing', () => {
         pageOrientation.value = raw.orientation
       }
       if (Number.isFinite(raw.customW) && Number.isFinite(raw.customH)) {
-        customW.value = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(raw.customW)))
-        customH.value = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(raw.customH)))
+        customW.value = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(raw.customW as number)))
+        customH.value = Math.min(PAGE_MAX, Math.max(PAGE_MIN, Math.round(raw.customH as number)))
       }
       if (raw.uiTheme === 'koyu' || raw.uiTheme === 'acik') {
         uiTheme.value = raw.uiTheme
@@ -569,38 +567,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
   const color = ref('#ffffff')
-  const cleanHexColor = (v: unknown): string | null =>
-    typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : null
-  const cleanCustomList = (input: unknown): string[] => {
-    if (!Array.isArray(input)) return []
-    const clean: string[] = []
-    for (const c of input) {
-      const hex = cleanHexColor(c)
-      if (hex && !clean.includes(hex) && clean.length < CUSTOM_SLOT_COUNT) clean.push(hex)
-    }
-    return clean
-  }
-  const cleanPalettes = (input: unknown): ColorPalette[] => {    if (!Array.isArray(input)) return []
-    const out: ColorPalette[] = []
-    for (const p of input) {
-      if (!p || typeof p !== 'object' || out.length >= PALETTE_MAX_COUNT) continue
-      const r = p as Record<string, unknown>
-      if (!Array.isArray(r.colors)) continue
-      const colors: string[] = []
-      for (const c of r.colors) {
-        const hex = cleanHexColor(c)
-        if (hex && !colors.includes(hex) && colors.length < PALETTE_MAX_COLORS) colors.push(hex)
-      }
-      if (colors.length === 0) continue
-      out.push({
-        id: typeof r.id === 'string' && r.id ? r.id : newStrokeId(),
-        name: typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 24) : `Palet ${out.length + 1}`,
-        colors,
-        customs: cleanCustomList(r.customs),
-      })
-    }
-    return out
-  }
   // Araç başına kalınlık hafızası: kalem ince, silgi kocaman olabilir; araç değişince geri gelir.
   // select/şekil mürekkep değil ya da kalem-aralığı kullanır (kayıtlı dursun yeter).
   // Tablo + tohum: config/tools (WIDTH_MIN/WIDTH_MAX/DEFAULT_WIDTHS).
@@ -1465,32 +1431,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     repaintBase()
     scheduleSave()
     return true
-  }
-  // --- Toolbar konfigürasyonu (Faz 9): sıra + gizli araçlar, v4 ayar ---
-  const toolbarOrder = ref<Tool[]>([...ALL_TOOLS])
-  const hiddenTools = ref<Tool[]>([])
-  const cleanToolbar = (input: unknown): ToolbarConfig => {
-    const fb: ToolbarConfig = { order: [...ALL_TOOLS], hidden: [] }
-    if (!input || typeof input !== 'object') return fb
-    const r = input as Record<string, unknown>
-    const order: Tool[] = []
-    if (Array.isArray(r.order)) {
-      for (const t of r.order) {
-        if (typeof t === 'string' && (ALL_TOOLS as string[]).includes(t) && !order.includes(t as Tool)) {
-          order.push(t as Tool)
-        }
-      }
-    }
-    for (const t of ALL_TOOLS) if (!order.includes(t)) order.push(t)
-    const hidden: Tool[] = []
-    if (Array.isArray(r.hidden)) {
-      for (const t of r.hidden) {
-        if (typeof t === 'string' && (ALL_TOOLS as string[]).includes(t) && !hidden.includes(t as Tool)) {
-          hidden.push(t as Tool)
-        }
-      }
-    }
-    return { order, hidden }
   }
   const setToolVisible = (t: Tool, visible: boolean) => {
     const i = hiddenTools.value.indexOf(t)
@@ -3519,6 +3459,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
+  // Thumbnail serit sürümü: her içerik mutasyonunda artar (component debounce'lu okur).
+  const thumbTick = ref(0)
+
   const scheduleSave = () => {
     if (saveTimer) clearTimeout(saveTimer)
     pendingSave.value = true
@@ -3531,165 +3474,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     thumbTick.value += 1
   }
 
-  // Thumbnail serit sürümü: her içerik mutasyonunda artar (component debounce'lu okur).
-  const thumbTick = ref(0)
-
-  // Bozuk kayda karşı stroke doğrulama (v1/v2 yükleme ortak).
-  // idsiz eski kayıtlar backfill alır (seçim çalışsın diye).
-  const cleanStrokes = (input: Stroke[]): Stroke[] => {
-    const clean: Stroke[] = []
-    for (const s of input) {
-      if (!s || !Array.isArray(s.points)) continue
-      const pts = s.points.filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y))
-      if (pts.length === 0) continue
-      clean.push({
-        id: typeof (s as Stroke).id === 'string' && (s as Stroke).id ? (s as Stroke).id : newStrokeId(),
-        tool: s.tool === 'eraser' || s.tool === 'highlighter' || isShapeTool(s.tool) ? s.tool : 'pen',
-        color: typeof s.color === 'string' ? s.color : '#ffffff',
-        width: typeof s.width === 'number' ? Math.min(120, Math.max(1, s.width)) : 3,
-        dash: (s as Stroke).dash === 'dash' || (s as Stroke).dash === 'dot' ? (s as Stroke).dash : 'solid',
-        opacity:
-          typeof (s as Stroke).opacity === 'number' && Number.isFinite((s as Stroke).opacity)
-            ? Math.min(1, Math.max(0.1, (s as Stroke).opacity))
-            : 1,
-        points: pts.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
-      })
-    }
-    return clean
-  }
-
-  // Bozuk kayda karşı metin doğrulama (v2'de yok → boş; boş metinler atılır).
-  const cleanTexts = (input: unknown): TextItem[] => {
-    if (!Array.isArray(input)) return []
-    const clean: TextItem[] = []
-    for (const t of input) {
-      if (!t || typeof t !== 'object') continue
-      const r = t as Record<string, unknown>
-      if (typeof r.text !== 'string' || r.text === '') continue
-      if (!Number.isFinite(r.x) || !Number.isFinite(r.y)) continue
-      clean.push({
-        id: typeof r.id === 'string' && r.id ? r.id : newStrokeId(),
-        x: r.x as number,
-        y: r.y as number,
-        text: (r.text as string).slice(0, 2000),
-        color: typeof r.color === 'string' ? r.color : '#ffffff',
-        size:
-          typeof r.size === 'number' && Number.isFinite(r.size)
-            ? Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, Math.round(r.size)))
-            : 24,
-        ...(typeof r.w === 'number' && Number.isFinite(r.w) && r.w >= 40
-          ? { w: Math.round(r.w) }
-          : {}),
-      })
-    }
-    return clean
-  }
-
-  // Bozuk kayda karşı resim doğrulama (v3'te yok → boş). Bitmap'siz kayıt
-  // boyamada atlanır ama referans korunur (restore sessiz dener).
-  const cleanImages = (input: unknown): ImageItem[] => {
-    if (!Array.isArray(input)) return []
-    const clean: ImageItem[] = []
-    for (const t of input) {
-      if (!t || typeof t !== 'object') continue
-      const r = t as Record<string, unknown>
-      if (typeof r.fileId !== 'string' || !r.fileId) continue
-      if (!Number.isFinite(r.x) || !Number.isFinite(r.y)) continue
-      if (!Number.isFinite(r.w) || !Number.isFinite(r.h)) continue
-      const w = Math.round(r.w as number)
-      const h = Math.round(r.h as number)
-      if (w < 16 || h < 16 || w > 3000 || h > 3000) continue
-      clean.push({
-        id: typeof r.id === 'string' && r.id ? r.id : newStrokeId(),
-        x: r.x as number,
-        y: r.y as number,
-        w,
-        h,
-        fileId: r.fileId,
-      })
-    }
-    return clean
-  }
-
-  // Bozuk kayda karşı katman doğrulama (v5; öncesi tek katmana sarılır).
-  // Boş/geçersiz katman listesi → tek boş katman (boyama/seçim çökmesin).
-  const cleanLayers = (input: unknown): Layer[] => {
-    if (!Array.isArray(input)) return []
-    const out: Layer[] = []
-    for (const l of input) {
-      if (!l || typeof l !== 'object') continue
-      const r = l as Record<string, unknown>
-      if (!Array.isArray(r.strokes)) continue
-      out.push({
-        id: typeof r.id === 'string' && r.id ? r.id : newStrokeId(),
-        name: typeof r.name === 'string' && r.name ? r.name.slice(0, 40) : `Katman ${out.length + 1}`,
-        visible: r.visible !== false,
-        strokes: cleanStrokes(r.strokes as Stroke[]),
-      })
-    }
-    return out
-  }
-
-  // Ham kayıt sayfası (sürümler arası şekil farkı — tip yalanına karşı bilinçli unknown).
-  interface RawPage {
-    id?: unknown
-    strokes?: unknown
-    layers?: unknown
-    activeLayerId?: unknown
-    texts?: unknown
-    images?: unknown
-    size?: unknown
-    bgSize?: unknown
-    pdfPageIndex?: unknown
-  }
-
-  const pageFromRaw = (p: RawPage, fallback: { w: number; h: number }): Page | null => {
-    if (!p || typeof p !== 'object') return null
-    const layers = cleanLayers(p.layers)
-    if (layers.length === 0 && Array.isArray(p.strokes)) {
-      // v2/v3/v4 göçü: tüm mürekkep tek katmana.
-      layers.push(
-        { id: newStrokeId(), name: 'Katman 1', visible: true, strokes: cleanStrokes(p.strokes as Stroke[]) },
-      )
-    }
-    if (layers.length === 0) {
-      // Metin/resim-sadece sayfa da sayfadır — boş katmanla yaşat.
-      layers.push({ id: newStrokeId(), name: 'Katman 1', visible: true, strokes: [] })
-    }
-    const activeLayerId =
-      typeof p.activeLayerId === 'string' && layers.some((l) => l.id === p.activeLayerId)
-        ? p.activeLayerId
-        : layers[0]!.id
-    return {
-      id: typeof p.id === 'string' && p.id ? p.id : newPageId(),
-      layers,
-      activeLayerId,
-      texts: cleanTexts(p.texts),
-      images: cleanImages(p.images),
-      size: pageSizeOf(p, fallback),
-      pdfPageIndex:
-        typeof p.pdfPageIndex === 'number' && Number.isFinite(p.pdfPageIndex)
-          ? Math.floor(p.pdfPageIndex)
-          : undefined,
-    }
-  }
-
-  // Eski kayıtlarda size yok: bgSize (PDF) varsa o, yoksa o anki ekran boyutu
-  // (eski çizgiler 1:1 korunur — aynı ekranda görünüm değişmez).
-  const pageSizeOf = (
-    raw: { size?: unknown; bgSize?: unknown },
-    fallback: { w: number; h: number },
-  ) => {
-    const s = raw.size as { w?: unknown; h?: unknown } | undefined
-    if (s && typeof s.w === 'number' && typeof s.h === 'number' && s.w > 0 && s.h > 0) {
-      return { w: s.w, h: s.h }
-    }
-    const b = raw.bgSize as { w?: unknown; h?: unknown } | undefined
-    if (b && typeof b.w === 'number' && typeof b.h === 'number' && b.w > 0 && b.h > 0) {
-      return { w: b.w, h: b.h }
-    }
-    return { ...fallback }
-  }
+  const pageFromRaw = (p: RawPage, fallback: { w: number; h: number }): Page | null =>
+    sanitizePageFromRaw(p, fallback, newPageId)
 
   // Açılışta SADECE bakılır, yüklenmez: kayıtlı oturum varsa banner için özet döner.
   // Boş kayıt (çizgisiz) oturum sayılmaz — her açılışta banner çıkmasın diye.
