@@ -30,7 +30,8 @@ import { wrapTextToWidth } from '../lib/text'
 import { estimateLines, textBBoxOf } from '../lib/text'
 import { fitContain, needsPdfRerender, shapeEndpoints } from '../lib/geometry'
 import { recognizeShape } from '../lib/shapeRecognition'
-import { calemFileName, pdfFileName } from '../config/files'
+import { exportXoppBytes, importXoppBytes } from '../lib/xopp'
+import { calemFileName, pdfFileName, xoppFileName } from '../config/files'
 import { ALL_TOOLS, DEFAULT_WIDTHS, WIDTH_MAX, WIDTH_MIN } from '../config/tools'
 import { A4, DEFAULT_PAPER_BACKGROUND, PAGE_FORMATS, PAPER_THEMES } from '../config/paper'
 import type { PageFormat, PageOrientation, PaperTheme } from '../config/paper'
@@ -3387,6 +3388,62 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
+  // .xopp (Xournal++) dışa aktarır: sayfaları gzip-XML vektör olarak kaydeder.
+  const exportXopp = async (): Promise<{ pages: number } | { error: string }> => {
+    if (pdfBusy.value || imgBusy.value) return { error: 'işlem sürüyor' }
+    pdfBusy.value = true
+    try {
+      const u8 = await exportXoppBytes(pages.value, paperFor(activePage.value) ?? '#ffffff')
+      const fileName = xoppFileName()
+      const blob = new Blob([u8.buffer as ArrayBuffer], { type: 'application/x-xopp' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = fileName
+      a.click()
+      window.setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+      return { pages: pages.value.length }
+    } catch (e) {
+      console.error('[calem] xopp export hatası:', e)
+      return { error: `yazılamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+    } finally {
+      pdfBusy.value = false
+    }
+  }
+
+  // .xopp açar: sayfaları ve katmanları Xournal++'tan yükler.
+  const importXopp = async (file: File): Promise<{ pages: number } | { error: string }> => {
+    if (pdfBusy.value || imgBusy.value) return { error: 'işlem sürüyor' }
+    pdfBusy.value = true
+    try {
+      const bytes = await file.arrayBuffer()
+      const { pages: importedPages, paperHex } = await importXoppBytes(bytes)
+      if (importedPages.length === 0) return { error: 'sayfa yok' }
+      if (paperHex && paperHex !== '#ffffff') {
+        paper.value = paperHex
+      }
+      bgCanvases.clear()
+      pdfRenderScales.clear()
+      pdfId.value = null
+      pdfName.value = ''
+      pages.value = importedPages
+      activePageIndex.value = 0
+      clearHistory()
+      selectedIds.value = []
+      activeTextId.value = null
+      activeImageId.value = null
+      recountActive()
+      repaintBase()
+      renderActiveStroke()
+      scheduleSave()
+      return { pages: importedPages.length }
+    } catch (e) {
+      console.error('[calem] xopp import hatası:', e)
+      return { error: `okunamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+    } finally {
+      pdfBusy.value = false
+    }
+  }
+
   // .calem açar: sayfaları + ayarları + bytes'ları değiştirir (component önceden confirm sorar).
   const importCalem = async (file: File): Promise<{ pages: number } | { error: string }> => {
     if (pdfBusy.value || imgBusy.value) return { error: 'işlem sürüyor' }
@@ -4255,6 +4312,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     exportPdf,
     buildCalemJSON,
     exportCalem,
+    exportXopp,
+    importXopp,
     quickSaveCalem,
     setCalemHandle,
     importCalem,

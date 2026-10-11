@@ -16,10 +16,15 @@ export const pdfFileName = (d = new Date()): string =>
 export const calemFileName = (d = new Date()): string =>
   `calem-${d.toISOString().slice(0, 10)}.calem`
 
+/** .xopp (Xournal++) belgesi yazılırken. */
+export const xoppFileName = (d = new Date()): string =>
+  `calem-${d.toISOString().slice(0, 10)}.xopp`
+
 export const PDF_ACCEPT = 'application/pdf,.pdf'
 export const IMAGE_ACCEPT = 'image/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg'
 export const SETTINGS_ACCEPT = 'application/json,.json'
 export const CALEM_ACCEPT = '.calem,application/json'
+export const XOPP_ACCEPT = '.xopp,.xoj,application/x-xopp,application/gzip'
 
 /** PWA service worker yolu (sadece production'da kayıt edilir). */
 export const SERVICE_WORKER_PATH = '/service-worker.js'

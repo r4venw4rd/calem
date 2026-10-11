@@ -61,6 +61,29 @@
           >
             {{ t('saveCalem') }}
           </button>
+          <button
+            @click="openXoppDoc"
+            :disabled="store.pdfBusy"
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
+            :title="t('openXoppTitle')"
+          >
+            {{ t('openXopp') }}
+          </button>
+          <input
+            ref="xoppInput"
+            type="file"
+            :accept="XOPP_ACCEPT"
+            class="hidden"
+            @change="onXoppFile"
+          />
+          <button
+            @click="exportXoppDoc"
+            :disabled="store.pdfBusy"
+            class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-40 disabled:cursor-not-allowed"
+            :title="t('exportXoppTitle')"
+          >
+            {{ t('exportXopp') }}
+          </button>
           <div class="my-1 border-t border-[var(--chrome-border)]"></div>
           <label
             class="block w-full text-left px-3 py-1.5 rounded text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition cursor-pointer"
@@ -949,7 +972,7 @@ import SettingsPanel from '@/components/SettingsPanel.vue'
 import StylePanel from '@/components/StylePanel.vue'
 import { TOOL_META } from '@/config/tools'
 import { SLIDERS } from '@/config/ui'
-import { CALEM_ACCEPT, IMAGE_ACCEPT, PDF_ACCEPT, pngFileName } from '@/config/files'
+import { CALEM_ACCEPT, IMAGE_ACCEPT, PDF_ACCEPT, XOPP_ACCEPT, pngFileName } from '@/config/files'
 import { selectionBBox, coalescedOf } from '@/lib/select'
 import { takeLaunchHandle, onLaunchHandle, type LaunchHandle } from '@/lib/launchFile'
 import ToolIcon from '@/components/ToolIcon.vue'
@@ -2076,6 +2099,31 @@ const onCalemFile = async (e: Event) => {
   else await store.setCalemHandle(null)
   updateHud(true)
   refreshThumbs()
+}
+
+const xoppInput = ref<HTMLInputElement | null>(null)
+const openXoppDoc = () => {
+  showFile.value = false
+  xoppInput.value?.click()
+}
+
+const onXoppFile = async (e: Event) => {
+  showFile.value = false
+  const input = e.target as HTMLInputElement
+  const f = input.files?.[0]
+  input.value = ''
+  if (!f) return
+  if (store.hasInk && !(await askConfirm(t('calemReplace')))) return
+  const res = await store.importXopp(f)
+  if ('error' in res) showPdfError(res.error)
+  updateHud(true)
+  refreshThumbs()
+}
+
+const exportXoppDoc = async () => {
+  showFile.value = false
+  const res = await store.exportXopp()
+  if ('error' in res) showPdfError(res.error)
 }
 
 const askClosePdf = async () => {
