@@ -49,3 +49,33 @@ graphify-out/
 # Documentation & plans
 BACKEND.md
 plan.md
+
+# Environment & Sensitive files
+.env
+.env.*
+!.env.example
+
+# OS files
+Thumbs.db
+
+# AI Assistants & Tooling configs
+.agents/
+.augment/
+.claude/
+.codebuddy/
+.codewhale/
+.codex/
+.continue/
+.cursor/
+.factory/
+.freebuff/
+.gemini/
+.github/prompts/
+.kilocode/
+.kiro/
+.qoder/
+.roo/
+.trae/
+.warp/
+.windsurf/
+
