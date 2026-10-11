@@ -4,7 +4,9 @@ import {
   PDF_MANY_THRESHOLD,
   PDF_RENDER_BASE,
   PDF_RENDER_MANY,
+  PDF_MAX_TOTAL_PIXELS,
 } from '../config/engine'
+import { pdfRasterScale } from './geometry'
 
 let workerReady = false
 
@@ -32,10 +34,18 @@ export const renderPdfPages = async (
   const pdfjs = await ensurePdfWorker()
   const pdf = await pdfjs.getDocument({ data: bytes }).promise
   try {
-    const scale = pdf.numPages > PDF_MANY_THRESHOLD ? PDF_RENDER_MANY : PDF_RENDER_BASE
-    const out: RenderedPdfPage[] = []
+    const preferredScale = pdf.numPages > PDF_MANY_THRESHOLD ? PDF_RENDER_MANY : PDF_RENDER_BASE
+    const pages = []
+    let unitPixels = 0
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i)
+      const size = page.getViewport({ scale: 1 })
+      pages.push({ page, cssW: size.width, cssH: size.height })
+      unitPixels += size.width * size.height
+    }
+    const scale = pdfRasterScale(unitPixels, preferredScale, PDF_MAX_TOTAL_PIXELS)
+    const out: RenderedPdfPage[] = []
+    for (const { page, cssW, cssH } of pages) {
       const viewport = page.getViewport({ scale })
       const canvas = document.createElement('canvas')
       canvas.width = Math.ceil(viewport.width)
@@ -43,7 +53,7 @@ export const renderPdfPages = async (
       const ctx = canvas.getContext('2d')
       if (!ctx) continue
       await page.render({ canvas, canvasContext: ctx, viewport }).promise
-      out.push({ canvas, cssW: viewport.width / scale, cssH: viewport.height / scale })
+      out.push({ canvas, cssW, cssH })
     }
     return { rendered: out, scale }
   } finally {

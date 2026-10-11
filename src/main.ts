@@ -47,8 +47,16 @@ if ('serviceWorker' in navigator) {
     try {
       const store = useDrawingStore()
       void Promise.resolve(store.persistNow())
-        .catch(() => {})
-        .finally(() => window.location.reload())
+        .then(() => {
+          if (store.pendingSave || store.saveError) {
+            refreshing = false
+            return
+          }
+          window.location.reload()
+        })
+        .catch(() => {
+          refreshing = false
+        })
     } catch {
       window.location.reload()
     }

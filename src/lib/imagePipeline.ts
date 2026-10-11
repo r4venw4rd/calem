@@ -100,11 +100,12 @@ export const deleteImageFilesOf = (
   pages: Page[],
   bitmaps: Map<string, HTMLCanvasElement>,
   storage: DocStorage,
+  keepIds: Set<string> = new Set(),
 ): void => {
-  for (const p of pages) {
-    for (const img of p.images ?? []) {
-      bitmaps.delete(img.fileId)
-      void storage.deleteFile(img.fileId).catch(() => {})
-    }
+  const ids = new Set(pages.flatMap((p) => (p.images ?? []).map((img) => img.fileId)))
+  for (const id of ids) {
+    if (keepIds.has(id)) continue
+    bitmaps.delete(id)
+    void storage.deleteFile(id).catch(() => {})
   }
 }

@@ -477,7 +477,7 @@
 
       <div
         v-if="store.savedSession && !presenting"
-        class="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)] select-none"
+        class="absolute top-3 left-1/2 z-30 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)] select-none"
         role="dialog"
         :aria-label="t('prevSession')"
       >
@@ -1115,7 +1115,7 @@ const onFullscreenChange = () => {
 // Sekme/app kapanırken IDB'ye flush'lanmamış iş varsa tarayıcı "emin misin"
 // sorar (flush'lanmış iş IDB'de güvende, banner'dan geri gelir — boşuna sormayız).
 const onBeforeUnload = (e: BeforeUnloadEvent) => {
-  if (store.hasInk && store.pendingSave) e.preventDefault()
+  if (store.pendingSave) e.preventDefault()
 }
 // Kapanışta son yazımı IDB'ye itmeyi dene (async garantisi yok, best-effort).
 const onPageHide = () => {

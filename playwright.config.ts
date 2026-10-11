@@ -1,9 +1,8 @@
 import { defineConfig } from '@playwright/test'
 
 // E2E kurulumu: gerçek pointer event'leriyle canvas davranışını doğrular.
-// Tarayıcı olarak SİSTEM Chrome kullanılır (`channel: 'chrome'`) — Playwright'ın
-// ~150MB Chromium indirmesine gerek kalmazsın. Farklı bir sürüm istersen:
-//   npx playwright install chromium   (+ channel satırını kaldır)
+// Chromium sistem Chrome'unu kullanır; Firefox ve WebKit için:
+//   npx playwright install firefox webkit
 // Sunucu ayrı portta ayağa kalkar; açık bir `npm run dev` ile çakışmaz.
 const PORT = 5199
 
@@ -15,17 +14,21 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 5_000 },
   reporter: [['list']],
+  projects: [
+    { name: 'chromium', use: { browserName: 'chromium', channel: 'chrome' } },
+    { name: 'firefox', use: { browserName: 'firefox' } },
+    { name: 'webkit', use: { browserName: 'webkit' } },
+  ],
   use: {
-    baseURL: `http://localhost:${PORT}`,
-    channel: 'chrome',
+    baseURL: `http://127.0.0.1:${PORT}`,
     headless: true,
     viewport: { width: 1280, height: 900 },
     // Piksel matematiği sade olsun: 1 CSS px = 1 canvas px.
     deviceScaleFactor: 1,
   },
   webServer: {
-    command: `npm run dev:fast -- --port ${PORT} --strictPort`,
-    url: `http://localhost:${PORT}`,
+    command: `npm run dev:fast -- --host 127.0.0.1 --port ${PORT} --strictPort`,
+    url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: true,
     timeout: 60_000,
   },

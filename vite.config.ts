@@ -29,6 +29,6 @@ export default defineConfig({
   test: {
     // Birim testleri `tests/` altında; e2e ayrı koşar (playwright.config.ts).
     // Hariç tutulmazsa vitest, Playwright spec'lerini de toplamaya çalışır.
-    exclude: [...configDefaults.exclude, 'tests/e2e/**'],
+    exclude: [...configDefaults.exclude, 'tests/e2e/**', 'tests/e2e-pwa/**'],
   },
 })

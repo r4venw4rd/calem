@@ -13,13 +13,13 @@
     "type-check": "vue-tsc --build",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:pwa": "playwright test --config=playwright.pwa.config.ts"
   },
   "dependencies": {
     "jspdf": "^4.2.1",
     "pdfjs-dist": "^6.4.299",
     "pinia": "^4.0.3",
-    "ui-audit": "^1.0.2",
     "vue": "^3.5.42",
     "vue-router": "^5.3.1"
   },

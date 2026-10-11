@@ -24,6 +24,8 @@ export const EXPORT_SCALE = 2
 export const PDF_RENDER_BASE = 3
 export const PDF_RENDER_MANY = 1.5
 export const PDF_RENDER_MAX = 4
+/** Imported PDF backgrounds stay below this many raster pixels in total. */
+export const PDF_MAX_TOTAL_PIXELS = 16_000_000
 
 /** 30 sayfadan fazlası düşük çözünürlükle açılır. */
 export const PDF_MANY_THRESHOLD = 30

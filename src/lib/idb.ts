@@ -85,17 +85,28 @@ let dbPromise: Promise<IDBDatabase> | null = null
 
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise
-  dbPromise = new Promise((resolve, reject) => {
+  const opening = new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = () => {
       const db = req.result
       if (!db.objectStoreNames.contains(DOCS_STORE)) db.createObjectStore(DOCS_STORE)
       if (!db.objectStoreNames.contains(FILES_STORE)) db.createObjectStore(FILES_STORE)
     }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error ?? new Error('idb open failed'))
+    req.onsuccess = () => {
+      const db = req.result
+      db.onversionchange = () => {
+        db.close()
+        if (dbPromise === opening) dbPromise = null
+      }
+      resolve(db)
+    }
+    req.onerror = () => {
+      if (dbPromise === opening) dbPromise = null
+      reject(req.error ?? new Error('idb open failed'))
+    }
   })
-  return dbPromise
+  dbPromise = opening
+  return opening
 }
 
 function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
@@ -104,8 +115,14 @@ function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) 
       new Promise<T>((resolve, reject) => {
         const t = db.transaction(store, mode)
         const req = fn(t.objectStore(store))
-        req.onsuccess = () => resolve(req.result)
+        let result!: T
+        req.onsuccess = () => {
+          result = req.result
+        }
         req.onerror = () => reject(req.error ?? new Error('idb request failed'))
+        t.oncomplete = () => resolve(result)
+        t.onerror = () => reject(t.error ?? new Error('idb transaction failed'))
+        t.onabort = () => reject(t.error ?? new Error('idb transaction aborted'))
       }),
   )
 }

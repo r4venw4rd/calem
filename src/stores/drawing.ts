@@ -49,6 +49,8 @@ import {
   restoreDocSnapshot,
   type DocSnap,
 } from '../persist/snapshot'
+import { takeObsoletePdfIds } from '../persist/pdfFileCleanup'
+import { isLatestSave } from '../persist/saveRevision'
 import {
   buildPersistedDoc,
   summarizePersistedDoc,
@@ -1254,8 +1256,8 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // Sayfa(lar) çöpe giderken yetim bytes bırakma (yükleme yolu hariç — orada referans yeni doc'ta).
   // SADECE geri alınamaz bağlamlarda (import/kapat) çağrılır; undo kapsamındakiler queueFileDeletes.
-  const deleteImageFilesOf = (pages: Page[]) => {
-    removeImageFiles(pages, imgBitmaps, storage)
+  const deleteImageFilesOf = (pages: Page[], keepIds?: Set<string>) => {
+    removeImageFiles(pages, imgBitmaps, storage, keepIds)
   }
 
   // Undo kapsamındaki resim bytes'ları hemen atılmaz: snapshot'lar hâlâ o dosyaya
@@ -2739,6 +2741,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // PDF kalite politikası: config/engine (PDF_RENDER_*, RERENDER_DELAY).
   // Açık PDF'in bytes'ları (yeniden render için bellekte; kapatınca silinir).
   let pdfBytesCache: Uint8Array | null = null
+  const pendingPdfDeletes = new Set<string>()
   // Sayfa id → bitmap'in render ölçeği (pt→bitmap px). İhtiyaç hesabının girdisi.
   const pdfRenderScales = new Map<string, number>()
 
@@ -2754,7 +2757,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       const stored = bytes.slice().buffer
       const { rendered, scale } = await renderPdfPages(bytes)
       if (rendered.length === 0) return { error: 'sayfa yok' }
-      const id = `${file.name}::${file.size}::${file.lastModified}`
+      const id = `pdf-${crypto.randomUUID()}`
       // Önce dosyayı persist et: başarısızsa mevcut sahne korunur.
       await storage.setFile({
         id,
@@ -2764,9 +2767,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         pageCount: rendered.length,
         bytes: stored,
       })
-      if (pdfId.value && pdfId.value !== id) {
-        void storage.deleteFile(pdfId.value).catch(() => {})
-      }
+      if (pdfId.value && pdfId.value !== id) pendingPdfDeletes.add(pdfId.value)
       bgCanvases.clear()
       pdfRenderScales.clear()
       pdfBytesCache = new Uint8Array(stored)
@@ -3142,8 +3143,12 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (paperHex && paperHex !== '#ffffff') {
         paper.value = paperHex
       }
+      if (pdfId.value) pendingPdfDeletes.add(pdfId.value)
+      deleteImageFilesOf(pages.value)
+      imgBitmaps.clear()
       bgCanvases.clear()
       pdfRenderScales.clear()
+      pdfBytesCache = null
       pdfId.value = null
       pdfName.value = ''
       pages.value = importedPages
@@ -3189,10 +3194,6 @@ export const useDrawingStore = defineStore('drawing', () => {
         .map((p) => sanitizePageFromRaw(p, fallback, newPageId))
         .filter((p): p is Page => p !== null)
       if (clean.length === 0) return { error: 'sayfa yok' }
-      // Ayarlar (varsa): mevcut doğrulama hattı + tek persist + boya.
-      if (r.settings && typeof r.settings === 'object') {
-        await importSettingsJSON(JSON.stringify(r.settings))
-      }
       // Bytes'lar ÖNCE: başarısızsa mevcut sahne korunur.
       const written = new Set<string>()
       const files = (r.files ?? {}) as Record<string, { kind?: unknown; name?: unknown; w?: unknown; h?: unknown; pageCount?: unknown; b64?: unknown }>
@@ -3228,6 +3229,10 @@ export const useDrawingStore = defineStore('drawing', () => {
           written.add(fid)
         }
       }
+      // Gömülü dosyalar yazılmadan ayarları değiştirip yarım içe aktarma bırakma.
+      if (r.settings && typeof r.settings === 'object') {
+        await importSettingsJSON(JSON.stringify(r.settings))
+      }
       const w = d.widths as Record<string, unknown> | undefined
       if (w) {
         for (const t of ['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow', 'text', 'image', 'hand'] as const) {
@@ -3238,8 +3243,8 @@ export const useDrawingStore = defineStore('drawing', () => {
         }
       }
       // Eski sahnenin yetim bytes'larını temizle, sonra değiştir.
-      deleteImageFilesOf(pages.value)
-      if (pdfId.value) void storage.deleteFile(pdfId.value).catch(() => {})
+      deleteImageFilesOf(pages.value, collectReferencedImageFileIds(clean, [], []))
+      if (pdfId.value) pendingPdfDeletes.add(pdfId.value)
       bgCanvases.clear()
       pdfRenderScales.clear()
       imgBitmaps.clear()
@@ -3282,7 +3287,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   // PDF'i kapat: arkaplanlar gider, tek boş sayfaya dönülür, dosya kaydı silinir.
   const closePdf = () => {
-    if (pdfId.value) void storage.deleteFile(pdfId.value).catch(() => {})
+    if (pdfId.value) pendingPdfDeletes.add(pdfId.value)
     bgCanvases.clear()
     pdfRenderScales.clear()
     pdfBytesCache = null
@@ -3360,8 +3365,10 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // --- Autosave (IndexedDB, debounce'lu) ---
   let saveTimer: ReturnType<typeof setTimeout> | undefined
+  let saveRevision = 0
   // IDB'ye henüz flush'lanmamış iş var mı (kapatma onayının kapısı).
   const pendingSave = ref(false)
+  const saveError = ref(false)
 
   const fmtTime = (t: number) =>
     new Date(t).toLocaleTimeString(locale.value === 'tr' ? 'tr-TR' : 'en-US', {
@@ -3370,6 +3377,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     })
 
   const persistNow = async (): Promise<void> => {
+    const startedRevision = saveRevision
     try {
       const now = Date.now()
       const doc = buildPersistedDoc({
@@ -3381,10 +3389,16 @@ export const useDrawingStore = defineStore('drawing', () => {
       })
       await storage.setDoc(doc)
       lastSavedAt.value = fmtTime(now)
+      if (isLatestSave(startedRevision, saveRevision)) {
+        pendingSave.value = false
+        saveError.value = false
+        for (const id of takeObsoletePdfIds(pendingPdfDeletes, pdfId.value)) {
+          void storage.deleteFile(id).catch(() => {})
+        }
+      }
     } catch {
-      // Özel mod / IDB kapalı: sessizce vazgeç (çizim bellekte sürer).
-    } finally {
-      pendingSave.value = false
+      // Save stays pending so close warns and the file menu can report the failure.
+      saveError.value = true
     }
   }
 
@@ -3393,6 +3407,7 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   const scheduleSave = () => {
     if (saveTimer) clearTimeout(saveTimer)
+    saveRevision += 1
     pendingSave.value = true
     saveTimer = setTimeout(() => {
       saveTimer = undefined
@@ -3800,6 +3815,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     setPressureSensitivity,
     persistNow,
     pendingSave,
+    saveError,
     loadPersisted,
     checkSavedSession,
     dismissSavedSession,

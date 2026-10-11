@@ -89,6 +89,20 @@ describe('xopp adapter', () => {
     expect(imported[0]!.texts[0]!.text).toBe('Hello Xournal++')
   })
 
+  it('rejects invalid XOPP instead of replacing the current document with a blank page', () => {
+    expect(() => parseXoppXml('<not-xournal><page width="1" height="1"></page></not-xournal>')).toThrow()
+    expect(() => parseXoppXml('<xournal></xournal>')).toThrow()
+  })
+
+  it('drops non-finite stroke coordinates and defaults invalid dimensions and widths', () => {
+    const { pages } = parseXoppXml(
+      '<xournal><page width="NaN" height="Infinity"><layer name="L"><stroke width="NaN">0 1 Infinity 2 3 4</stroke></layer></page></xournal>',
+    )
+    expect(pages[0]!.size).toEqual({ w: 595, h: 842 })
+    expect(pages[0]!.layers[0]!.strokes[0]!.width).toBe(2)
+    expect(pages[0]!.layers[0]!.strokes[0]!.points).toEqual([{ x: 0, y: 1 }, { x: 3, y: 4 }])
+  })
+
   it('compresses to gzip and decompresses bytes roundtrip', async () => {
     const pages: Page[] = [
       {

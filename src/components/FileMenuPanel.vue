@@ -108,7 +108,7 @@
       </div>
 
       <div
-        v-if="store.pdfName || store.lastSavedAt"
+        v-if="store.pdfName || store.lastSavedAt || store.saveError"
         class="mt-1 pt-1 border-t border-[var(--chrome-border)] px-3 py-1 text-[10px] text-[var(--chrome-faint)] font-mono truncate"
       >
         <span v-if="store.pdfName" :title="store.pdfName">
@@ -120,6 +120,7 @@
         <span v-if="store.lastSavedAt" :title="t('autosave')">
           {{ store.pdfName ? ' · ' : '' }}{{ t('saved') }} {{ store.lastSavedAt }}
         </span>
+        <span v-if="store.saveError" class="text-red-500">{{ t('saveFailed') }}</span>
       </div>
     </div>
   </Teleport>

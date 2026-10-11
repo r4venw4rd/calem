@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fitContain, needsPdfRerender, shapeEndpoints } from '../src/lib/geometry'
+import { fitContain, needsPdfRerender, pdfRasterScale, shapeEndpoints } from '../src/lib/geometry'
 
 describe('fitContain', () => {
   it('dar hedefte yukseklige gore', () => {
@@ -37,5 +37,12 @@ describe('needsPdfRerender', () => {
     expect(needsPdfRerender(100, 119)).toBe(false)
     expect(needsPdfRerender(100, 121)).toBe(true)
     expect(needsPdfRerender(0, 50)).toBe(false)
+  })
+})
+
+describe('pdfRasterScale', () => {
+  it('keeps preferred quality under the total pixel budget and scales down above it', () => {
+    expect(pdfRasterScale(1_000_000, 3, 16_000_000)).toBe(3)
+    expect(pdfRasterScale(4_000_000, 3, 16_000_000)).toBe(2)
   })
 })

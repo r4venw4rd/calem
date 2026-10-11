@@ -176,6 +176,9 @@ const unescapeXml = (str: string): string => {
 
 /** Xournal++ XML dizgisini ayrıştırıp Calem Page[] dizisine dönüştürür. */
 export const parseXoppXml = (xmlStr: string): { pages: Page[]; paperHex: string } => {
+  const documentMatch = /<xournal\b[^>]*>([\s\S]*?)<\/xournal\s*>/i.exec(xmlStr)
+  if (!documentMatch) throw new Error('invalid Xournal document')
+  xmlStr = documentMatch[1] ?? ''
   const pages: Page[] = []
   let detectedPaperHex = '#ffffff'
 
@@ -189,8 +192,10 @@ export const parseXoppXml = (xmlStr: string): { pages: Page[]; paperHex: string 
 
     const widthMatch = pageAttrs.match(/width="([^"]+)"/)
     const heightMatch = pageAttrs.match(/height="([^"]+)"/)
-    const w = widthMatch ? parseFloat(widthMatch[1]!) : 595
-    const h = heightMatch ? parseFloat(heightMatch[1]!) : 842
+    const parsedW = widthMatch ? Number(widthMatch[1]) : 595
+    const parsedH = heightMatch ? Number(heightMatch[1]) : 842
+    const w = Number.isFinite(parsedW) && parsedW > 0 ? parsedW : 595
+    const h = Number.isFinite(parsedH) && parsedH > 0 ? parsedH : 842
 
     // Arkaplan rengi
     const bgMatch = pageContent.match(/<background\b[^>]*color="([^"]+)"[^>]*>/i)
@@ -234,12 +239,15 @@ export const parseXoppXml = (xmlStr: string): { pages: Page[]; paperHex: string 
         }
 
         const { color, opacity } = colorMatch ? fromXoppColor(colorMatch[1]!) : { color: '#000000', opacity: 1 }
-        const width = widthMatch ? Math.max(1, parseFloat(widthMatch[1]!)) : 2
+        const parsedWidth = widthMatch ? Number(widthMatch[1]) : 2
+        const width = Number.isFinite(parsedWidth) ? Math.max(1, parsedWidth) : 2
 
-        const rawNumbers = sData.split(/\s+/).map((n) => parseFloat(n)).filter((n) => !Number.isNaN(n))
         const pts: Point[] = []
+        const rawNumbers = sData.split(/\s+/)
         for (let i = 0; i < rawNumbers.length - 1; i += 2) {
-          pts.push({ x: rawNumbers[i]!, y: rawNumbers[i + 1]! })
+          const x = Number(rawNumbers[i])
+          const y = Number(rawNumbers[i + 1])
+          if (Number.isFinite(x) && Number.isFinite(y)) pts.push({ x, y })
         }
 
         if (pts.length > 0) {
@@ -268,9 +276,12 @@ export const parseXoppXml = (xmlStr: string): { pages: Page[]; paperHex: string 
         const sizeMatch = tAttrs.match(/size="([^"]+)"/)
         const colorMatch = tAttrs.match(/color="([^"]+)"/)
 
-        const x = xMatch ? parseFloat(xMatch[1]!) : 50
-        const y = yMatch ? parseFloat(yMatch[1]!) : 50
-        const size = sizeMatch ? parseFloat(sizeMatch[1]!) : 14
+        const parsedX = xMatch ? Number(xMatch[1]) : 50
+        const parsedY = yMatch ? Number(yMatch[1]) : 50
+        const parsedSize = sizeMatch ? Number(sizeMatch[1]) : 14
+        const x = Number.isFinite(parsedX) ? parsedX : 50
+        const y = Number.isFinite(parsedY) ? parsedY : 50
+        const size = Number.isFinite(parsedSize) && parsedSize > 0 ? parsedSize : 14
         const { color } = colorMatch ? fromXoppColor(colorMatch[1]!) : { color: '#000000' }
 
         if (tData) {
@@ -314,18 +325,7 @@ export const parseXoppXml = (xmlStr: string): { pages: Page[]; paperHex: string 
     })
   }
 
-  if (pages.length === 0) {
-    // Boş belge güvencesi
-    const defaultLayer: Layer = { id: newLayerId(), name: 'Layer 1', visible: true, strokes: [] }
-    pages.push({
-      id: newPageId(),
-      size: { w: 595, h: 842 },
-      layers: [defaultLayer],
-      activeLayerId: defaultLayer.id,
-      texts: [],
-      images: [],
-    })
-  }
+  if (pages.length === 0) throw new Error('Xournal document has no pages')
 
   return { pages, paperHex: detectedPaperHex }
 }

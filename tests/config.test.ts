@@ -15,6 +15,7 @@ import {
   PDF_RENDER_BASE,
   PDF_RENDER_MANY,
   PDF_RENDER_MAX,
+  PDF_MAX_TOTAL_PIXELS,
   RERENDER_DELAY,
   SAVE_DELAY,
   ZOOM_MAX,
@@ -55,6 +56,7 @@ describe('engine', () => {
   it('render ölçekleri', () => {
     expect(EXPORT_SCALE).toBe(2)
     expect([PDF_RENDER_BASE, PDF_RENDER_MANY, PDF_RENDER_MAX]).toEqual([3, 1.5, 4])
+    expect(PDF_MAX_TOTAL_PIXELS).toBe(16_000_000)
     expect(PDF_MANY_THRESHOLD).toBe(30)
     expect(DPR_CAP).toBe(2)
     expect(IMAGE_MAX_DIM).toBe(1600)

@@ -28,7 +28,7 @@ export const cleanStrokes = (input: unknown): Stroke[] => {
       id: typeof (s as Stroke).id === 'string' && (s as Stroke).id ? (s as Stroke).id : newStrokeId(),
       tool: s.tool === 'eraser' || s.tool === 'highlighter' || isShapeTool(s.tool) ? s.tool : 'pen',
       color: typeof s.color === 'string' ? s.color : '#ffffff',
-      width: typeof s.width === 'number' ? Math.min(120, Math.max(1, s.width)) : 3,
+      width: typeof s.width === 'number' && Number.isFinite(s.width) ? Math.min(120, Math.max(1, s.width)) : 3,
       dash: (s as Stroke).dash === 'dash' || (s as Stroke).dash === 'dot' ? (s as Stroke).dash : 'solid',
       opacity:
         typeof (s as Stroke).opacity === 'number' && Number.isFinite((s as Stroke).opacity)
@@ -37,7 +37,10 @@ export const cleanStrokes = (input: unknown): Stroke[] => {
       points: pts.map((p: { x: number; y: number; pressure?: number }) => ({
         x: p.x,
         y: p.y,
-        pressure: typeof p.pressure === 'number' ? p.pressure : 0.5,
+        pressure:
+          typeof p.pressure === 'number' && Number.isFinite(p.pressure)
+            ? Math.min(1, Math.max(0, p.pressure))
+            : 0.5,
       })),
     })
   }
@@ -116,11 +119,17 @@ export const pageSizeOf = (
   fallback: { w: number; h: number },
 ): { w: number; h: number } => {
   const s = raw.size as { w?: unknown; h?: unknown } | undefined
-  if (s && typeof s.w === 'number' && typeof s.h === 'number' && s.w > 0 && s.h > 0) {
+  if (
+    s && typeof s.w === 'number' && Number.isFinite(s.w) &&
+    typeof s.h === 'number' && Number.isFinite(s.h) && s.w > 0 && s.h > 0
+  ) {
     return { w: s.w, h: s.h }
   }
   const b = raw.bgSize as { w?: unknown; h?: unknown } | undefined
-  if (b && typeof b.w === 'number' && typeof b.h === 'number' && b.w > 0 && b.h > 0) {
+  if (
+    b && typeof b.w === 'number' && Number.isFinite(b.w) &&
+    typeof b.h === 'number' && Number.isFinite(b.h) && b.w > 0 && b.h > 0
+  ) {
     return { w: b.w, h: b.h }
   }
   return { ...fallback }
