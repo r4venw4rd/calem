@@ -237,3 +237,76 @@ export const selectionBBox = (
   }
   return acc
 }
+
+/** Noktanın doğru parçasına (a -> b) dik uzaklığı. */
+const distToSeg = (px: number, py: number, ax: number, ay: number, bx: number, by: number): number => {
+  const dx = bx - ax
+  const dy = by - ay
+  const l2 = dx * dx + dy * dy
+  if (l2 === 0) return Math.hypot(px - ax, py - ay)
+  let t = ((px - ax) * dx + (py - ay) * dy) / l2
+  t = Math.max(0, Math.min(1, t))
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+}
+
+/**
+ * Bir noktanın belirli bir stroke'un çizgisine veya kapalı iç bölgesine yakın olup olmadığını test eder.
+ */
+export const pointNearStroke = (
+  x: number,
+  y: number,
+  s: Pick<Stroke, 'points' | 'width'>,
+  hitRadius = 14,
+): boolean => {
+  const pts = s.points
+  if (!pts || pts.length === 0) return false
+  const bb = strokeBBox(s)
+  if (!bb) return false
+
+  // Bounding box dışında mı?
+  if (x < bb.x0 - hitRadius || x > bb.x1 + hitRadius || y < bb.y0 - hitRadius || y > bb.y1 + hitRadius) {
+    return false
+  }
+
+  // 1. Kapalı poligon ise (örneğin üçgen/kutu) iç bölgesine tıklandığında da seçilebilmeli!
+  const first = pts[0]!
+  const last = pts[pts.length - 1]!
+  const isClosed = pts.length >= 3 && Math.hypot(first.x - last.x, first.y - last.y) < Math.max(24, (bb.x1 - bb.x0) * 0.25)
+  if (isClosed && pointInPolygon(x, y, pts)) {
+    return true
+  }
+
+  // 2. Çizgi segmentlerine dik mesafe testi (vuruş toleransı)
+  const threshold = Math.max(hitRadius, (s.width || 3) / 2 + 6)
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i]!
+    const b = pts[i + 1]!
+    const d = distToSeg(x, y, a.x, a.y, b.x, b.y)
+    if (d <= threshold) return true
+  }
+
+  // Tek nokta durumu
+  if (pts.length === 1) {
+    return Math.hypot(x - pts[0]!.x, y - pts[0]!.y) <= threshold
+  }
+
+  return false
+}
+
+/**
+ * Tıklanan noktadaki en üstteki stroke'u bulur (hızlı tekil seçim).
+ */
+export const strokeAtPoint = (
+  strokes: Pick<Stroke, 'id' | 'points' | 'width'>[],
+  x: number,
+  y: number,
+  hitRadius = 14,
+): string | null => {
+  for (let i = strokes.length - 1; i >= 0; i--) {
+    const s = strokes[i]!
+    if (pointNearStroke(x, y, s, hitRadius)) {
+      return s.id
+    }
+  }
+  return null
+}

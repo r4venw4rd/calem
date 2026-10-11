@@ -978,7 +978,7 @@ import StylePanel from '@/components/StylePanel.vue'
 import { TOOL_META } from '@/config/tools'
 import { SLIDERS } from '@/config/ui'
 import { CALEM_ACCEPT, IMAGE_ACCEPT, PDF_ACCEPT, XOPP_ACCEPT, pngFileName } from '@/config/files'
-import { selectionBBox, coalescedOf } from '@/lib/select'
+import { selectionBBox, coalescedOf, strokeAtPoint, pointNearStroke } from '@/lib/select'
 import { takeLaunchHandle, onLaunchHandle, type LaunchHandle } from '@/lib/launchFile'
 import ToolIcon from '@/components/ToolIcon.vue'
 
@@ -1221,17 +1221,30 @@ const selectDown = (e: PointerEvent) => {
   }
   ps.setActive(e.pointerId)
   const p = store.eventToPage(e)
+
+  // 1. Zaten seçili bir öğenin sınırları içine tıklandıysa: anında taşımaya başla
   if (store.selectionCount > 0 && selInside(p)) {
     selMoving = true
     selLast = p
     selActive = true
-  } else if (store.selectMode === 'lasso') {
-    selPoly = [p]
-    selActive = true
   } else {
-    selAnchor = p
-    selCurrent = p
-    selActive = true
+    // 2. Bir nesneye (örneğin üçgen, çizgi, şekil) doğrudan tıklandı mı?
+    const hitId = strokeAtPoint(store.strokes, p.x, p.y)
+    if (hitId) {
+      store.selectedIds = [hitId]
+      selMoving = true
+      selLast = p
+      selActive = true
+    } else if (store.selectMode === 'lasso') {
+      store.clearSelection()
+      selPoly = [p]
+      selActive = true
+    } else {
+      store.clearSelection()
+      selAnchor = p
+      selCurrent = p
+      selActive = true
+    }
   }
   drawSelectionOverlay()
 }

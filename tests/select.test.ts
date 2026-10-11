@@ -13,6 +13,8 @@ import {
   strokeBBox,
   subRunsInRect,
   unionRect,
+  pointNearStroke,
+  strokeAtPoint,
 } from '../src/lib/select'
 
 const S = (id: string, pts: { x: number; y: number }[], width = 3) => ({
@@ -158,3 +160,24 @@ describe('coalescedOf', () => {
     expect(coalescedOf(e)).toEqual([inner])
   })
 })
+
+describe('strokeAtPoint & pointNearStroke', () => {
+  it('ucgenin kenarina veya icine tiklayinca secilir', () => {
+    // Ucgen (50, 10), (100, 90), (0, 90), (50, 10)
+    const triPts = [
+      { x: 50, y: 10 },
+      { x: 100, y: 90 },
+      { x: 0, y: 90 },
+      { x: 50, y: 10 },
+    ]
+    const s = S('tri', triPts, 3)
+    // Ucgenin icine tiklama
+    expect(pointNearStroke(50, 60, s)).toBe(true)
+    // Ucgenin kenarina yakin tiklama
+    expect(pointNearStroke(52, 12, s)).toBe(true)
+    // Ucgenin tamamen disina tiklama
+    expect(pointNearStroke(200, 200, s)).toBe(false)
+    expect(strokeAtPoint([s], 50, 60)).toBe('tri')
+  })
+})
+
