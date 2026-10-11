@@ -42,3 +42,10 @@ blob-report/
 
 # Vite
 *.timestamp-*-*.mjs
+dist/
+graphify-out/
+.opencode/
+
+# Documentation & plans
+BACKEND.md
+plan.md
