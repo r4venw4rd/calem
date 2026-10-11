@@ -30,11 +30,15 @@ export interface PinchStep {
 export function usePointerState() {
   let activeId: number | null = null
   let spacePan = false
-  // Aşağıdaki tüm pointer'lar (pinch için) — id → son konum.
   const pointers = new Map<number, PointerPos>()
   let gesture: PinchGesture | null = null
   // İki parmak jesti bu oturumda bir kez başladı mı (parmaklar kalkana dek çizim kapalı).
   let consumed = false
+
+  // Çoklu parmakla hızlı dokunma (tap) takibi: 2 parmak = undo, 3 parmak = redo
+  let gestureStartTime = 0
+  let maxPointersInGesture = 0
+  let gestureMoved = false
 
   const positions = (): PointerPos[] => [...pointers.values()]
 
@@ -57,14 +61,27 @@ export function usePointerState() {
       spacePan = on
     },
 
-    // --- Pointer havuzu (pinch) ---
+    // --- Pointer havuzu (pinch & multi-finger tap) ---
     track: (id: number, p: PointerPos) => {
+      if (pointers.size === 0) {
+        gestureStartTime = performance.now()
+        maxPointersInGesture = 0
+        gestureMoved = false
+      }
       pointers.set(id, p)
+      if (pointers.size > maxPointersInGesture) {
+        maxPointersInGesture = pointers.size
+      }
     },
     has: (id: number) => pointers.has(id),
     moveTracked: (id: number, p: PointerPos) => {
       const cur = pointers.get(id)
       if (!cur) return false
+      const dx = p.x - cur.x
+      const dy = p.y - cur.y
+      if (dx * dx + dy * dy > 64) {
+        gestureMoved = true
+      }
       cur.x = p.x
       cur.y = p.y
       return true
@@ -73,6 +90,7 @@ export function usePointerState() {
     positions,
     clearPointers: () => {
       pointers.clear()
+      maxPointersInGesture = 0
     },
 
     // --- Pinch jesti ---
@@ -101,24 +119,41 @@ export function usePointerState() {
         dx: mx - gesture.mx0,
         dy: my - gesture.my0,
       }
+      if (Math.abs(d1 - gesture.d0) > 8 || Math.hypot(step.dx, step.dy) > 8) {
+        gestureMoved = true
+      }
       gesture = { d0: d1, mx0: mx, my0: my }
       return step
     },
     // Gesture (veya artığı) hâlâ aktifken çizim kapalıdır — çağırıcı erken dönmeli.
     gestureLocked: () => gesture !== null || consumed,
     // Pointer kalktı: havuzdan düş, kilit durumunu güncelle.
-    // Dönen true = jest bitmedi, çağırıcı beklemeli (arta kalan parmak çizmesin).
-    releasePointer: (id?: number): boolean => {
+    // Dönen: { locked: boolean, tapAction?: 'undo' | 'redo' }
+    releasePointer: (id?: number): { locked: boolean; tapAction?: 'undo' | 'redo' } => {
       if (id !== undefined) pointers.delete(id)
+      let tapAction: 'undo' | 'redo' | undefined
+
       if (pointers.size === 0) {
+        const elapsed = performance.now() - gestureStartTime
+        // 350ms'den kısa, parmaklar kaydırılmamışsa tap jesti olarak yorumla
+        if (!gestureMoved && elapsed < 350) {
+          if (maxPointersInGesture === 2) {
+            tapAction = 'undo'
+          } else if (maxPointersInGesture === 3) {
+            tapAction = 'redo'
+          }
+        }
         gesture = null
         consumed = false
+        maxPointersInGesture = 0
+        gestureMoved = false
       }
+
       if (gesture !== null || consumed) {
         if (gesture !== null && pointers.size < 2) gesture = null
-        return true
+        return { locked: true, tapAction }
       }
-      return false
+      return { locked: false, tapAction }
     },
     clearGesture: () => {
       gesture = null

@@ -2356,7 +2356,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (autoShapeSnap.value && currentTool.value === 'pen') {
       clearShapeHold()
       if (activeShapeSnap.value) {
-        if (activeShapeSnap.value.tool === 'line') {
+        if (activeShapeSnap.value.tool === 'line' || activeShapeSnap.value.tool === 'arrow') {
           activeShapeSnap.value.points[1] = { x, y, pressure: pressureVal }
         }
       } else if (pts.length >= 3) {

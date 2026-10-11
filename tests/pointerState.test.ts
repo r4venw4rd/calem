@@ -93,22 +93,45 @@ describe('releasePointer', () => {
     ps.track(2, { x: 10, y: 0 })
     ps.beginGesture()
     // ilk parmak kalktı: hâlâ jest artığı yüzünden kilitli
-    expect(ps.releasePointer(1)).toBe(true)
+    expect(ps.releasePointer(1).locked).toBe(true)
     expect(ps.count()).toBe(1)
     expect(ps.gestureLocked()).toBe(true)
     // ikinci de kalktı: kilit çözülür
-    expect(ps.releasePointer(2)).toBe(false)
+    expect(ps.releasePointer(2).locked).toBe(false)
     expect(ps.count()).toBe(0)
     expect(ps.gestureLocked()).toBe(false)
   })
 
   it('id verilmezse havuz değişmez ama kilit durumu raporlanır', () => {
     const ps = usePointerState()
-    expect(ps.releasePointer(undefined)).toBe(false)
+    expect(ps.releasePointer(undefined).locked).toBe(false)
     ps.track(1, { x: 0, y: 0 })
     ps.track(2, { x: 10, y: 0 })
     ps.beginGesture()
-    expect(ps.releasePointer(undefined)).toBe(true)
+    expect(ps.releasePointer(undefined).locked).toBe(true)
     expect(ps.count()).toBe(2)
   })
+
+  it('iki parmakla hızlı dokunma (two-finger tap) undo tetikler', () => {
+    const ps = usePointerState()
+    ps.track(1, { x: 10, y: 10 })
+    ps.track(2, { x: 30, y: 10 })
+    expect(ps.releasePointer(1).tapAction).toBeUndefined()
+    const rel2 = ps.releasePointer(2)
+    expect(rel2.locked).toBe(false)
+    expect(rel2.tapAction).toBe('undo')
+  })
+
+  it('üç parmakla hızlı dokunma (three-finger tap) redo tetikler', () => {
+    const ps = usePointerState()
+    ps.track(1, { x: 10, y: 10 })
+    ps.track(2, { x: 30, y: 10 })
+    ps.track(3, { x: 50, y: 10 })
+    expect(ps.releasePointer(1).tapAction).toBeUndefined()
+    expect(ps.releasePointer(2).tapAction).toBeUndefined()
+    const rel3 = ps.releasePointer(3)
+    expect(rel3.locked).toBe(false)
+    expect(rel3.tapAction).toBe('redo')
+  })
 })
+

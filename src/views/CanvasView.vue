@@ -1811,7 +1811,15 @@ const draw = (e: PointerEvent) => {
 
 const endDraw = (e?: PointerEvent) => {
   // Gesture bitene (tüm parmaklar kalkana) kadar çizim kapalı — arta kalan parmak çizmesin.
-  if (ps.releasePointer(e?.pointerId)) return
+  const rel = ps.releasePointer(e?.pointerId)
+  if (rel.tapAction === 'undo') {
+    undo()
+    return
+  } else if (rel.tapAction === 'redo') {
+    redo()
+    return
+  }
+  if (rel.locked) return
   // Aktif pointer kilidini pahalı commit'ten ÖNCE bırak: stopDrawing (snapshotDoc
   // tam-klon + base'e işleme) bitmeden gelen pointerdown temiz görsün, yoksa
   // isDrawing/pointerId kapılarına takılıp ilk vuruş sessizce yutuluyordu.
