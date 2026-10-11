@@ -2727,8 +2727,8 @@ export const useDrawingStore = defineStore('drawing', () => {
           // Sayfa-kaplayan dev stroke'u her frame baştan tessellate etme: yalnız kirli
           // kutuya yakın nokta koşularını çiz (şekiller uç-noktalı, onlar tam kalır).
           if (!isShapeTool(s.tool)) {
-            drawingPerf.repaintPoints += s.points.length
             const runs = indexedSubRunsInRect(s, dirty, DIRTY_STROKE_MARGIN)
+            drawingPerf.repaintPoints += runs.reduce((n, run) => n + run.length, 0)
             if (runs.length === 0) continue
             // Genişlik TÜM noktalardan hesaplanır (basınç ortalaması) — koşuya bölününce
             // değişmesin diye tam genişliği geçir, hassasiyeti 0 ver.
