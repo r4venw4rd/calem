@@ -209,4 +209,51 @@ test.describe('Kaydırmalı görünüm (Scroll Mode)', () => {
     )
     expect(drift).toBeLessThan(40)
   })
+
+  test('dar ekranda zoom merkezli kalır ve sağ/sol yatay kaydırılabilir', async ({ page }) => {
+    await page.setViewportSize({ width: 600, height: 900 })
+    await page.goto('/')
+    await page.locator('button[title*="scroll view"], button[title*="kaydırma"]').first().click()
+    await page.waitForTimeout(800)
+
+    const anchor = { x: 300, y: 450 }
+    const before = await page.evaluate(({ x, y }) => {
+      const block = [...document.querySelectorAll('div[style*="aspect-ratio"]')][0] as HTMLElement
+      const box = document.querySelector('.overflow-y-auto') as HTMLElement
+      const r = block.getBoundingClientRect()
+      return { fracX: (x - r.left) / r.width, fracY: (y - r.top) / r.height, left: box.scrollLeft }
+    }, anchor)
+
+    await page.mouse.move(anchor.x, anchor.y)
+    await page.keyboard.down('Control')
+    await page.mouse.wheel(0, -600)
+    await page.keyboard.up('Control')
+    await page.waitForTimeout(800)
+
+    const after = await page.evaluate(({ x, y, fracX, fracY }) => {
+      const block = [...document.querySelectorAll('div[style*="aspect-ratio"]')][0] as HTMLElement
+      const box = document.querySelector('.overflow-y-auto') as HTMLElement
+      const r = block.getBoundingClientRect()
+      return {
+        width: r.width,
+        driftX: Math.abs(r.left + fracX * r.width - x),
+        driftY: Math.abs(r.top + fracY * r.height - y),
+        scrollLeft: box.scrollLeft,
+        maxLeft: box.scrollWidth - box.clientWidth,
+      }
+    }, { ...anchor, fracX: before.fracX, fracY: before.fracY })
+
+    expect(after.width).toBeGreaterThan(800)
+    expect(after.scrollLeft).toBeGreaterThan(0)
+    expect(after.maxLeft).toBeGreaterThan(0)
+    expect(after.driftX).toBeLessThan(45)
+    expect(after.driftY).toBeLessThan(45)
+    const rightEdgeGap = await page.evaluate(() => {
+      const block = [...document.querySelectorAll('div[style*="aspect-ratio"]')][0] as HTMLElement
+      const box = document.querySelector('.overflow-y-auto') as HTMLElement
+      box.scrollLeft = box.scrollWidth
+      return Math.abs(block.getBoundingClientRect().right - box.getBoundingClientRect().right)
+    })
+    expect(rightEdgeGap).toBeLessThan(5)
+  })
 })

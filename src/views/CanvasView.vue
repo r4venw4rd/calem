@@ -352,7 +352,7 @@
       <div v-else ref="scrollBox" class="absolute inset-0 overflow-y-auto overscroll-contain" @scroll.passive="onScrollBox"
         @pointerdown="onScrollBoxPointerDown" @pointermove="onScrollBoxPointerMove"
         @pointerup="onScrollBoxPointerUp" @pointercancel="onScrollBoxPointerCancel">
-        <div class="mx-auto w-full max-w-[860px] px-3 pt-3 pb-28 flex flex-col gap-4">
+        <div class="px-3 pt-3 pb-28 flex flex-col gap-4" :style="scrollContentStyle">
           <div
             v-for="(p, i) in store.pages"
             :key="p.id"
@@ -361,7 +361,7 @@
           <div
             :ref="(el) => setBlockRef(el, p.id)"
             class="mx-auto rounded-sm overflow-hidden cursor-pointer scroll-mt-2 min-[640px]:scroll-mt-[72px]"
-            :style="{ width: `${store.zoomFactor * 100}%`, aspectRatio: `${p.size.w} / ${p.size.h}`, visibility: i === store.activePageIndex ? 'hidden' : 'visible', touchAction: 'pan-x pan-y' }"
+            :style="{ width: `${scrollPageWidth}px`, aspectRatio: `${p.size.w} / ${p.size.h}`, visibility: i === store.activePageIndex ? 'hidden' : 'visible', touchAction: 'pan-x pan-y' }"
             @pointerdown.prevent="onBlockDown"
             @pointerup="onBlockUp($event, i)"
             @pointercancel="resetBlockTap"
@@ -1310,19 +1310,13 @@ const togglePresent = async () => {
     }
   }
   await nextTick()
-  sizeCanvas()
-  updateHud(true)
+  scheduleFullscreenResize()
 }
 
 // Tarayıcı-Esc ile fullscreen'den çıkılınca sade mod da kapanır.
 const onFullscreenChange = () => {
-  if (!document.fullscreenElement && presenting.value) {
-    presenting.value = false
-    nextTick(() => {
-      sizeCanvas()
-      updateHud(true)
-    })
-  }
+  if (!document.fullscreenElement && presenting.value) presenting.value = false
+  nextTick(scheduleFullscreenResize)
 }
 
 // Sekme/app kapanırken IDB'ye flush'lanmamış iş varsa tarayıcı "emin misin"
@@ -1504,9 +1498,45 @@ const {
 
 const sizeCanvas = () => {
   if (!baseCanvas.value || !overlayCanvas.value) return
+  scrollViewportWidth.value = scrollBox.value?.clientWidth || window.innerWidth
   if (scrollMode.value) positionSlot()
   store.resizeCanvas()
   drawSelectionOverlay()
+}
+
+const scrollViewportWidth = ref(window.innerWidth)
+const scrollPageWidth = computed(() => Math.min(860, Math.max(0, scrollViewportWidth.value - 24)) * store.zoomFactor)
+const scrollContentStyle = computed(() => ({
+  width: `${Math.max(scrollViewportWidth.value, scrollPageWidth.value)}px`,
+}))
+watch(scrollViewportWidth, () => {
+  if (!scrollMode.value) return
+  nextTick(() => {
+    if (!scrollMode.value) return
+    positionSlot()
+    store.resizeCanvas()
+    drawSelectionOverlay()
+  })
+})
+
+let fullscreenRaf = 0
+let fullscreenResizePass = 0
+const scheduleFullscreenResize = () => {
+  if (fullscreenRaf) cancelAnimationFrame(fullscreenRaf)
+  fullscreenResizePass = 0
+  const resize = () => {
+    fullscreenRaf = 0
+    sizeCanvas()
+    if (++fullscreenResizePass < 3) {
+      fullscreenRaf = requestAnimationFrame(resize)
+    } else {
+      fullscreenResizePass = 0
+      updateHud(true)
+    }
+  }
+  fullscreenRaf = requestAnimationFrame(() => {
+    nextTick(resize)
+  })
 }
 
 // Görünür alan yüksekliği (px). visualViewport pinch içermez (zoom kapalı), en doğru ölçüdür.
@@ -1735,6 +1765,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (rafId !== 0) cancelAnimationFrame(rafId)
+  if (fullscreenRaf !== 0) cancelAnimationFrame(fullscreenRaf)
+  fullscreenRaf = 0
   if (zoomRaf !== 0) cancelAnimationFrame(zoomRaf)
   zoomRaf = 0
   ps.clearActive()
