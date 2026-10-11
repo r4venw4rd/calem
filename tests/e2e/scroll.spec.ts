@@ -86,4 +86,45 @@ test.describe('Kaydırmalı görünüm (Scroll Mode)', () => {
       expect(await centerAlpha()).toBeGreaterThan(200)
     }
   })
+
+  test('scroll modda el-sürükleme native scroll yapar, boya-pan yapmaz', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('button[title*="scroll view"], button[title*="kaydırma"]').first().click()
+    await page.waitForTimeout(800)
+    await page.locator('button[title*="New page"], button[title*="Yeni sayfa"]').first().click()
+    await page.waitForTimeout(1000)
+
+    const scrollTop = () =>
+      page.evaluate(() => {
+        const slot = [...document.querySelectorAll('div')].find(
+          (d) => d.children.length === 2 && d.children[0].tagName === 'CANVAS',
+        )
+        const sc = slot?.parentElement as HTMLElement | null
+        return sc ? sc.scrollTop : -1
+      })
+    const strokes = () =>
+      page.evaluate(() => {
+        const hud = [...document.querySelectorAll('div')].find((d) =>
+          d.textContent?.includes('strokes'),
+        )
+        const m = /(\d+) strokes/.exec(hud?.textContent ?? '')
+        return m ? Number(m[1]) : -1
+      })
+
+    // El aracını seç, aktif sayfa içinden aşağı sürükle
+    await page.locator('button[title*="drag to pan"], button[title*="sürükle-kaydır"]').first().click()
+    const before = await scrollTop()
+    expect(before).toBeGreaterThan(200)
+    await page.mouse.move(640, 400)
+    await page.mouse.down()
+    await page.mouse.move(640, 650, { steps: 12 })
+    await page.mouse.up()
+    await page.waitForTimeout(400)
+    const after = await scrollTop()
+
+    // Tut-sürükle: içerik fareyi takip eder (scrollTop ~250 azalır), mürekkep bulaşmaz
+    expect(before - after).toBeGreaterThan(150)
+    expect(await strokes()).toBe(0)
+    await expect(page.locator('[aria-label="Sayfalar"] span.font-mono')).toHaveText('2 / 2')
+  })
 })
