@@ -349,7 +349,9 @@
           @contextmenu.prevent
         ></canvas>
       </template>
-      <div v-else ref="scrollBox" class="absolute inset-0 overflow-y-auto" @scroll.passive="onScrollBox">
+      <div v-else ref="scrollBox" class="absolute inset-0 overflow-y-auto" @scroll.passive="onScrollBox"
+        @pointerdown="onScrollBoxPointerDown" @pointermove="onScrollBoxPointerMove"
+        @pointerup="onScrollBoxPointerUp" @pointercancel="onScrollBoxPointerCancel">
         <div class="mx-auto w-full max-w-[860px] px-3 pt-3 pb-28 flex flex-col gap-4">
           <div
             v-for="(p, i) in store.pages"
@@ -578,7 +580,7 @@ import { drawingPerf } from '@/model/document'
 import { useDrawingStore } from '@/stores/drawing'
 import { useDialogs } from '@/composables/useDialogs'
 import { useLocale } from '@/composables/useLocale'
-import { usePointerState } from '@/composables/usePointerState'
+import { usePointerState, type PinchStep } from '@/composables/usePointerState'
 import { useSelectionOps } from '@/composables/useSelectionOps'
 import { useCanvasShortcuts } from '@/composables/useCanvasShortcuts'
 import { useCanvasFileActions } from '@/composables/useCanvasFileActions'
@@ -939,6 +941,26 @@ const startDraw = (e: PointerEvent) => {
   scheduleRender()
 }
 
+// Pinch adımı uygulaması (canvas + scrollBox yolları ortak): görünüm-çapalı
+// zoom, saf ötelemede native scroll. Çift çağrı zararsızdır (ardışık delta).
+const applyPinchStep = (step: PinchStep) => {
+  if (step.scale > 0) {
+    // Kaydırmalı modda pinch de görünüm-çapalıdır (imleç = pinch merkezi).
+    if (scrollMode.value && overlayCanvas.value) {
+      const r = overlayCanvas.value.getBoundingClientRect()
+      anchorViewZoom(r.left + step.midX, r.top + step.midY)
+    }
+    store.pinch(step.scale, step.midX, step.midY, step.dx, step.dy)
+  }
+  // Kaydırmalı modda saf iki-parmak öteleme native scroll'u sürer (store
+  // boya-pan yapmaz).
+  if (scrollMode.value && step.scale === 1 && (step.dx !== 0 || step.dy !== 0)) {
+    driveScroll(step.dx, step.dy)
+  }
+  updateHud()
+  drawSelectionOverlay()
+}
+
 const draw = (e: PointerEvent) => {
   if (e.cancelable) e.preventDefault()
   if (ps.has(e.pointerId) && overlayCanvas.value) {
@@ -947,21 +969,7 @@ const draw = (e: PointerEvent) => {
   }
   const step = ps.stepGesture()
   if (step) {
-    if (step.scale > 0) {
-      // Kaydırmalı modda pinch de görünüm-çapalıdır (imleç = pinch merkezi).
-      if (scrollMode.value && overlayCanvas.value) {
-        const r = overlayCanvas.value.getBoundingClientRect()
-        anchorViewZoom(r.left + step.midX, r.top + step.midY)
-      }
-      store.pinch(step.scale, step.midX, step.midY, step.dx, step.dy)
-    }
-    // Kaydırmalı modda saf iki-parmak öteleme native scroll'u sürer (store
-    // boya-pan yapmaz).
-    if (scrollMode.value && step.scale === 1 && (step.dx !== 0 || step.dy !== 0)) {
-      driveScroll(step.dx, step.dy)
-    }
-    updateHud()
-    drawSelectionOverlay()
+    applyPinchStep(step)
     return
   }
   // Kaydırmalı modda parmak-sürükleme: mürekkep YOK, scrollBox manuel sürülür.
@@ -1113,6 +1121,62 @@ const redo = () => {
   store.redo()
   drawSelectionOverlay()
   updateHud(true)
+}
+
+// Kaydırmalı-mod blok/boşluk parmak takibi: canvas-dışı dokunuşlar da pinch
+// sayacına girer (her yerde pinch). Tek parmağa DOKUNULMAZ (native scroll +
+// tap-activate aynen yaşar). Canvas-sahipli pointer'lar canvas yolundadır.
+const boxOwnsPointer = (e: PointerEvent) =>
+  !(e.target instanceof Node) || !overlayCanvas.value || !overlayCanvas.value.contains(e.target)
+// Pinch mesafesi ötelemeden bağımsızdır; uzay canvas-uzayıyla aynı olmalı.
+const boxTouchPos = (e: PointerEvent) => {
+  const r = overlayCanvas.value?.getBoundingClientRect()
+  return r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: e.clientX, y: e.clientY }
+}
+const onScrollBoxPointerDown = (e: PointerEvent) => {
+  if (!scrollMode.value || e.pointerType !== 'touch') return
+  if (!boxOwnsPointer(e)) return
+  ps.track(e.pointerId, boxTouchPos(e))
+  if (ps.count() === 2) {
+    // Canvas yolundaki preemption ile birebir (çapraz parmak çifti).
+    store.cancelActiveStroke()
+    cancelSelGesture()
+    cancelTextGesture()
+    cancelImageGesture()
+    cancelPan()
+    pendingTouch = null
+    panDrive = null
+    if (rafId !== 0) {
+      cancelAnimationFrame(rafId)
+      rafId = 0
+    }
+    ps.clearActive()
+    ps.beginGesture()
+  }
+}
+const onScrollBoxPointerMove = (e: PointerEvent) => {
+  if (!scrollMode.value || e.pointerType !== 'touch') return
+  if (!boxOwnsPointer(e)) return
+  if (!ps.has(e.pointerId)) return
+  ps.moveTracked(e.pointerId, boxTouchPos(e))
+  const step = ps.stepGesture()
+  if (step) applyPinchStep(step)
+}
+const releaseBoxPointer = (e: PointerEvent | undefined, allowTap: boolean) => {
+  const rel = ps.releasePointer(e?.pointerId)
+  if (!allowTap) return
+  if (rel.tapAction === 'undo') undo()
+  else if (rel.tapAction === 'redo') redo()
+}
+const onScrollBoxPointerUp = (e: PointerEvent) => {
+  if (!scrollMode.value || e.pointerType !== 'touch') return
+  if (!boxOwnsPointer(e)) return
+  releaseBoxPointer(e, true)
+}
+const onScrollBoxPointerCancel = (e: PointerEvent) => {
+  if (!scrollMode.value || e.pointerType !== 'touch') return
+  if (!boxOwnsPointer(e)) return
+  releaseBoxPointer(e, false)
 }
 
 const { onKeyDown, onKeyUp } = useCanvasShortcuts({
