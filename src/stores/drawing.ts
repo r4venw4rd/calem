@@ -38,7 +38,22 @@ import {
   type NormRect,
 } from '../lib/select'
 import { dropTinyRuns, polylineHitsCircle, splitRunsOutside } from '../lib/erase'
-import { newStrokeId, snapshotImage, snapshotLayer, snapshotStroke, snapshotText } from '../persist/snapshot'
+import {
+  newStrokeId,
+  newPageId,
+  snapshotImage,
+  snapshotLayer,
+  snapshotStroke,
+  snapshotText,
+  snapshotDoc as makeSnapshotDoc,
+  restoreDocSnapshot,
+  type DocSnap,
+} from '../persist/snapshot'
+import {
+  buildPersistedDoc,
+  summarizePersistedDoc,
+  deserializePersistedDoc,
+} from '../persist/docPersistence'
 import {
   cleanImages,
   cleanLayers,
@@ -773,46 +788,16 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Store içi yazımlar activeLayer.value.strokes üzerindendir.
   const strokes = computed(() => activeLayer.value.strokes)
 
-  // Undo ile çıkanlar buraya; yeni çizgi VEYA sayfa değişimi öldürür.
-  // ESKİ Stroke[] redo — snapshot modeline geçildi (aşağıda DocSnap).
-  interface DocSnap {
-    pages: Page[]
-    activePageIndex: number
-  }
   const undoStack = ref<DocSnap[]>([])
   const redoStack = ref<DocSnap[]>([])
   // Derinlik: config/engine (HISTORY_CAP).
 
-  const snapshotDoc = (): DocSnap => ({
-    pages: pages.value.map((p) => ({
-      id: p.id,
-      layers: p.layers.map(snapshotLayer),
-      activeLayerId: p.activeLayerId,
-      texts: p.texts.map(snapshotText),
-      images: p.images.map(snapshotImage),
-      size: { w: p.size.w, h: p.size.h },
-      ...(p.pdfPageIndex !== undefined ? { pdfPageIndex: p.pdfPageIndex } : {}),
-    })),
-    activePageIndex: activePageIndex.value,
-  })
+  const snapshotDoc = (): DocSnap => makeSnapshotDoc(pages.value, activePageIndex.value)
 
   const restoreDoc = (s: DocSnap) => {
-    // Snapshot'lar değişmez: geri yükleme de klonlar (canlı yazım geçmişi kirletmesin).
-    pages.value = s.pages.map((p) => ({
-      id: p.id,
-      layers: p.layers.map((l) => ({
-        id: l.id,
-        name: l.name,
-        visible: l.visible,
-        strokes: l.strokes.map(snapshotStroke),
-      })),
-      activeLayerId: p.activeLayerId,
-      texts: p.texts.map(snapshotText),
-      images: p.images.map(snapshotImage),
-      size: { w: p.size.w, h: p.size.h },
-      ...(p.pdfPageIndex !== undefined ? { pdfPageIndex: p.pdfPageIndex } : {}),
-    }))
-    activePageIndex.value = Math.min(s.activePageIndex, Math.max(0, pages.value.length - 1))
+    const res = restoreDocSnapshot(s)
+    pages.value = res.pages
+    activePageIndex.value = res.activePageIndex
   }
 
   // Yapısal op öncesi çağrılır: redo ölür, derinlik cap'lenir.
@@ -3248,7 +3233,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         h: canvasRef.value?.clientHeight || FALLBACK_VIEWPORT.h,
       }
       const clean = (d.pages as unknown as RawPage[])
-        .map((p) => pageFromRaw(p, fallback))
+        .map((p) => sanitizePageFromRaw(p, fallback, newPageId))
         .filter((p): p is Page => p !== null)
       if (clean.length === 0) return { error: 'sayfa yok' }
       // Ayarlar (varsa): mevcut doğrulama hattı + tek persist + boya.
@@ -3434,22 +3419,13 @@ export const useDrawingStore = defineStore('drawing', () => {
   const persistNow = async (): Promise<void> => {
     try {
       const now = Date.now()
-      const doc: PersistedDoc = {
-        v: 5,
-        savedAt: now,
-        pages: pages.value.map((p) => ({
-          id: p.id,
-          layers: p.layers.map(snapshotLayer),
-          activeLayerId: p.activeLayerId,
-          texts: p.texts.map(snapshotText),
-          images: p.images.map(snapshotImage),
-          size: { w: p.size.w, h: p.size.h },
-          ...(p.pdfPageIndex !== undefined ? { pdfPageIndex: p.pdfPageIndex } : {}),
-        })),
-        widths: { ...widths.value },
+      const doc = buildPersistedDoc({
+        pages: pages.value,
+        widths: widths.value,
         activePageIndex: activePageIndex.value,
-        ...(pdfId.value ? { pdfId: pdfId.value, pdfName: pdfName.value } : {}),
-      }
+        pdfId: pdfId.value,
+        pdfName: pdfName.value,
+      })
       await storage.setDoc(doc)
       lastSavedAt.value = fmtTime(now)
     } catch {
@@ -3474,9 +3450,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     thumbTick.value += 1
   }
 
-  const pageFromRaw = (p: RawPage, fallback: { w: number; h: number }): Page | null =>
-    sanitizePageFromRaw(p, fallback, newPageId)
-
   // Açılışta SADECE bakılır, yüklenmez: kayıtlı oturum varsa banner için özet döner.
   // Boş kayıt (çizgisiz) oturum sayılmaz — her açılışta banner çıkmasın diye.
   const checkSavedSession = async (): Promise<boolean> => {
@@ -3487,39 +3460,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       savedSession.value = null
       return false
     }
-    if (!doc || typeof doc.v !== 'number') {
-      savedSession.value = null
-      return false
-    }
-    let pages = 0
-    let strokes = 0
-    if ((doc.v === 2 || doc.v === 3 || doc.v === 4 || doc.v === 5) && Array.isArray(doc.pages)) {
-      pages = doc.pages.length
-      for (const raw of doc.pages as unknown as RawPage[]) {
-        if (!raw || typeof raw !== 'object') continue
-        if (Array.isArray(raw.strokes)) strokes += raw.strokes.length
-        if (Array.isArray(raw.texts)) strokes += raw.texts.length
-        if (Array.isArray(raw.images)) strokes += raw.images.length
-        if (Array.isArray(raw.layers)) {
-          for (const l of raw.layers as { strokes?: unknown }[]) {
-            if (l && Array.isArray(l.strokes)) strokes += l.strokes.length
-          }
-        }
-      }
-    } else if (doc.v === 1 && Array.isArray((doc as { strokes?: unknown }).strokes)) {
-      pages = 1
-      strokes = (doc as unknown as { strokes: unknown[] }).strokes.length
-    }
-    if (strokes === 0) {
-      savedSession.value = null
-      return false
-    }
-    savedSession.value = {
-      when: fmtTime(typeof doc.savedAt === 'number' ? doc.savedAt : Date.now()),
-      pages,
-      strokes,
-    }
-    return true
+    const summary = summarizePersistedDoc(doc, fmtTime)
+    savedSession.value = summary
+    return summary !== null
   }
 
   const dismissSavedSession = () => {
@@ -3538,49 +3481,33 @@ export const useDrawingStore = defineStore('drawing', () => {
     // Kayıtlı .calem dosya handle'ı (Ctrl+S direkt yazsın diye).
     await loadCalemHandle()
     if (!doc || typeof doc.v !== 'number') return false
-    // widths her sürümde ortak
-    const w = (doc as { widths?: unknown }).widths as Record<string, unknown> | undefined
-    if (w) {
-      for (const t of ['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow', 'text', 'image', 'hand'] as const) {
-        const v = w[t]
-        if (typeof v === 'number' && Number.isFinite(v)) {
-          widths.value[t] = Math.min(WIDTH_MAX[t], Math.max(WIDTH_MIN[t], Math.round(v)))
-        }
-      }
-    }
-    let loaded: Page[] | null = null
+
     const viewFallback = {
       w: canvasRef.value?.clientWidth || FALLBACK_VIEWPORT.w,
       h: canvasRef.value?.clientHeight || FALLBACK_VIEWPORT.h,
     }
-    if ((doc.v === 2 || doc.v === 3 || doc.v === 4 || doc.v === 5) && Array.isArray(doc.pages)) {
-      const clean = (doc.pages as unknown as RawPage[])
-        .map((p) => pageFromRaw(p, viewFallback))
-        .filter((p): p is Page => p !== null)
-      loaded = clean.length > 0 ? clean : null
-    } else if (doc.v === 1 && Array.isArray((doc as { strokes?: unknown }).strokes)) {
-      const v1 = (doc as unknown as { strokes: Stroke[] }).strokes
-      const clean = cleanStrokes(v1)
-      loaded = clean.length > 0 ? [singleLayerPage(newPageId(), clean, { ...viewFallback })] : null
+    const res = deserializePersistedDoc({ doc, viewFallback, newPageId })
+    if (!res) return false
+
+    if (res.widths) {
+      for (const [k, v] of Object.entries(res.widths)) {
+        if (k in widths.value) (widths.value as Record<string, number>)[k] = v
+      }
     }
-    if (!loaded || loaded.length === 0) return false
-    pages.value = loaded
+
+    pages.value = res.pages
     savedSession.value = null
     clearHistory()
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
-    const idx = (doc as { activePageIndex?: unknown }).activePageIndex
-    activePageIndex.value =
-      typeof idx === 'number' && Number.isFinite(idx)
-        ? Math.min(loaded.length - 1, Math.max(0, Math.floor(idx)))
-        : 0
+    activePageIndex.value = res.activePageIndex
     layoutView()
     // PDF kaydı varsa arkaplanları bytes'tan yeniden üret (yoksa mürekkep tek başına durur).
-    if ((doc.v === 2 || doc.v === 3 || doc.v === 4 || doc.v === 5) && doc.pdfId) {
-      pdfId.value = doc.pdfId
-      pdfName.value = doc.pdfName ?? ''
-      await restorePdfBackgrounds(doc.pdfId)
+    if (res.pdfId) {
+      pdfId.value = res.pdfId
+      pdfName.value = res.pdfName
+      await restorePdfBackgrounds(res.pdfId)
     } else {
       pdfId.value = null
       pdfName.value = ''

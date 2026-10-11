@@ -161,3 +161,17 @@ export const pageFromRaw = (
         : undefined,
   }
 }
+
+export const singleLayerPage = (
+  id: string,
+  strokes: Stroke[],
+  size: { w: number; h: number },
+  layerId: string = newStrokeId(),
+): Page => ({
+  id,
+  layers: [{ id: layerId, name: 'Katman 1', visible: true, strokes }],
+  activeLayerId: layerId,
+  texts: [],
+  images: [],
+  size,
+})
