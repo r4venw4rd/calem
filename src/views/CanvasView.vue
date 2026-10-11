@@ -585,6 +585,7 @@ import { useCanvasShortcuts } from '@/composables/useCanvasShortcuts'
 import { useCanvasFileActions } from '@/composables/useCanvasFileActions'
 import { useSelectionGesture } from '@/composables/useSelectionGesture'
 import { useScrollMode } from '@/composables/useScrollMode'
+import { usePanGesture } from '@/composables/usePanGesture'
 import AppDialog from '@/components/AppDialog.vue'
 import FileMenuPanel from '@/components/FileMenuPanel.vue'
 import ImageEditorOverlay from '@/components/ImageEditorOverlay.vue'
@@ -1084,85 +1085,14 @@ const delActiveImage = () => {
 }
 
 // --- El/Space kaydırma: ekran-px delta ile pan (her araçta Space ile) ---
-let panActive = false
-let panLast: { x: number; y: number } | null = null
-let panDx = 0
-let panDy = 0
-let panRaf = 0
-
-const panDown = (e: PointerEvent) => {
-  try {
-    overlayCanvas.value!.setPointerCapture(e.pointerId)
-  } catch {
-    /* ignore */
-  }
-  ps.setActive(e.pointerId)
-  panLast = ptrPos(e)
-  panActive = true
-}
-
-const panMove = (e: PointerEvent) => {
-  // Space sonradan basılırsa devralınmaz (mürekkep gasp edilmesin) — önce Space, sonra bas.
-  if (!panActive || !ps.isActive(e.pointerId)) return
-  if (e.buttons === 0 && e.pointerType === 'mouse') return
-  // Delta biriktir, boyayı rAF'e bırak: her move'da tam sahne boyası (repaintBase)
-  // mobil GPU'da kasıyordu. Kalem yolundaki scheduleRender deseninin aynısı.
-  for (const ev of coalescedOf(e)) {
-    const cur = ptrPos(ev)
-    if (!panLast) {
-      panLast = cur
-      continue
-    }
-    panDx += cur.x - panLast.x
-    panDy += cur.y - panLast.y
-    panLast = cur
-  }
-  schedulePan()
-}
-
-// Birikmiş pan deltayı frame başına tek boyayla işler.
-const schedulePan = () => {
-  if (panRaf !== 0) return
-  panRaf = requestAnimationFrame(() => {
-    panRaf = 0
-    if (panDx !== 0 || panDy !== 0) {
-      store.panBy(panDx, panDy)
-      panDx = 0
-      panDy = 0
-      drawSelectionOverlay()
-      updateHud()
-    }
-  })
-}
-
-const panUp = (e?: PointerEvent) => {
-  if (ps.stale(e)) return
-  if (panRaf !== 0) {
-    cancelAnimationFrame(panRaf)
-    panRaf = 0
-  }
-  // Kuyrukta kalan deltayı çöpe atma — bırakıştaki son milimetre kaybolmasın.
-  if (panDx !== 0 || panDy !== 0) {
-    store.panBy(panDx, panDy)
-    panDx = 0
-    panDy = 0
-  }
-  panActive = false
-  panLast = null
-  ps.clearActive()
-  updateHud(true)
-}
-
-const cancelPan = () => {
-  if (panRaf !== 0) {
-    cancelAnimationFrame(panRaf)
-    panRaf = 0
-  }
-  panDx = 0
-  panDy = 0
-  panActive = false
-  panLast = null
-}
+const { isPanActive, panDown, panMove, panUp, cancelPan } = usePanGesture({
+  store,
+  ps,
+  overlayCanvas,
+  ptrPos,
+  drawSelectionOverlay,
+  updateHud: (force) => updateHud(force),
+})
 
 const startDraw = (e: PointerEvent) => {
   // iPadOS ilk dokunuşu jest kararı için bekletmesin: olayı en başta sahiplen.
@@ -1248,7 +1178,7 @@ const draw = (e: PointerEvent) => {
     selectMove(e)
     return
   }
-  if (panActive) {
+  if (isPanActive()) {
     panMove(e)
     return
   }
@@ -1289,7 +1219,7 @@ const endDraw = (e?: PointerEvent) => {
     selectUp(e)
     return
   }
-  if (panActive) {
+  if (isPanActive()) {
     panUp(e)
     return
   }
