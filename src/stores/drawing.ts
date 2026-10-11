@@ -55,6 +55,15 @@ import {
   deserializePersistedDoc,
 } from '../persist/docPersistence'
 import {
+  bytesToCanvas,
+  fitImageDimensions,
+  placeImageInBounds,
+  restoreBitmapsFromStorage,
+  collectReferencedImageFileIds,
+  deleteImageFilesOf as removeImageFiles,
+  isImageFile,
+} from '../lib/imagePipeline'
+import {
   cleanImages,
   cleanLayers,
   cleanStrokes,
@@ -1184,28 +1193,6 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Bitmap cap'i: config/engine (IMAGE_MAX_DIM, oran korunur).
   const imgBusy = ref(false)
 
-  const bytesToCanvas = async (bytes: ArrayBuffer): Promise<HTMLCanvasElement | null> => {
-    try {
-      const bmp = await createImageBitmap(new Blob([bytes]))
-      try {
-        const scale = Math.min(1, IMAGE_MAX_DIM / Math.max(bmp.width, bmp.height))
-        const w = Math.max(1, Math.round(bmp.width * scale))
-        const h = Math.max(1, Math.round(bmp.height * scale))
-        const canvas = document.createElement('canvas')
-        canvas.width = w
-        canvas.height = h
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return null
-        ctx.drawImage(bmp, 0, 0, w, h)
-        return canvas
-      } finally {
-        bmp.close()
-      }
-    } catch {
-      return null
-    }
-  }
-
   // Tıklanan noktaya ortalanmış yerleştirir (taşma payı moveImage sınırlarında).
   const addImage = async (
     file: File,
@@ -1213,23 +1200,15 @@ export const useDrawingStore = defineStore('drawing', () => {
     y: number,
   ): Promise<{ id: string } | { error: string }> => {
     if (imgBusy.value) return { error: 'işlem sürüyor' }
-    const looksImg = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name)
-    if (!looksImg) return { error: 'resim dosyası seç' }
+    if (!isImageFile(file)) return { error: 'resim dosyası seç' }
     imgBusy.value = true
     try {
       const buf = await file.arrayBuffer()
       const canvas = await bytesToCanvas(buf)
       if (!canvas) return { error: 'resim okunamadı' }
       const fileId = `img-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
-      // px ≈ pt (1:1); sayfaya sığmazsa oranlı küçült.
       const size = activePage.value.size
-      const maxW = Math.max(64, size.w - 16)
-      let w = canvas.width
-      let h = canvas.height
-      if (w > maxW) {
-        h = Math.max(16, Math.round((h * maxW) / w))
-        w = maxW
-      }
+      const { w, h } = fitImageDimensions(canvas.width, canvas.height, Math.max(64, size.w - 16))
       const rec: ImageFileRecord = {
         id: fileId,
         name: file.name,
@@ -1242,10 +1221,11 @@ export const useDrawingStore = defineStore('drawing', () => {
       await storage.setImage(rec)
       imgBitmaps.set(fileId, canvas)
       pushHistory()
+      const pos = placeImageInBounds(x, y, w, h, size)
       const item: ImageItem = {
         id: newStrokeId(),
-        x: Math.min(size.w - 8, Math.max(-w + 8, Math.round(x - w / 2))),
-        y: Math.min(size.h - 8, Math.max(-h + 8, Math.round(y - h / 2))),
+        x: pos.x,
+        y: pos.y,
         w,
         h,
         fileId,
@@ -1269,32 +1249,13 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // Açılışta resim bitmap'lerini bytes'tan yeniden üretir (sessiz: kayıp resim atlanır).
   const restoreImageBitmaps = async (): Promise<void> => {
-    try {
-      const ids = new Set<string>()
-      for (const p of pages.value) {
-        for (const img of p.images ?? []) ids.add(img.fileId)
-      }
-      for (const fid of ids) {
-        if (imgBitmaps.has(fid)) continue
-        const rec = await storage.getImage(fid)
-        if (!rec) continue
-        const canvas = await bytesToCanvas(rec.bytes)
-        if (canvas) imgBitmaps.set(fid, canvas)
-      }
-    } catch {
-      /* resimsiz devam */
-    }
+    await restoreBitmapsFromStorage(pages.value, imgBitmaps, storage)
   }
 
   // Sayfa(lar) çöpe giderken yetim bytes bırakma (yükleme yolu hariç — orada referans yeni doc'ta).
   // SADECE geri alınamaz bağlamlarda (import/kapat) çağrılır; undo kapsamındakiler queueFileDeletes.
   const deleteImageFilesOf = (pages: Page[]) => {
-    for (const p of pages) {
-      for (const img of p.images ?? []) {
-        imgBitmaps.delete(img.fileId)
-        void storage.deleteFile(img.fileId).catch(() => {})
-      }
-    }
+    removeImageFiles(pages, imgBitmaps, storage)
   }
 
   // Undo kapsamındaki resim bytes'ları hemen atılmaz: snapshot'lar hâlâ o dosyaya
@@ -1302,16 +1263,8 @@ export const useDrawingStore = defineStore('drawing', () => {
   // böylece Temizle/sayfa-sil sonrası Undo resmi bozuk getirmez.
   const pendingFileDeletes = new Set<string>()
 
-  const referencedImageFileIds = (): Set<string> => {
-    const ids = new Set<string>()
-    const add = (list: Page[]) => {
-      for (const p of list) for (const img of p.images ?? []) ids.add(img.fileId)
-    }
-    add(pages.value)
-    for (const s of undoStack.value) add(s.pages)
-    for (const s of redoStack.value) add(s.pages)
-    return ids
-  }
+  const referencedImageFileIds = (): Set<string> =>
+    collectReferencedImageFileIds(pages.value, undoStack.value, redoStack.value)
 
   // Gerçek silme: canlı doküman ve hiçbir snapshot referans etmiyorsa bytes'ı at.
   const flushFileDeletes = () => {
