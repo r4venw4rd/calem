@@ -340,7 +340,7 @@
           @pointermove.prevent="draw"
           @pointerup="endDraw"
           @pointerleave="endDraw"
-          @pointercancel="endDraw"
+          @pointercancel="cancelDraw"
           @touchstart.prevent
           @touchmove.prevent
           @gesturestart.prevent
@@ -380,7 +380,7 @@
             @pointermove.prevent="draw"
             @pointerup="endDraw"
             @pointerleave="endDraw"
-            @pointercancel="endDraw"
+            @pointercancel="cancelDraw"
             @touchstart.prevent
             @touchmove.prevent
             @gesturestart.prevent
@@ -1031,6 +1031,24 @@ const endDraw = (e?: PointerEvent) => {
   }
   // stopDrawing stroke'u base'e işler + overlay'i temizler — ek redraw gerekmez.
   store.stopDrawing()
+  updateHud(true)
+}
+
+// pointercancel = "bu jest'e güvenme": KESİNLİKLE commit yok. Tarayıcı scroll'u
+// devraldığında, kesintide vs. gelir — yarım stroke/base'e işlenmemeli.
+const cancelDraw = (e?: PointerEvent) => {
+  ps.releasePointer(e?.pointerId)
+  pendingTouch = null
+  if (rafId !== 0) {
+    cancelAnimationFrame(rafId)
+    rafId = 0
+  }
+  if (isSelActive()) cancelSelGesture()
+  if (hasTextDown()) cancelTextGesture()
+  if (hasImgDown()) cancelImageGesture()
+  if (isPanActive()) cancelPan()
+  if (store.isDrawing) store.cancelActiveStroke()
+  ps.clearActive()
   updateHud(true)
 }
 
