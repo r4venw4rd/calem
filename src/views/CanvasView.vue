@@ -1223,8 +1223,7 @@ const {
   refreshBlocks,
   toggleScroll,
   resetBlockTap,
-  getHoldScroll,
-  setHoldScroll,
+  takeHoldNav,
 } = useScrollMode({
   store,
   ps,
@@ -1446,8 +1445,7 @@ onMounted(() => {
         drawSelectionOverlay()
         refreshBlocks()
         // Yerinde aktivasyonda (tık/spy) görünümü zıplatma.
-        if (!getHoldScroll()) scrollActiveIntoView()
-        setHoldScroll(false)
+        if (!takeHoldNav()) scrollActiveIntoView()
       })
     },
   )

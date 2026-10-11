@@ -42,8 +42,11 @@ export function useScrollMode(opts: ScrollModeOptions) {
   }
 
   // Programatik yumuşak kaydırma uçuşurken spy ara sayfalara takılmasın.
+  // Baskılama zaman damgalı: smooth süresi mesafeye göre 650ms'i aşabilir ve
+  // reduced-motion'da davranış auto olur — bayrak tek başına yetmezdi.
   let smoothScrolling = false
   let smoothTimer: ReturnType<typeof setTimeout> | undefined
+  let suppressSpyUntil = 0
   const scrollActiveIntoView = (smooth = true) => {
     if (!scrollMode.value) return
     const pg = store.pages[store.activePageIndex]
@@ -58,44 +61,64 @@ export function useScrollMode(opts: ScrollModeOptions) {
         smoothScrolling = false
       }, 650)
     }
+    suppressSpyUntil = Date.now() + 700
     block.scrollIntoView({ block: 'nearest', behavior: useSmooth ? 'smooth' : 'auto' })
   }
 
   // Kaydırmalı modda sayfayı yerinde aktifleştir (görünüm kaymaz, canlı canvas taşınır).
-  let holdScroll = false
+  // Sayaç: hızlı ardışık aktivasyonlarda tek boolean yutuluyordu (ikinci gezinme
+  // yanlışlıkla kaydırıyor / programatik gezinme kaydıramıyordu).
+  let holdCount = 0
   const activatePageInPlace = (i: number) => {
     if (!scrollMode.value || i === store.activePageIndex) return
-    holdScroll = true
+    holdCount++
     store.goToPage(i)
+  }
+  /** Watcher bir yerinde-aktivasyon jetonu varsa tüketir (kaydırma atlanır). */
+  const takeHoldNav = (): boolean => {
+    if (holdCount > 0) {
+      holdCount--
+      return true
+    }
+    return false
   }
 
   // Scroll bitince en görünür bloğu aktifleştir (sürekli mod beklentisi).
   // Debounce'lu: programatik kaydırma bitince hedef zaten aktif olduğundan no-op olur.
   let scrollTimer: ReturnType<typeof setTimeout> | undefined
+  const runSpy = () => {
+    scrollTimer = undefined
+    if (!scrollMode.value || store.isDrawing || ps.spacePan() || smoothScrolling) return
+    // Programatik kaydırma (uzun smooth dahil) yerleşene kadar spy kapalı;
+    // süre dolmadıysa kalan süreye ertele, ara sayfaya takılma.
+    const wait = suppressSpyUntil - Date.now()
+    if (wait > 0) {
+      if (scrollTimer) clearTimeout(scrollTimer)
+      scrollTimer = setTimeout(runSpy, wait)
+      return
+    }
+    const box = scrollBox.value
+    if (!box) return
+    const br = box.getBoundingClientRect()
+    let best = -1
+    let bestVis = 0
+    for (let i = 0; i < store.pages.length; i++) {
+      const pg = store.pages[i]
+      if (!pg) continue
+      const el = blockEls.get(pg.id)
+      if (!el) continue
+      const r = el.getBoundingClientRect()
+      const vis = Math.max(0, Math.min(r.bottom, br.bottom) - Math.max(r.top, br.top))
+      if (vis > bestVis) {
+        bestVis = vis
+        best = i
+      }
+    }
+    if (best >= 0 && bestVis > 0) activatePageInPlace(best)
+  }
   const onScrollBox = () => {
     if (scrollTimer) clearTimeout(scrollTimer)
-    scrollTimer = setTimeout(() => {
-      scrollTimer = undefined
-      if (!scrollMode.value || store.isDrawing || ps.spacePan() || smoothScrolling) return
-      const box = scrollBox.value
-      if (!box) return
-      const br = box.getBoundingClientRect()
-      let best = -1
-      let bestVis = 0
-      for (let i = 0; i < store.pages.length; i++) {
-        const pg = store.pages[i]
-        if (!pg) continue
-        const el = blockEls.get(pg.id)
-        if (!el) continue
-        const r = el.getBoundingClientRect()
-        const vis = Math.max(0, Math.min(r.bottom, br.bottom) - Math.max(r.top, br.top))
-        if (vis > bestVis) {
-          bestVis = vis
-          best = i
-        }
-      }
-      if (best >= 0 && bestVis > 0) activatePageInPlace(best)
-    }, 150)
+    scrollTimer = setTimeout(runSpy, 150)
   }
 
   // Bloğa tıklama = o sayfada çalışmaya başla. Kaydırmayı bozmamak için
@@ -200,9 +223,6 @@ export function useScrollMode(opts: ScrollModeOptions) {
     toggleScroll,
     resetBlockTap,
     cleanup,
-    getHoldScroll: () => holdScroll,
-    setHoldScroll: (v: boolean) => {
-      holdScroll = v
-    },
+    takeHoldNav,
   }
 }
