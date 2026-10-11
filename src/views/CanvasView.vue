@@ -824,6 +824,18 @@ let pendingTouch: PendingTouch | null = null
 let replayingTap = false
 const TAP_SLOP_SQ = 64 // 8px — blok tap eşiğiyle aynı
 
+// Kaydırmalı-mod native scroll sürüşü (el/Space/orta-tuş/parmak): scrollBox'u
+// doğrudan sürer, boya-pan YOK. viewPan'e dokunulmaz — slot/blok hizası bozulmasın
+// diye scroll modda pan her zaman sıfırdır (store tarafı da sıfırlar/korur).
+const driveScroll = (dx: number, dy: number) => {
+  const box = scrollBox.value
+  if (!box) return
+  if (dx !== 0) box.scrollLeft -= dx
+  if (dy !== 0) box.scrollTop -= dy
+}
+// El/Space/orta-tuş sürüş oturumu (fare/kalem; parmak pendingTouch yolunda).
+let panDrive: { lastX: number; lastY: number } | null = null
+
 const startDraw = (e: PointerEvent) => {
   // iPadOS ilk dokunuşu jest kararı için bekletmesin: olayı en başta sahiplen.
   // (touch-action:none ile birlikte; Apple Pencil hover'ı move tarafında zaten no-op.)
@@ -844,6 +856,7 @@ const startDraw = (e: PointerEvent) => {
     cancelImageGesture()
     cancelPan()
     pendingTouch = null
+    panDrive = null
     if (rafId !== 0) {
       cancelAnimationFrame(rafId)
       rafId = 0
@@ -879,6 +892,18 @@ const startDraw = (e: PointerEvent) => {
     return
   }
   // Space-kaydırma her aracı ezer (pinch sonrası değil); el aracı dokunmayla da kaydırır.
+  // Kaydırmalı modda el/Space/orta-tuş NATIVE scroll sürer (boya-pan YOK).
+  if (scrollMode.value && (ps.spacePan() || store.currentTool === 'hand' || (e.pointerType === 'mouse' && e.button === 1))) {
+    if (e.pointerType === 'mouse' && e.button === 1) e.preventDefault()
+    try {
+      overlayCanvas.value?.setPointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
+    }
+    ps.setActive(e.pointerId)
+    panDrive = { lastX: e.clientX, lastY: e.clientY }
+    return
+  }
   if (ps.spacePan() || store.currentTool === 'hand') {
     panDown(e)
     return
@@ -923,6 +948,11 @@ const draw = (e: PointerEvent) => {
   const step = ps.stepGesture()
   if (step) {
     if (step.scale > 0) store.pinch(step.scale, step.midX, step.midY, step.dx, step.dy)
+    // Kaydırmalı modda saf iki-parmak öteleme native scroll'u sürer (store
+    // boya-pan yapmaz; ölçekli adımın ötelemesi pinch çapasının içindedir).
+    if (scrollMode.value && step.scale === 1 && (step.dx !== 0 || step.dy !== 0)) {
+      driveScroll(step.dx, step.dy)
+    }
     updateHud()
     drawSelectionOverlay()
     return
@@ -941,12 +971,15 @@ const draw = (e: PointerEvent) => {
       if (sx * sx + sy * sy > TAP_SLOP_SQ) t.scrolled = true
     }
     if (t.scrolled) {
-      const box = scrollBox.value
-      if (box) {
-        box.scrollTop -= dy
-        box.scrollLeft -= dx
-      }
+      driveScroll(dx, dy)
     }
+    return
+  }
+  // Kaydırmalı-mod el/Space/orta-tuş sürüşü: native scroll, boya-pan yok.
+  if (panDrive && ps.isActive(e.pointerId)) {
+    driveScroll(e.clientX - panDrive.lastX, e.clientY - panDrive.lastY)
+    panDrive.lastX = e.clientX
+    panDrive.lastY = e.clientY
     return
   }
   if (store.currentTool === 'select') {
@@ -984,6 +1017,13 @@ const endDraw = (e?: PointerEvent) => {
     return
   }
   if (rel.locked) return
+  // Kaydırmalı-mod sürüş oturumu: iş bitmiştir (scroll'du), kilidi bırak.
+  if (panDrive) {
+    panDrive = null
+    ps.clearActive()
+    updateHud(true)
+    return
+  }
   // Kaydırmalı-mod parmak adayı: sürüklendiyse iş bitmiştir (scroll'du, çizim yok).
   // Kımıldamadıysa tap'ti — down olayını replay ile normal araç akışına sok,
   // aşağıdan standart commit yolu devam etsin (nokta/metin/seçim tıkı çalışır).
@@ -1042,6 +1082,7 @@ const endDraw = (e?: PointerEvent) => {
 const cancelDraw = (e?: PointerEvent) => {
   ps.releasePointer(e?.pointerId)
   pendingTouch = null
+  panDrive = null
   if (rafId !== 0) {
     cancelAnimationFrame(rafId)
     rafId = 0

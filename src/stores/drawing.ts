@@ -790,19 +790,11 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (nz !== viewZoom && Number.isFinite(midX) && Number.isFinite(midY)) {
         stashZoomAnchor(midX, midY, Number.isFinite(dx) ? dx : 0, Number.isFinite(dy) ? dy : 0)
         viewZoom = nz
-      } else if (Number.isFinite(dx) && Number.isFinite(dy)) {
-        // Saf iki-parmak kaydırma (ölçek değişmedi): doğrudan pan.
-        viewPanX += dx || 0
-        viewPanY += dy || 0
-        clampPan()
-        repaintBase()
-        clearOverlay()
-        return
-      } else {
-        return
+        syncZoomLabel()
+        scheduleRerender()
       }
-      syncZoomLabel()
-      scheduleRerender()
+      // Saf iki-parmak öteleme: boya-pan YOK — çağıran native scroll'u sürer
+      // (slot/blok hizası için viewPan scroll modda daima sıfırdır).
       return
     }
     if (nz !== viewZoom && Number.isFinite(midX) && Number.isFinite(midY)) {
@@ -2854,13 +2846,19 @@ export const useDrawingStore = defineStore('drawing', () => {
       pdfName.value = file.name
       activePageIndex.value = 0
       clearHistory()
-      selectedIds.value = []
-      activeTextId.value = null
+    selectedIds.value = []
+    activeTextId.value = null
     activeImageId.value = null
-      points.value = []
-      isDrawing.value = false
-      bb = null
-      layoutView()
+    points.value = []
+    isDrawing.value = false
+    bb = null
+    // Kaydırmalı modda boya-pan YOKTUR (gezinti native scroll'undur);
+    // sızan eski pan canlı sayfayı bloktan kaydırırdı — sigorta olarak sıfırla.
+    if (scrollLive) {
+      viewPanX = 0
+      viewPanY = 0
+    }
+    layoutView()
       recountActive()
       repaintBase()
       clearOverlay()
