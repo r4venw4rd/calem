@@ -137,7 +137,10 @@ See [BACKEND.md](BACKEND.md) for detailed architecture and cloud plans.
 
 ## License
 
-Calem is licensed under the **GNU Affero General Public License v3.0 or later**. Copyright ownership and authorship remain with r4venw4rd. If you run a modified version on a server, you must offer the source code to its users (see LICENSE §13).
+Calem is licensed under the **GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)**.
+Copyright (C) 2026 r4venw4rd.
+
+If you run a modified version on a server, you must offer the source code to its users (see [LICENSE](LICENSE) §13).
 
 See [LICENSE](LICENSE) for details.
 
