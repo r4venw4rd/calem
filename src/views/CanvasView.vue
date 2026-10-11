@@ -1421,14 +1421,21 @@ onMounted(() => {
     refreshThumbs,
   )
   // Zoom değişince kaydırmalı yerleşimi yenile (tekli modda etkisiz).
+  // nextTick ŞART: blok genişliği (zoomFactor*100%) DOM'a işlenmeden ölçülürse
+  // slot bir kare bayat kalıyor ve zoom sonrası yerleşim bozuluyordu.
   stopZoomWatch = watch(
     () => store.zoomLabel,
     () => {
       if (!scrollMode.value) return
-      positionSlot()
-      store.resizeCanvas()
-      refreshBlocks()
-      drawSelectionOverlay()
+      nextTick(() => {
+        positionSlot()
+        store.resizeCanvas()
+        refreshBlocks()
+        drawSelectionOverlay()
+        // Zoom blok boylarını değiştirir (offsetTop kayar) — aktif sayfayı
+        // animasyonsuz yerine sabitle, yoksa görünüm zıplamış gibi durur.
+        scrollActiveIntoView(false)
+      })
     },
   )
   // PWA dosya ilişkilendirme: soğuk açılışta slottaki handle + sıcak açılışlar.
