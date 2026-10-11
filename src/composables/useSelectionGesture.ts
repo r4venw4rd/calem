@@ -77,12 +77,19 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
       ctx.stroke()
     }
     if (hasSel) {
-      const bb = selectionBBox(store.strokes, store.selectedIds)
-      if (bb) {
-        const x0 = sx(bb.x0)
-        const y0 = sy(bb.y0)
-        const x1 = sx(bb.x1)
-        const y1 = sy(bb.y1)
+      const bb = selectionBBox(store.activePage.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes), store.selectedIds)
+      const imageBoxes = store.activePage.images.filter((img) => store.selectedIds.includes(img.id))
+      const bounds = imageBoxes.reduce((r, img) => ({
+        x0: Math.min(r?.x0 ?? Infinity, img.x),
+        y0: Math.min(r?.y0 ?? Infinity, img.y),
+        x1: Math.max(r?.x1 ?? -Infinity, img.x + img.w),
+        y1: Math.max(r?.y1 ?? -Infinity, img.y + img.h),
+      }), bb)
+      if (bounds) {
+        const x0 = sx(bounds.x0)
+        const y0 = sy(bounds.y0)
+        const x1 = sx(bounds.x1)
+        const y1 = sy(bounds.y1)
         ctx.strokeStyle = '#6366f1'
         ctx.setLineDash([6, 4])
         ctx.beginPath()
@@ -100,7 +107,17 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
   }
 
   const selInside = (p: { x: number; y: number }): boolean => {
-    const bb = selectionBBox(store.strokes, store.selectedIds)
+    const raw = selectionBBox(store.activePage.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes), store.selectedIds)
+    let bb = raw ? { ...raw } : null
+    for (const img of store.activePage.images) {
+      if (!store.selectedIds.includes(img.id)) continue
+      if (bb) {
+        bb.x0 = Math.min(bb.x0, img.x)
+        bb.y0 = Math.min(bb.y0, img.y)
+        bb.x1 = Math.max(bb.x1, img.x + img.w)
+        bb.y1 = Math.max(bb.y1, img.y + img.h)
+      } else return p.x >= img.x && p.x <= img.x + img.w && p.y >= img.y && p.y <= img.y + img.h
+    }
     if (!bb) return false
     return p.x >= bb.x0 && p.x <= bb.x1 && p.y >= bb.y0 && p.y <= bb.y1
   }
@@ -122,7 +139,12 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
       selActive = true
     } else {
       // 2. Bir nesneye (örneğin üçgen, çizgi, şekil) doğrudan tıklandı mı?
-      const hitId = strokeAtPoint(store.strokes, p.x, p.y)
+      const layers = store.activePage.layers.filter((layer) => layer.visible)
+      const hitStroke = strokeAtPoint(layers.slice().reverse().flatMap((layer) => layer.strokes), p.x, p.y)
+      const hitImage = [...store.activePage.images].reverse().find((img) =>
+        p.x >= img.x && p.x <= img.x + img.w && p.y >= img.y && p.y <= img.y + img.h,
+      )
+      const hitId = hitStroke ?? hitImage?.id ?? null
       if (hitId) {
         store.selectedIds = [hitId]
         selMoving = true
@@ -178,6 +200,7 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
     if (selMoving) {
       selMoving = false
       selLast = null
+      if (selHistOpen) store.scheduleSave()
     } else if (selPoly) {
       const poly = selPoly
       selPoly = null

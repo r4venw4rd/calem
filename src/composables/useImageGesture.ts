@@ -98,9 +98,9 @@ export function useImageGesture(options: UseImageGestureOptions) {
           imgMoving = true
           imgMoveId = imgDownHit
           imgMoveLast = p
-          store.pushHistory()
         }
-      } else if (imgMoving && imgMoveId && imgMoveLast) {
+      }
+      if (imgMoving && imgMoveId && imgMoveLast) {
         store.moveImage(imgMoveId, p.x - imgMoveLast.x, p.y - imgMoveLast.y)
         imgMoveLast = p
       }
@@ -115,6 +115,8 @@ export function useImageGesture(options: UseImageGestureOptions) {
     cancelImageGesture()
     ps.clearActive()
     if (wasMoving) {
+      store.scheduleSave()
+      store.endHistoryGroup()
       updateHud(true)
       return
     }

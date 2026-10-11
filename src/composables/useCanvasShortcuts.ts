@@ -251,7 +251,10 @@ export function useCanvasShortcuts(opts: CanvasShortcutsOptions) {
   const onKeyUp = (e: KeyboardEvent) => {
     if (e.key === ' ') ps.setSpacePan(false)
     // Ok bırakılınca dürtme grubunu kapat — sonraki dürtme ayrı undo olsun.
-    if (e.key.startsWith('Arrow')) store.endHistoryGroup()
+    if (e.key.startsWith('Arrow')) {
+      store.endHistoryGroup()
+      store.scheduleSave()
+    }
   }
 
   return { onKeyDown, onKeyUp }

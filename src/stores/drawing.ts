@@ -30,6 +30,7 @@ import {
   expandRect,
   rectAround,
   rectsOverlap,
+  normRect,
   selectByLasso as selByLasso,
   selectByRect as selByRect,
   strokeBBox,
@@ -920,33 +921,53 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   // Alan seçimi: sayfa-uzayı koordinatlarla çağrılır (getPos çıktısı).
   const selectRectArea = (a: { x: number; y: number }, b: { x: number; y: number }): number => {
-    selectedIds.value = selByRect(activeLayer.value.strokes, a, b)
+    const r = normRect(a.x, a.y, b.x, b.y)
+    const visibleStrokes = activePage.value.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes)
+    selectedIds.value = [
+      ...selByRect(visibleStrokes, a, b),
+      ...activePage.value.images.filter((img) => rectsOverlap(r, { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h })).map((img) => img.id),
+    ]
     return selectedIds.value.length
   }
   const selectLassoArea = (poly: { x: number; y: number }[]): number => {
-    selectedIds.value = selByLasso(activeLayer.value.strokes, poly)
+    const xs = poly.map((p) => p.x)
+    const ys = poly.map((p) => p.y)
+    const box = { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }
+    const visibleStrokes = activePage.value.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes)
+    selectedIds.value = [
+      ...selByLasso(visibleStrokes, poly),
+      ...activePage.value.images.filter((img) => rectsOverlap(box, { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h })).map((img) => img.id),
+    ]
     return selectedIds.value.length
   }
   const selectAll = (): number => {
-    selectedIds.value = activeLayer.value.strokes.map((s) => s.id)
+    selectedIds.value = [...activePage.value.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes.map((s) => s.id)), ...activePage.value.images.map((img) => img.id)]
     return selectedIds.value.length
   }
   // Seçiliyi sil: yapısal op — redo ölür, base baştan boyanır, autosave kuyruğa girer.
   const deleteSelected = (): number => {
     if (selectedIds.value.length === 0) return 0
     const set = new Set(selectedIds.value)
-    const before = activeLayer.value.strokes.length
+    let removed = 0
+    const removedImages = activePage.value.images.filter((img) => set.has(img.id))
     pushHistory()
-    activeLayer.value.strokes = activeLayer.value.strokes.filter((s) => !set.has(s.id))
-    const removed = before - activeLayer.value.strokes.length
+    for (const img of removedImages) brushDirty({ x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h })
+    queueFileDeletes(removedImages.map((img) => img.fileId))
+    for (const layer of activePage.value.layers) {
+      const before = layer.strokes.length
+      layer.strokes = layer.strokes.filter((s) => !set.has(s.id))
+      removed += before - layer.strokes.length
+    }
+    activePage.value.images = activePage.value.images.filter((img) => !set.has(img.id))
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
     recountActive()
-    repaintBase()
+    if (removedImages.length) scheduleEraseRepaint()
+    else repaintBase()
     clearOverlay()
     scheduleSave()
-    return removed
+    return removed + removedImages.length
   }
   // Seçiliyi ötele (sayfa-uzayı delta): şekli bozmamak için delta, seçim kutusu
   // sayfada kalacak şekilde kelepçelenir, tüm noktalara AYNI delta uygulanır.
@@ -956,13 +977,20 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (selectedIds.value.length === 0) return false
     const set = new Set(selectedIds.value)
     const size = activePage.value.size
+    const movedStrokes = activePage.value.layers.flatMap((layer) => layer.strokes).filter((s) => set.has(s.id))
     let x0 = Infinity
     let y0 = Infinity
     let x1 = -Infinity
     let y1 = -Infinity
     let count = 0
-    for (const s of activeLayer.value.strokes) {
-      if (!set.has(s.id)) continue
+    const movedImages = activePage.value.images.filter((img) => set.has(img.id))
+    for (const img of movedImages) {
+      x0 = Math.min(x0, img.x)
+      y0 = Math.min(y0, img.y)
+      x1 = Math.max(x1, img.x + img.w)
+      y1 = Math.max(y1, img.y + img.h)
+    }
+    for (const s of movedStrokes) {
       for (const p of s.points) {
         if (p.x < x0) x0 = p.x
         if (p.y < y0) y0 = p.y
@@ -971,46 +999,53 @@ export const useDrawingStore = defineStore('drawing', () => {
         count++
       }
     }
-    if (count === 0) {
+    if (count === 0 && movedImages.length === 0) {
       selectedIds.value = []
       return false
     }
     dx = Math.min(size.w - x1, Math.max(-x0, dx))
     dy = Math.min(size.h - y1, Math.max(-y0, dy))
     if (!dx && !dy) return false
-    for (const s of activeLayer.value.strokes) {
-      if (!set.has(s.id)) continue
+    const oldBounds = { x0, y0, x1, y1 }
+    for (const s of movedStrokes) {
       for (const p of s.points) {
         p.x += dx
         p.y += dy
       }
     }
-    // Seçim korunur (zincir taşıma için). History: sürüklemede component başta açar,
-    // nudge'ta component önce iter — burada kayıt YOK (tur başına tek kayıt).
+    for (const img of movedImages) {
+      img.x += dx
+      img.y += dy
+    }
+    // Seçim korunur (zincir taşıma için).
     recountActive()
-    repaintBase()
-    scheduleSave()
+    brushDirty(oldBounds)
+    brushDirty({ x0: oldBounds.x0 + dx, y0: oldBounds.y0 + dy, x1: oldBounds.x1 + dx, y1: oldBounds.y1 + dy })
+    scheduleEraseRepaint()
     return true
   }
   // Pano: sayfalar-arası çalışır, içerik idsiz saklanır (yapıştırma yeni id verir).
   // Reaktivite dışı; buton durumu için sayacı ayrıca senkronlanır.
-  let clipboard: Omit<Stroke, 'id'>[] = []
+  let clipboard: { strokes: Omit<Stroke, 'id'>[]; images: Omit<ImageItem, 'id'>[] } = { strokes: [], images: [] }
   const clipboardCount = ref(0)
   const copySelected = (): number => {
     if (selectedIds.value.length === 0) return 0
     const set = new Set(selectedIds.value)
-    clipboard = activeLayer.value.strokes
-      .filter((s) => set.has(s.id))
-      .map((s) => ({
+    clipboard = {
+      strokes: activePage.value.layers.flatMap((layer) => layer.strokes)
+        .filter((s) => set.has(s.id))
+        .map((s) => ({
         tool: s.tool,
         color: s.color,
         width: s.width,
         dash: s.dash,
         opacity: s.opacity,
         points: s.points.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
-      }))
-    clipboardCount.value = clipboard.length
-    return clipboard.length
+        })),
+      images: activePage.value.images.filter((img) => set.has(img.id)).map(({ id: _id, ...img }) => ({ ...img })),
+    }
+    clipboardCount.value = clipboard.strokes.length + clipboard.images.length
+    return clipboardCount.value
   }
   const cutSelected = (): number => {
     const n = copySelected()
@@ -1021,14 +1056,14 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Yapıştırma hafif ötelenir (üst üste binmesin), kutu sayfada kalır.
   // Yapışanlar seçili gelir (zincir taşıma/yapıştırma için). Redo ölür.
   const pasteClipboard = (dx = 12, dy = 12): number => {
-    if (clipboard.length === 0) return 0
+    if (clipboardCount.value === 0) return 0
     if (!Number.isFinite(dx) || !Number.isFinite(dy)) return 0
     const size = activePage.value.size
     let x0 = Infinity
     let y0 = Infinity
     let x1 = -Infinity
     let y1 = -Infinity
-    for (const s of clipboard) {
+    for (const s of clipboard.strokes) {
       for (const p of s.points) {
         if (p.x < x0) x0 = p.x
         if (p.y < y0) y0 = p.y
@@ -1036,10 +1071,16 @@ export const useDrawingStore = defineStore('drawing', () => {
         if (p.y > y1) y1 = p.y
       }
     }
+    for (const img of clipboard.images) {
+      x0 = Math.min(x0, img.x)
+      y0 = Math.min(y0, img.y)
+      x1 = Math.max(x1, img.x + img.w)
+      y1 = Math.max(y1, img.y + img.h)
+    }
     if (!Number.isFinite(x0) || !Number.isFinite(y0)) return 0
     dx = Math.min(size.w - x1, Math.max(-x0, dx))
     dy = Math.min(size.h - y1, Math.max(-y0, dy))
-    const pasted: Stroke[] = clipboard.map((s) => ({
+    const pasted: Stroke[] = clipboard.strokes.map((s) => ({
       id: newStrokeId(),
       tool: s.tool,
       color: s.color,
@@ -1048,15 +1089,17 @@ export const useDrawingStore = defineStore('drawing', () => {
       opacity: s.opacity,
       points: s.points.map((p) => ({ x: p.x + dx, y: p.y + dy, pressure: p.pressure })),
     }))
-    if (pasted.length === 0) return 0
+    if (pasted.length === 0 && clipboard.images.length === 0) return 0
     pushHistory()
     for (const s of pasted) activeLayer.value.strokes.push(s)
-    selectedIds.value = pasted.map((s) => s.id)
+    const pastedImages = clipboard.images.map((img) => ({ ...img, id: newStrokeId(), x: img.x + dx, y: img.y + dy }))
+    activePage.value.images.push(...pastedImages)
+    selectedIds.value = [...pasted.map((s) => s.id), ...pastedImages.map((img) => img.id)]
     recountActive()
     repaintBase()
     clearOverlay()
     scheduleSave()
-    return pasted.length
+    return pasted.length + pastedImages.length
   }
 
   // --- Metin kutuları (Faz 4): aktif sayfa kapsamlı, stroke seçiminden bağımsız ---
@@ -1182,10 +1225,16 @@ export const useDrawingStore = defineStore('drawing', () => {
     const nx = Math.min(size.w - 8, Math.max(-img.w + 8, img.x + dx))
     const ny = Math.min(size.h - 8, Math.max(-img.h + 8, img.y + dy))
     if (nx === img.x && ny === img.y) return false
+    if (lastPushKey !== 'image-drag') {
+      pushHistory()
+      lastPushKey = 'image-drag'
+    }
+    const old = { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h }
     img.x = nx
     img.y = ny
-    repaintBase()
-    scheduleSave()
+    brushDirty(old)
+    brushDirty({ x0: nx, y0: ny, x1: nx + img.w, y1: ny + img.h })
+    scheduleEraseRepaint()
     return true
   }
   const resizeImage = (id: string, w: number, h: number): boolean => {
@@ -1206,15 +1255,19 @@ export const useDrawingStore = defineStore('drawing', () => {
     const img = activePage.value.images.find((x) => x.id === id)
     if (!img) return false
     pushHistory()
-    activePage.value.images = activePage.value.images.filter((t) => t.id !== id)
+    activePage.value.images.splice(activePage.value.images.findIndex((t) => t.id === id), 1)
+    queueFileDeletes([img.fileId])
     if (activeImageId.value === id) activeImageId.value = null
     // Bytes SİLİNMEZ: undo referansı geri getirebilir (tekil silinti yetimleri IDB'de kalır).
     recountActive()
-    repaintBase()
+    brushDirty({ x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h })
+    scheduleEraseRepaint()
     clearOverlay()
     scheduleSave()
     return true
   }
+
+
 
   // --- Resim import pipeline: dosya → decode → cap → IDB → sayfaya yerleştir ---
   // Bitmap cap'i: config/engine (IMAGE_MAX_DIM, oran korunur).
@@ -1379,6 +1432,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (!l) return false
     pushHistory()
     l.visible = !l.visible
+    if (!l.visible) selectedIds.value = selectedIds.value.filter((sid) => !l.strokes.some((s) => s.id === sid))
     repaintBase()
     scheduleSave()
     return true
@@ -1779,19 +1833,37 @@ export const useDrawingStore = defineStore('drawing', () => {
         return true
       }
     }
-    const arr = activeLayer.value.strokes
-    for (let i = arr.length - 1; i >= 0; i--) {
-      const s = arr[i]!
-      if (s.tool === 'eraser') continue
-      const bb = strokeBBox(s)
-      if (!bb) continue
-      if (x < bb.x0 || x > bb.x1 || y < bb.y0 || y > bb.y1) continue
-      noteEraseMutation()
-      brushDirty(bb)
-      const [gone] = arr.splice(i, 1)
-      if (selectedIds.value.includes(gone!.id)) {
-        selectedIds.value = selectedIds.value.filter((id) => id !== gone!.id)
+    const visibleLayers = activePage.value.layers.filter((layer) => layer.visible)
+    let hitStroke: { layer: Layer; stroke: Stroke } | null = null
+    for (let li = visibleLayers.length - 1; li >= 0; li--) {
+      const layer = visibleLayers[li]!
+      for (let i = layer.strokes.length - 1; i >= 0; i--) {
+        const stroke = layer.strokes[i]!
+        const bb = strokeBBox(stroke)
+        if (stroke.tool !== 'eraser' && bb && x >= bb.x0 && x <= bb.x1 && y >= bb.y0 && y <= bb.y1 && polylineHitsCircle(stroke.points, x, y, eraseRadius())) {
+          hitStroke = { layer, stroke }
+          break
+        }
       }
+      if (hitStroke) break
+    }
+    const hitImage = imageAt(x, y)
+    const imgBox = hitImage && { x0: hitImage.x, y0: hitImage.y, x1: hitImage.x + hitImage.w, y1: hitImage.y + hitImage.h }
+    const imageHit = imgBox && x >= imgBox.x0 && x <= imgBox.x1 && y >= imgBox.y0 && y <= imgBox.y1
+    if (hitImage && (imageHit || !hitStroke)) {
+      noteEraseMutation()
+      const images = activePage.value.images
+      images.splice(images.findIndex((img) => img.id === hitImage.id), 1)
+      queueFileDeletes([hitImage.fileId])
+      if (activeImageId.value === hitImage.id) activeImageId.value = null
+      brushDirty(imgBox!)
+      return true
+    }
+    if (hitStroke) {
+      noteEraseMutation()
+      brushDirty(strokeBBox(hitStroke.stroke)!)
+      hitStroke.layer.strokes.splice(hitStroke.layer.strokes.indexOf(hitStroke.stroke), 1)
+      selectedIds.value = selectedIds.value.filter((id) => id !== hitStroke!.stroke.id)
       return true
     }
     return false
@@ -1906,7 +1978,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     erasePath.push({ x: p.x, y: p.y })
   }
   const splitEraseAt = (x: number, y: number, radius: number): boolean => {
-    const layer = activeLayer.value
+    const layers = activePage.value.layers.filter((layer) => layer.visible)
     let touched = false
     const touch = () => {
       if (!touched) {
@@ -1930,9 +2002,22 @@ export const useDrawingStore = defineStore('drawing', () => {
       const [gone] = tarr.splice(i, 1)
       if (activeTextId.value === gone!.id) activeTextId.value = null
     }
+    for (let i = activePage.value.images.length - 1; i >= 0; i--) {
+      const img = activePage.value.images[i]!
+      const nx = Math.min(Math.max(x, img.x), img.x + img.w)
+      const ny = Math.min(Math.max(y, img.y), img.y + img.h)
+      const dx = x - nx
+      const dy = y - ny
+      if (dx * dx + dy * dy > radius * radius) continue
+      touch()
+      brushDirty({ x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h })
+      activePage.value.images.splice(i, 1)
+      queueFileDeletes([img.fileId])
+      if (activeImageId.value === img.id) activeImageId.value = null
+    }
     const keptSel = new Set(selectedIds.value)
     let selChanged = false
-    for (let i = layer.strokes.length - 1; i >= 0; i--) {
+    for (const layer of layers) for (let i = layer.strokes.length - 1; i >= 0; i--) {
       const s = layer.strokes[i]!
       const bb = strokeBBox(s)
       if (!bb) continue
@@ -1980,7 +2065,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // kırıntı eleme tüm daireler uygulandıktan SONRA bir kez yapılır.
   const splitEraseSweep = (path: { x: number; y: number }[], radius: number): boolean => {
     if (path.length === 0) return false
-    const layer = activeLayer.value
+    const layers = activePage.value.layers.filter((layer) => layer.visible)
     let touched = false
     const touch = () => {
       if (!touched) {
@@ -2010,6 +2095,26 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (bucket) bucket.push(c)
       else grid.set(key, [c])
     }
+    for (let i = activePage.value.images.length - 1; i >= 0; i--) {
+      const img = activePage.value.images[i]!
+      const box = { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h }
+      if (!rectsOverlap(box, sweep)) continue
+      let hit = false
+      for (const c of path) {
+        const nx = Math.min(Math.max(c.x, box.x0), box.x1)
+        const ny = Math.min(Math.max(c.y, box.y0), box.y1)
+        if ((c.x - nx) ** 2 + (c.y - ny) ** 2 <= radius * radius) {
+          hit = true
+          break
+        }
+      }
+      if (!hit) continue
+      touch()
+      brushDirty(box)
+      activePage.value.images.splice(i, 1)
+      queueFileDeletes([img.fileId])
+      if (activeImageId.value === img.id) activeImageId.value = null
+    }
     // Metin kutuları parçalanmaz: daire değerse tümden gider.
     const tarr = activePage.value.texts
     for (let i = tarr.length - 1; i >= 0; i--) {
@@ -2036,7 +2141,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     const keptSel = new Set(selectedIds.value)
     let selChanged = false
-    for (let i = layer.strokes.length - 1; i >= 0; i--) {
+    for (const layer of layers) for (let i = layer.strokes.length - 1; i >= 0; i--) {
       const s = layer.strokes[i]!
       const bb = strokeBBox(s)
       if (!bb) continue
@@ -3847,6 +3952,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     getImageData,
     setPressureSensitivity,
     persistNow,
+    scheduleSave,
     pendingSave,
     saveError,
     loadPersisted,
