@@ -325,7 +325,7 @@
       <SettingsPanel :open="showSettings" ref="settingsPanelRef" @close="showSettings = false" @page-layout="onPageLayoutChange" @error="showPdfError" />
 
 
-    <div class="relative flex-1 bg-[var(--page-bg)] min-h-0">
+    <div ref="canvasHost" class="relative flex-1 bg-[var(--page-bg)] min-h-0">
       <!-- Tekli mod: tam-alan canlı canvas. Kaydırmalı mod: statik bloklar + aktif slota yüzen canlı canvas. -->
       <template v-if="!scrollMode">
         <canvas
@@ -607,6 +607,7 @@ import { takeLaunchHandle, onLaunchHandle, type LaunchHandle } from '@/lib/launc
 
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
+const canvasHost = ref<HTMLElement | null>(null)
 const hud = ref<HTMLDivElement | null>(null)
 const showSettings = ref(false)
 const showFile = ref(false)
@@ -1310,13 +1311,13 @@ const togglePresent = async () => {
     }
   }
   await nextTick()
-  scheduleFullscreenResize()
+  scheduleCanvasResize()
 }
 
 // Tarayıcı-Esc ile fullscreen'den çıkılınca sade mod da kapanır.
 const onFullscreenChange = () => {
   if (!document.fullscreenElement && presenting.value) presenting.value = false
-  nextTick(scheduleFullscreenResize)
+  nextTick(scheduleCanvasResize)
 }
 
 // Sekme/app kapanırken IDB'ye flush'lanmamış iş varsa tarayıcı "emin misin"
@@ -1519,23 +1520,16 @@ watch(scrollViewportWidth, () => {
   })
 })
 
-let fullscreenRaf = 0
-let fullscreenResizePass = 0
-const scheduleFullscreenResize = () => {
-  if (fullscreenRaf) cancelAnimationFrame(fullscreenRaf)
-  fullscreenResizePass = 0
-  const resize = () => {
-    fullscreenRaf = 0
-    sizeCanvas()
-    if (++fullscreenResizePass < 3) {
-      fullscreenRaf = requestAnimationFrame(resize)
-    } else {
-      fullscreenResizePass = 0
+let canvasResizeRaf = 0
+let canvasResizeObserver: ResizeObserver | null = null
+const scheduleCanvasResize = () => {
+  if (canvasResizeRaf) cancelAnimationFrame(canvasResizeRaf)
+  canvasResizeRaf = requestAnimationFrame(() => {
+    canvasResizeRaf = 0
+    nextTick(() => {
+      sizeCanvas()
       updateHud(true)
-    }
-  }
-  fullscreenRaf = requestAnimationFrame(() => {
-    nextTick(resize)
+    })
   })
 }
 
@@ -1656,9 +1650,12 @@ onMounted(() => {
   syncIsMobile()
   mobileMq.addEventListener('change', syncIsMobile)
   narrowMq.addEventListener('change', syncIsMobile)
-  window.addEventListener('resize', sizeCanvas)
-  // Mobil URL barı açılıp kapanınca window.resize ateşlenmez; visualViewport yakalar.
-  window.visualViewport?.addEventListener('resize', sizeCanvas)
+  canvasResizeObserver = new ResizeObserver((entries) => {
+    const size = entries[0]?.contentRect
+    if (!size || size.width <= 0 || size.height <= 0) return
+    scheduleCanvasResize()
+  })
+  if (canvasHost.value) canvasResizeObserver.observe(canvasHost.value)
   // Kök yükseklik: dvh desteksiz tarayıcıda 100vh fold altına taşar, alt bar kaybolur.
   // innerHeight/visualViewport her yerde doğru ölçer; mount sonrası JS devralır.
   syncAppHeight()
@@ -1765,8 +1762,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (rafId !== 0) cancelAnimationFrame(rafId)
-  if (fullscreenRaf !== 0) cancelAnimationFrame(fullscreenRaf)
-  fullscreenRaf = 0
+  if (canvasResizeRaf !== 0) cancelAnimationFrame(canvasResizeRaf)
+  canvasResizeRaf = 0
   if (zoomRaf !== 0) cancelAnimationFrame(zoomRaf)
   zoomRaf = 0
   ps.clearActive()
@@ -1804,8 +1801,8 @@ onUnmounted(() => {
   mobileMq = null
   narrowMq?.removeEventListener('change', syncIsMobile)
   narrowMq = null
-  window.removeEventListener('resize', sizeCanvas)
-  window.visualViewport?.removeEventListener('resize', sizeCanvas)
+  canvasResizeObserver?.disconnect()
+  canvasResizeObserver = null
   window.removeEventListener('resize', syncAppHeight)
   window.visualViewport?.removeEventListener('resize', syncAppHeight)
   window.removeEventListener('keydown', onKeyDown)
