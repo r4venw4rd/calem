@@ -41,6 +41,15 @@
         />
         {{ t('touchPan') }}
       </label>
+      <label class="flex items-center gap-2 mt-2 cursor-pointer" :title="t('autoShapeSnapTitle')">
+        <input
+          type="checkbox"
+          :checked="store.autoShapeSnap"
+          @change="store.setAutoShapeSnap(($event.target as HTMLInputElement).checked)"
+          class="accent-indigo-600"
+        />
+        {{ t('autoShapeSnap') }}
+      </label>
     </div>
   </SettingsSection>
 </template>

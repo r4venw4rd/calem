@@ -29,6 +29,7 @@ import { dashFor, effectiveWidth, paintStroke } from '../render/strokes'
 import { wrapTextToWidth } from '../lib/text'
 import { estimateLines, textBBoxOf } from '../lib/text'
 import { fitContain, needsPdfRerender, shapeEndpoints } from '../lib/geometry'
+import { recognizeShape } from '../lib/shapeRecognition'
 import { calemFileName, pdfFileName } from '../config/files'
 import { ALL_TOOLS, DEFAULT_WIDTHS, WIDTH_MAX, WIDTH_MIN } from '../config/tools'
 import { A4, DEFAULT_PAPER_BACKGROUND, PAGE_FORMATS, PAPER_THEMES } from '../config/paper'
@@ -315,6 +316,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         locale: locale.value,
         uiScale: uiScale.value,
         pageStripOpen: pageStripOpen.value,
+        autoShapeSnap: autoShapeSnap.value,
       }
       await storage.setKey(SETTINGS_KEY, doc)
     } catch {
@@ -342,6 +344,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         locale: locale.value,
         uiScale: uiScale.value,
         pageStripOpen: pageStripOpen.value,
+        autoShapeSnap: autoShapeSnap.value,
     }
     return JSON.stringify(doc)
   }
@@ -535,6 +538,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       if (typeof raw.pageStripOpen === 'boolean') {
         pageStripOpen.value = raw.pageStripOpen
+      }
+      if (typeof raw.autoShapeSnap === 'boolean') {
+        autoShapeSnap.value = raw.autoShapeSnap
       }
       applyUiTheme()
       applyLocale()
@@ -1649,6 +1655,33 @@ export const useDrawingStore = defineStore('drawing', () => {
     void persistSettings()
   }
 
+  // Otomatik şekil tanıma: çizim bitiminde kalemi basılı tutunca primitife (çizgi/elips/kutu) kilitlenir.
+  const autoShapeSnap = ref(true)
+  const setAutoShapeSnap = (v: boolean) => {
+    autoShapeSnap.value = v
+    void persistSettings()
+  }
+
+  const activeShapeSnap = ref<{ tool: ShapeTool; points: [Point, Point] } | null>(null)
+  let shapeHoldTimer: ReturnType<typeof setTimeout> | null = null
+
+  const clearShapeHold = () => {
+    if (shapeHoldTimer !== null) {
+      clearTimeout(shapeHoldTimer)
+      shapeHoldTimer = null
+    }
+  }
+
+  const checkShapeHold = () => {
+    if (!isDrawing.value || currentTool.value !== 'pen' || !autoShapeSnap.value) return
+    if (points.value.length < 2) return
+    const recognized = recognizeShape(points.value)
+    if (recognized) {
+      activeShapeSnap.value = { tool: recognized.tool, points: recognized.points }
+      renderActiveStroke()
+    }
+  }
+
   const shouldIgnoreEvent = (e: PointerEvent): boolean => {
     if (rejectTouch.value && e.pointerType === 'touch') return true
     return false
@@ -2188,6 +2221,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       return true
     }
     isDrawing.value = true
+    clearShapeHold()
+    activeShapeSnap.value = null
 
     const { x, y } = getPos(e)
     const size = activePage.value.size
@@ -2314,11 +2349,22 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (y < bb.y0) bb.y0 = y
       else if (y > bb.y1) bb.y1 = y
     }
+    if (autoShapeSnap.value && currentTool.value === 'pen') {
+      clearShapeHold()
+      if (activeShapeSnap.value) {
+        if (activeShapeSnap.value.tool === 'line') {
+          activeShapeSnap.value.points[1] = { x, y, pressure: pressureVal }
+        }
+      } else if (pts.length >= 3) {
+        shapeHoldTimer = setTimeout(checkShapeHold, 420)
+      }
+    }
   }
 
   // ✅ Bitti — stroke'u geçmişe kaydet ve base katmanına bir kez işle (overlay temizlenir).
   // Silgi nokta toplamaz: kes/vuruş oturumlarında points boştur, kayıt oluşmaz.
   const stopDrawing = () => {
+    clearShapeHold()
     // Hızlı silgi: bırakışta gerçek kesimi yol boyunca uygula + tek tam repaint.
     if (fastErase) {
       fastErase = false
@@ -2349,11 +2395,17 @@ export const useDrawingStore = defineStore('drawing', () => {
       return
     }
     if (isDrawing.value && points.value.length > 0) {
+      const snapped = activeShapeSnap.value
       // Şekiller uç-noktayla saklanır (ara noktalar sürükleme artığıdır, export'u şişirmesin).
-      const shapeEnds = isShapeTool(currentTool.value) ? shapeEndpoints(points.value) : null
+      const shapeEnds = snapped
+        ? snapped.points
+        : isShapeTool(currentTool.value)
+          ? shapeEndpoints(points.value)
+          : null
+      const strokeTool = snapped ? snapped.tool : currentTool.value
       const stroke: Stroke = {
         id: newStrokeId(),
-        tool: currentTool.value,
+        tool: strokeTool,
         color: color.value,
         width: strokeWidth.value,
         dash: strokeDash.value,
@@ -2365,6 +2417,7 @@ export const useDrawingStore = defineStore('drawing', () => {
             ]
           : [...points.value],
       }
+      activeShapeSnap.value = null
       // Yeni mürekkep: ÖNCE pre-state kaydı, sonra ekle (undo çizeri geri alır).
       pushHistory()
       activeLayer.value.strokes.push(stroke)
@@ -2383,6 +2436,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     isDrawing.value = false
     points.value = []
+    activeShapeSnap.value = null
     clearOverlay()
     bb = null
   }
@@ -2392,7 +2446,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   const clearOverlay = () => {
     const ctx = getCtx(overlayRef.value)
     if (!ctx) return
-    if (!bb) {
+    if (!bb || activeShapeSnap.value) {
       clearLayer(ctx)
       return
     }
@@ -2606,17 +2660,29 @@ export const useDrawingStore = defineStore('drawing', () => {
     clearOverlay()
     if (isDrawing.value && points.value.length > 0) {
       const paperHex = paperFor(activePage.value)
-      applyView(ctx, () => {
-        paintStroke(
-          ctx,
-          {
+      const strokeToPaint: Stroke = activeShapeSnap.value
+        ? {
+            id: 'preview-snap',
+            tool: activeShapeSnap.value.tool,
+            color: color.value,
+            width: strokeWidth.value,
+            dash: strokeDash.value,
+            opacity: strokeOpacity.value,
+            points: activeShapeSnap.value.points,
+          }
+        : {
+            id: 'preview-active',
             tool: currentTool.value,
             color: color.value,
             width: strokeWidth.value,
             dash: strokeDash.value,
             opacity: strokeOpacity.value,
             points: points.value,
-          },
+          }
+      applyView(ctx, () => {
+        paintStroke(
+          ctx,
+          strokeToPaint,
           paperHex,
           pressureSensitivity.value,
         )
@@ -4090,6 +4156,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     setRejectTouch,
     touchPan,
     setTouchPan,
+    autoShapeSnap,
+    setAutoShapeSnap,
+    activeShapeSnap,
     smoothing,
     setSmoothing,
     strokeDash,
