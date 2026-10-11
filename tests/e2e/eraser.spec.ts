@@ -59,6 +59,37 @@ const meanLuma = (page: Page, r: Rect) =>
     return sum / (img.data.length / 4)
   }, r)
 
+// Bölgenin ortalama alfasi: sayfa DIŞI (letterbox) boyandı mı?
+const meanAlpha = (page: Page, r: Rect) =>
+  page.evaluate((r) => {
+    const canvas = document.querySelectorAll('canvas')[0] as HTMLCanvasElement
+    const ctx = canvas.getContext('2d')!
+    const img = ctx.getImageData(r.x, r.y, r.w, r.h)
+    let sum = 0
+    for (let i = 3; i < img.data.length; i += 4) sum += img.data[i]!
+    return sum / (img.data.length / 4)
+  }, r)
+
+// Bölgede eşiğin üstündeki piksel oranı: kâğıt deseni/çizgi yoğunluğu ölçüsü.
+const brightRatio = (page: Page, r: Rect, threshold = 34) =>
+  page.evaluate(
+    ({ r, threshold }) => {
+      const canvas = document.querySelectorAll('canvas')[0] as HTMLCanvasElement
+      const ctx = canvas.getContext('2d')!
+      const img = ctx.getImageData(r.x, r.y, r.w, r.h)
+      let bright = 0
+      let n = 0
+      for (let i = 0; i < img.data.length; i += 4) {
+        const a = img.data[i + 3]! / 255
+        const l = (img.data[i]! * 0.299 + img.data[i + 1]! * 0.587 + img.data[i + 2]! * 0.114) * a
+        if (l > threshold) bright++
+        n++
+      }
+      return bright / n
+    },
+    { r, threshold },
+  )
+
 // HUD metni: "0.0/16ms e0.0 c0.4 · 4 strokes · 33+33" (reaktivite dışı DOM'a yazılır).
 const hudText = (page: Page) =>
   page.evaluate(() => {
@@ -242,6 +273,130 @@ test('kes-silgi: önizleme nihai değilse (metin var) repaint çalışır ve gö
 
   const textAfter = await meanLuma(page, textRect)
   expect(Math.abs(textAfter - paper), 'metin silindi, zemin temiz').toBeLessThan(5)
+
+  expect(errors, 'konsol/sayfa hatası yok').toEqual([])
+})
+
+test('kes-silgi: önizleme kâğıt dışına taşmaz (kenardan süpürme)', async ({ page }) => {
+  const { info, errors } = await boot(page)
+  const pb = info.bounds
+  const w = pb.x1 - pb.x0
+  const h = pb.y1 - pb.y0
+  const sx = (x: number) => info.rect.left + x / info.scale
+  const sy = (y: number) => info.rect.top + y / info.scale
+
+  const paper = await meanLuma(page, {
+    x: Math.round(pb.x0 + w * 0.2),
+    y: Math.round(pb.y0 + h * 0.08),
+    w: Math.round(w * 0.6),
+    h: Math.round(h * 0.05),
+  })
+
+  // Sayfa kenarına dayanan çizgi (süpürme bunun üstünden geçecek).
+  const yMid = Math.round(pb.y0 + h * 0.45)
+  await page.mouse.move(sx(pb.x0 + 2), sy(yMid))
+  await page.mouse.down()
+  await page.mouse.move(sx(pb.x0 + 260), sy(yMid), { steps: 14 })
+  await page.mouse.up()
+  await expect.poll(async () => parseHud(await hudText(page)).strokes).toBe(1)
+
+  // Şerit içi (kenarda, çizginin üstünde) + şerit dışı + sayfa dışı (letterbox).
+  const bandInk: Rect = { x: pb.x0 + 1, y: yMid - 6, w: 12, h: 12 }
+  const inkAway: Rect = { x: Math.round(pb.x0 + w * 0.25), y: yMid - 6, w: 80, h: 12 }
+  const outsideStrip: Rect = { x: pb.x0 - 40, y: yMid - 60, w: 36, h: 120 }
+  const bandBefore = await meanLuma(page, bandInk)
+  const awayBefore = await meanLuma(page, inkAway)
+  expect(bandBefore, 'kenarda mürekkep var').toBeGreaterThan(paper + 40)
+  expect(awayBefore, 'şerit dışında mürekkep var').toBeGreaterThan(paper + 40)
+  expect(await meanAlpha(page, outsideStrip), 'öncesi: sayfa dışı boş').toBe(0)
+
+  // Kenarın 4px içinden dikey süpürme: fırça yarıçapı (~13px) sayfayı taşar.
+  await page.keyboard.press('e')
+  await page.mouse.move(sx(pb.x0 + 4), sy(yMid - 120))
+  await page.mouse.down()
+  await page.mouse.move(sx(pb.x0 + 4), sy(yMid + 120), { steps: 20 })
+
+  // Sürükleme SIRASINDA: sayfa dışına tek piksel boyanmamalı, şerit içi örtülmeli.
+  const outsideDuring = await meanAlpha(page, outsideStrip)
+  const bandDuring = await meanLuma(page, bandInk)
+  expect(outsideDuring, 'sürükleme sırasında sayfa dışı boyanmadı').toBe(0)
+  expect(bandDuring, 'önizleme şerit içini örttü').toBeLessThan(paper + 12)
+
+  await page.mouse.up()
+  await expect.poll(async () => parseHud(await hudText(page)).cutMs).toBeGreaterThan(0)
+  expect(await meanAlpha(page, outsideStrip), 'bırakış sonrası sayfa dışı boş').toBe(0)
+  expect(parseHud(await hudText(page)).eraseMs, 'boş kâğıtta repaint atlandı').toBe(0)
+
+  // Şerit içi temiz, şerit dışı el değmemiş.
+  expect(await meanLuma(page, bandInk), 'şerit içi mürekkep gitti').toBeLessThan(paper + 12)
+  expect(Math.abs((await meanLuma(page, inkAway)) - awayBefore), 'şerit dışı değişmedi').toBeLessThan(3)
+
+  expect(errors, 'konsol/sayfa hatası yok').toEqual([])
+})
+
+test('kes-silgi: desenli kâğıtta önizleme deseni korur (bant sonradan "kaybolmaz")', async ({
+  page,
+}) => {
+  const { info, errors } = await boot(page)
+  const pb = info.bounds
+  const w = pb.x1 - pb.x0
+  const h = pb.y1 - pb.y0
+  const sx = (x: number) => info.rect.left + x / info.scale
+  const sy = (y: number) => info.rect.top + y / info.scale
+
+  // Ayarlar → kareli kâğıt, en sık aralık (ölçüm sinyali güçlensin).
+  await page.getByTitle('Settings').click()
+  await page.getByTitle('Paper pattern').selectOption('graph')
+  await page.getByTitle('Spacing').evaluate((el) => {
+    const input = el as HTMLInputElement
+    input.value = input.min
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await page.mouse.click(8, 8) // backdrop → kapat
+  await expect(page.getByTitle('Paper pattern')).toBeHidden()
+
+  const yMid = Math.round(pb.y0 + h * 0.5)
+  const sweepX = Math.round(pb.x0 + w * 0.35)
+  const sweepTop = Math.round(pb.y0 + h * 0.25)
+  const sweepBottom = Math.round(pb.y0 + h * 0.72)
+  // Bant bölgesi: süpürmenin içinde ama çizginin ÜSTÜNDE (mürekkeksiz, desenli alan).
+  const bandPattern: Rect = { x: sweepX - 10, y: sweepTop + 20, w: 20, h: yMid - sweepTop - 60 }
+  // Bant içinde çizginin üstü: önizlemenin gerçekten boyadığının kanıtı.
+  const bandInk: Rect = { x: sweepX - 16, y: yMid - 6, w: 32, h: 12 }
+  const outsideStrip: Rect = { x: pb.x0 - 40, y: sweepTop, w: 36, h: sweepBottom - sweepTop }
+
+  // Çizgi süpürmenin ortasından geçsin (kesim iki parça üretsin).
+  await page.mouse.move(sx(Math.round(pb.x0 + w * 0.2)), sy(yMid))
+  await page.mouse.down()
+  await page.mouse.move(sx(Math.round(pb.x0 + w * 0.8)), sy(yMid), { steps: 14 })
+  await page.mouse.up()
+  await expect.poll(async () => parseHud(await hudText(page)).strokes).toBe(1)
+
+  const patternBefore = await brightRatio(page, bandPattern)
+  const bandInkBefore = await meanLuma(page, bandInk)
+  expect(patternBefore, 'desen boyandı').toBeGreaterThan(0.05)
+  expect(bandInkBefore, 'şeritte çizgi var').toBeGreaterThan(60)
+
+  await page.keyboard.press('e')
+  await page.mouse.move(sx(sweepX), sy(sweepTop))
+  await page.mouse.down()
+  await page.mouse.move(sx(sweepX), sy(sweepBottom), { steps: 20 })
+
+  // Sürükleme sırasında: şeritteki mürekkep örtülmüş VE desen korunmuş olmalı
+  // (aksi halde bant kâğıt rengiyle boyanıp bırakışta "kayboluyor" gibi görünür).
+  const inkDuring = await meanLuma(page, bandInk)
+  const patternDuring = await brightRatio(page, bandPattern)
+  expect(inkDuring, 'önizleme şeritteki mürekkebi örttü').toBeLessThan(bandInkBefore - 40)
+  expect(patternDuring, 'sürükleme sırasında desen korundu').toBeGreaterThan(patternBefore * 0.5)
+  expect(await meanAlpha(page, outsideStrip), 'sayfa dışı boyanmadı').toBe(0)
+
+  await page.mouse.up()
+  await expect.poll(async () => parseHud(await hudText(page)).strokes).toBe(2)
+  // Desen var → önizleme nihai sayılmaz, repaint çalışır (görüntü yine doğru).
+  expect(parseHud(await hudText(page)).eraseMs, 'desenli kâğıtta repaint çalıştı').toBeGreaterThan(0)
+  const patternAfter = await brightRatio(page, bandPattern)
+  expect(patternAfter, 'bırakış sonrası desen yerinde').toBeGreaterThan(patternBefore * 0.5)
+  expect(await meanAlpha(page, outsideStrip), 'bırakış sonrası sayfa dışı boş').toBe(0)
 
   expect(errors, 'konsol/sayfa hatası yok').toEqual([])
 })
