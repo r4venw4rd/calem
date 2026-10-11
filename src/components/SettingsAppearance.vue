@@ -68,6 +68,9 @@
         <option value="graph">{{ t('graph') }}</option>
         <option value="dotted">{{ t('dottedBg') }}</option>
         <option value="staff">{{ t('staff') }}</option>
+        <option value="isometric">{{ t('isometric') }}</option>
+        <option value="cornell">{{ t('cornell') }}</option>
+        <option value="planner">{{ t('planner') }}</option>
       </select>
       <input
         type="color"

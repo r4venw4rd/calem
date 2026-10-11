@@ -3,9 +3,12 @@ import { computed, ref, shallowRef } from 'vue'
 import { storage, SETTINGS_KEY, type ImageFileRecord, type PersistedDoc } from '../lib/idb'
 import {
   cleanPaperBackground,
+  cornellLayout,
   dottedPoints,
   graphLineXs,
+  isometricLines,
   marginLineX,
+  plannerLayout,
   ruledLineYs,
   staffLineYs,
   type PaperBackground,
@@ -2528,6 +2531,82 @@ export const useDrawingStore = defineStore('drawing', () => {
       for (const group of staffLineYs(h, bg.spacing)) {
         for (const y of group) hline(y, 0.9)
       }
+    } else if (bg.type === 'isometric') {
+      ctx.lineWidth = 0.5
+      for (const line of isometricLines(w, h, bg.spacing)) {
+        ctx.beginPath()
+        ctx.moveTo(line.x1, line.y1)
+        ctx.lineTo(line.x2, line.y2)
+        ctx.stroke()
+      }
+    } else if (bg.type === 'cornell') {
+      const cl = cornellLayout(w, h, bg.spacing)
+      if (cl) {
+        // Ana ayırıcılar (daha belirgin)
+        ctx.lineWidth = 1.2
+        // Üst başlık çizgisi
+        ctx.beginPath()
+        ctx.moveTo(0, cl.headerY)
+        ctx.lineTo(w, cl.headerY)
+        ctx.stroke()
+        // Dikey cue sütun çizgisi
+        ctx.beginPath()
+        ctx.moveTo(cl.cueX, cl.headerY)
+        ctx.lineTo(cl.cueX, cl.summaryY)
+        ctx.stroke()
+        // Alt özet çizgisi
+        ctx.beginPath()
+        ctx.moveTo(0, cl.summaryY)
+        ctx.lineTo(w, cl.summaryY)
+        ctx.stroke()
+
+        // Not satırları (ince)
+        ctx.lineWidth = 0.6
+        for (const r of cl.ruledLines) {
+          ctx.beginPath()
+          ctx.moveTo(r.x1, r.y)
+          ctx.lineTo(r.x2, r.y)
+          ctx.stroke()
+        }
+      }
+    } else if (bg.type === 'planner') {
+      const pl = plannerLayout(w, h, bg.spacing)
+      if (pl) {
+        // Üst başlık ayrımı
+        ctx.lineWidth = 1.2
+        ctx.beginPath()
+        ctx.moveTo(0, pl.headerY)
+        ctx.lineTo(w, pl.headerY)
+        ctx.stroke()
+
+        // Sağ yan sütun varsa
+        if (pl.sideColX !== null) {
+          ctx.beginPath()
+          ctx.moveTo(pl.sideColX, pl.headerY)
+          ctx.lineTo(pl.sideColX, h)
+          ctx.stroke()
+        }
+
+        // Satırlar ve sol kutucuklar
+        for (let i = 0; i < pl.ruledLines.length; i++) {
+          const y = pl.ruledLines[i]
+          const boxX = pl.checkboxXs[i]
+          if (y === undefined || boxX === undefined) continue
+          ctx.lineWidth = 0.6
+          ctx.beginPath()
+          ctx.moveTo(0, y)
+          ctx.lineTo(w, y)
+          ctx.stroke()
+
+          // Checkbox kutusu (kare, kenar uzunluğu 8pt, satırın üstünde)
+          const boxSize = Math.min(10, Math.max(6, Math.round(bg.spacing * 0.45)))
+          const boxY = y - boxSize - 3
+          if (boxY > pl.headerY) {
+            ctx.lineWidth = 0.9
+            ctx.strokeRect(boxX, boxY, boxSize, boxSize)
+          }
+        }
+      }
     }
     if (bg.margin) {
       const mx = marginLineX(w)
@@ -3036,6 +3115,48 @@ export const useDrawingStore = defineStore('drawing', () => {
         doc.setLineWidth(0.9)
         for (const group of staffLineYs(h, bg.spacing)) {
           for (const y of group) doc.line(0, y, w, y)
+        }
+      } else if (bg.type === 'isometric') {
+        doc.setLineWidth(0.5)
+        for (const line of isometricLines(w, h, bg.spacing)) {
+          doc.line(line.x1, line.y1, line.x2, line.y2)
+        }
+      } else if (bg.type === 'cornell') {
+        const cl = cornellLayout(w, h, bg.spacing)
+        if (cl) {
+          doc.setLineWidth(1.2)
+          doc.line(0, cl.headerY, w, cl.headerY)
+          doc.line(cl.cueX, cl.headerY, cl.cueX, cl.summaryY)
+          doc.line(0, cl.summaryY, w, cl.summaryY)
+
+          doc.setLineWidth(0.6)
+          for (const r of cl.ruledLines) {
+            doc.line(r.x1, r.y, r.x2, r.y)
+          }
+        }
+      } else if (bg.type === 'planner') {
+        const pl = plannerLayout(w, h, bg.spacing)
+        if (pl) {
+          doc.setLineWidth(1.2)
+          doc.line(0, pl.headerY, w, pl.headerY)
+          if (pl.sideColX !== null) {
+            doc.line(pl.sideColX, pl.headerY, pl.sideColX, h)
+          }
+
+          for (let i = 0; i < pl.ruledLines.length; i++) {
+            const y = pl.ruledLines[i]
+            const boxX = pl.checkboxXs[i]
+            if (y === undefined || boxX === undefined) continue
+            doc.setLineWidth(0.6)
+            doc.line(0, y, w, y)
+
+            const boxSize = Math.min(10, Math.max(6, Math.round(bg.spacing * 0.45)))
+            const boxY = y - boxSize - 3
+            if (boxY > pl.headerY) {
+              doc.setLineWidth(0.9)
+              doc.rect(boxX, boxY, boxSize, boxSize)
+            }
+          }
         }
       }
       if (bg.margin) {

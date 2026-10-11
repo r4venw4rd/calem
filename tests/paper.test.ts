@@ -1,20 +1,32 @@
 import { describe, expect, it } from 'vitest'
 import {
   cleanPaperBackground,
+  cornellLayout,
   DEFAULT_PAPER_BACKGROUND,
   dottedPoints,
   graphLineXs,
+  isometricLines,
   isPaperBackgroundType,
   marginLineX,
   PAPER_SPACING_MAX,
   PAPER_SPACING_MIN,
+  plannerLayout,
   ruledLineYs,
   staffLineYs,
 } from '../src/lib/paper'
 
 describe('isPaperBackgroundType', () => {
   it('gecerli tipleri kabul eder', () => {
-    for (const t of ['blank', 'ruled', 'graph', 'dotted', 'staff']) {
+    for (const t of [
+      'blank',
+      'ruled',
+      'graph',
+      'dotted',
+      'staff',
+      'isometric',
+      'cornell',
+      'planner',
+    ]) {
       expect(isPaperBackgroundType(t)).toBe(true)
     }
   })
@@ -44,6 +56,7 @@ describe('cleanPaperBackground', () => {
   })
   it('tipi korur, bilinmeyeni blank yapar', () => {
     expect(cleanPaperBackground({ type: 'graph' }).type).toBe('graph')
+    expect(cleanPaperBackground({ type: 'cornell' }).type).toBe('cornell')
     expect(cleanPaperBackground({ type: 'x' }).type).toBe('blank')
   })
 })
@@ -70,5 +83,24 @@ describe('geometri', () => {
   it('marginLineX dar sayfada yok', () => {
     expect(marginLineX(100)).toBeNull()
     expect(marginLineX(595)).toBe(72)
+  })
+  it('isometricLines uretir', () => {
+    const lines = isometricLines(595, 842, 28)
+    expect(lines.length).toBeGreaterThan(20)
+    expect(isometricLines(0, 0, 28)).toEqual([])
+  })
+  it('cornellLayout bolumleri kurar', () => {
+    const cl = cornellLayout(595, 842, 28)
+    expect(cl).not.toBeNull()
+    expect(cl?.cueX).toBe(Math.round(595 * 0.3))
+    expect(cl?.ruledLines.length).toBeGreaterThan(5)
+    expect(cornellLayout(50, 50, 28)).toBeNull()
+  })
+  it('plannerLayout bolumleri kurar', () => {
+    const pl = plannerLayout(595, 842, 28)
+    expect(pl).not.toBeNull()
+    expect(pl?.checkboxXs.length).toBe(pl?.ruledLines.length)
+    expect(pl?.sideColX).toBe(595 - 80)
+    expect(plannerLayout(50, 50, 28)).toBeNull()
   })
 })
