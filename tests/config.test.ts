@@ -34,10 +34,12 @@ import {
   PDF_ACCEPT,
   SERVICE_WORKER_PATH,
   SETTINGS_ACCEPT,
+  XOPP_ACCEPT,
   calemFileName,
   pdfFileName,
   pngFileName,
   settingsBackupName,
+  xoppFileName,
 } from '../src/config/files'
 import { SLIDERS } from '../src/config/ui'
 
@@ -162,12 +164,14 @@ describe('files', () => {
     expect(settingsBackupName(d)).toBe('calem-ayarlar-2026-10-09.json')
     expect(pdfFileName(d)).toBe('calem-2026-10-09.pdf')
     expect(calemFileName(d)).toBe('calem-2026-10-09.calem')
+    expect(xoppFileName(d)).toBe('calem-2026-10-09.xopp')
   })
   it('accept filtreleri', () => {
     expect(PDF_ACCEPT).toContain('.pdf')
     expect(IMAGE_ACCEPT).toContain('image/*')
     expect(SETTINGS_ACCEPT).toContain('.json')
     expect(CALEM_ACCEPT).toContain('.calem')
+    expect(XOPP_ACCEPT).toContain('.xopp')
   })
   it('sw yolu', () => {
     expect(SERVICE_WORKER_PATH).toBe('/service-worker.js')
