@@ -49,3 +49,9 @@ export const B64_CHUNK = 0x8000
 
 /** PDF arkaplan JPEG kalitesi. */
 export const JPEG_QUALITY = 0.9
+
+/** Backing-store tavanı: canvas alan/kenar limiti aşılırsa DPR düşürülür.
+/// 64M px alan + 8192 px kenar: 4K DPR2 fullscreen net kalır, GB'lık zoom
+/// canvas'ları (donma/boş sayfa) budanır. Bozuk canvas'tansa hafif blur. */
+export const BACKING_MAX_AREA = 67_108_864
+export const BACKING_MAX_SIDE = 8192

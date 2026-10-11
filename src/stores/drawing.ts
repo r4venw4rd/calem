@@ -38,6 +38,7 @@ import {
   type NormRect,
 } from '../lib/select'
 import { dropTinyRuns, polylineHitsCircle, splitRunsOutside } from '../lib/erase'
+import { capBackingScale } from '../lib/canvasLimits'
 import {
   newStrokeId,
   newPageId,
@@ -1686,16 +1687,16 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   const getDPR = () => Math.min(window.devicePixelRatio || 1, DPR_CAP)
 
-  // Backing store'u CSS boyut x DPR yap. Boyut değiştiyse true döner.
+  // Backing store'u CSS boyut x DPR yap (canvas limitlerine cap'li). Boyut değiştiyse true döner.
   const setupBackingStoreFor = (canvas: HTMLCanvasElement | null): boolean => {
     if (!canvas) return false
     const w = canvas.clientWidth
     const h = canvas.clientHeight
     if (w === 0 || h === 0) return false
-    const scale = getDPR()
+    const scale = capBackingScale(w, h, getDPR())
     dpr.value = scale
-    const bw = Math.round(w * scale)
-    const bh = Math.round(h * scale)
+    const bw = Math.max(1, Math.round(w * scale))
+    const bh = Math.max(1, Math.round(h * scale))
     if (canvas.width !== bw || canvas.height !== bh) {
       canvas.width = bw
       canvas.height = bh
@@ -2671,6 +2672,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     const { w, h } = page.size
     if (!(w > 0 && h > 0)) return null
     if (!Number.isFinite(scale) || scale <= 0) return null
+    // Dev sayfa + yüksek ölçekte canvas limiti: boş çıktı yerine cap'li ölçek.
+    scale = capBackingScale(w, h, scale)
     const canvas = document.createElement('canvas')
     canvas.width = Math.max(1, Math.round(w * scale))
     canvas.height = Math.max(1, Math.round(h * scale))
