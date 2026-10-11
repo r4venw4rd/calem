@@ -102,6 +102,7 @@ export interface AppSettings {
   locale?: Locale
   uiScale?: number
   pageStripOpen?: boolean
+  autoShapeSnap?: boolean
 }
 
 // .calem aktarım dosyası: vektör belge + ayar + gömülü bytes (base64).
