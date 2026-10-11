@@ -41,28 +41,18 @@ export function useScrollMode(opts: ScrollModeOptions) {
     slot.style.height = `${block.offsetHeight}px`
   }
 
-  // Programatik yumuşak kaydırma uçuşurken spy ara sayfalara takılmasın.
-  // Baskılama zaman damgalı: smooth süresi mesafeye göre 650ms'i aşabilir ve
-  // reduced-motion'da davranış auto olur — bayrak tek başına yetmezdi.
-  let smoothScrolling = false
-  let smoothTimer: ReturnType<typeof setTimeout> | undefined
+  // Programatik kaydırma ANİMASYONSUZ (`behavior: auto`): smooth scrollIntoView
+  // kullanıcı girdisiyle dövüşüyordu — animasyon sürerken tekerlek yutuluyor,
+  // görünüm aktif sayfadan kopuyordu (özellikle hızlı art arda eklemede).
+  // Ani iniş her zaman doğru yerdedir, dövüşecek animasyon kalmaz.
   let suppressSpyUntil = 0
-  const scrollActiveIntoView = (smooth = true) => {
+  const scrollActiveIntoView = () => {
     if (!scrollMode.value) return
     const pg = store.pages[store.activePageIndex]
     const block = pg ? blockEls.get(pg.id) : undefined
     if (!block) return
-    const reduce = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    const useSmooth = smooth && !reduce
-    if (useSmooth) {
-      smoothScrolling = true
-      if (smoothTimer) clearTimeout(smoothTimer)
-      smoothTimer = setTimeout(() => {
-        smoothScrolling = false
-      }, 650)
-    }
     suppressSpyUntil = Date.now() + 700
-    block.scrollIntoView({ block: 'nearest', behavior: useSmooth ? 'smooth' : 'auto' })
+    block.scrollIntoView({ block: 'nearest', behavior: 'auto' })
   }
 
   // Kaydırmalı modda sayfayı yerinde aktifleştir (görünüm kaymaz, canlı canvas taşınır).
@@ -88,7 +78,7 @@ export function useScrollMode(opts: ScrollModeOptions) {
   let scrollTimer: ReturnType<typeof setTimeout> | undefined
   const runSpy = () => {
     scrollTimer = undefined
-    if (!scrollMode.value || store.isDrawing || ps.spacePan() || smoothScrolling) return
+    if (!scrollMode.value || store.isDrawing || ps.spacePan()) return
     // Programatik kaydırma (uzun smooth dahil) yerleşene kadar spy kapalı;
     // süre dolmadıysa kalan süreye ertele, ara sayfaya takılma.
     const wait = suppressSpyUntil - Date.now()
@@ -195,8 +185,6 @@ export function useScrollMode(opts: ScrollModeOptions) {
     blockTimer = undefined
     if (scrollTimer) clearTimeout(scrollTimer)
     scrollTimer = undefined
-    if (smoothTimer) clearTimeout(smoothTimer)
-    smoothTimer = undefined
     blockEls.clear()
   }
 

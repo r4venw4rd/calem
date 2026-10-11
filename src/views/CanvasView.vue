@@ -1530,8 +1530,8 @@ onMounted(() => {
         refreshBlocks()
         drawSelectionOverlay()
         // Zoom blok boylarını değiştirir (offsetTop kayar) — aktif sayfayı
-        // animasyonsuz yerine sabitle, yoksa görünüm zıplamış gibi durur.
-        scrollActiveIntoView(false)
+        // yerine sabitle, yoksa görünüm zıplamış gibi durur.
+        scrollActiveIntoView()
       })
     },
   )
