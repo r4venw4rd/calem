@@ -340,7 +340,7 @@
           @pointermove.prevent="draw"
           @pointerup="endDraw"
           @pointerleave="endDraw"
-          @pointercancel="endDraw"
+          @pointercancel="cancelDraw"
           @touchstart.prevent
           @touchmove.prevent
           @gesturestart.prevent
@@ -349,7 +349,9 @@
           @contextmenu.prevent
         ></canvas>
       </template>
-      <div v-else ref="scrollBox" class="absolute inset-0 overflow-y-auto" @scroll.passive="onScrollBox">
+      <div v-else ref="scrollBox" class="absolute inset-0 overflow-y-auto overscroll-contain" @scroll.passive="onScrollBox"
+        @pointerdown="onScrollBoxPointerDown" @pointermove="onScrollBoxPointerMove"
+        @pointerup="onScrollBoxPointerUp" @pointercancel="onScrollBoxPointerCancel">
         <div class="mx-auto w-full max-w-[860px] px-3 pt-3 pb-28 flex flex-col gap-4">
           <div
             v-for="(p, i) in store.pages"
@@ -359,11 +361,10 @@
           <div
             :ref="(el) => setBlockRef(el, p.id)"
             class="mx-auto rounded-sm overflow-hidden cursor-pointer scroll-mt-2 min-[640px]:scroll-mt-[72px]"
-            :style="{ width: `${store.zoomFactor * 100}%`, aspectRatio: `${p.size.w} / ${p.size.h}`, visibility: i === store.activePageIndex ? 'hidden' : 'visible' }"
+            :style="{ width: `${store.zoomFactor * 100}%`, aspectRatio: `${p.size.w} / ${p.size.h}`, visibility: i === store.activePageIndex ? 'hidden' : 'visible', touchAction: 'pan-x pan-y' }"
             @pointerdown.prevent="onBlockDown"
             @pointerup="onBlockUp($event, i)"
-            @touchstart.prevent
-            @touchmove.prevent
+            @pointercancel="resetBlockTap"
           ></div>
           </div>
         </div>
@@ -380,7 +381,7 @@
             @pointermove.prevent="draw"
             @pointerup="endDraw"
             @pointerleave="endDraw"
-            @pointercancel="endDraw"
+            @pointercancel="cancelDraw"
             @touchstart.prevent
             @touchmove.prevent
             @gesturestart.prevent
@@ -579,7 +580,7 @@ import { drawingPerf } from '@/model/document'
 import { useDrawingStore } from '@/stores/drawing'
 import { useDialogs } from '@/composables/useDialogs'
 import { useLocale } from '@/composables/useLocale'
-import { usePointerState } from '@/composables/usePointerState'
+import { usePointerState, type PinchStep } from '@/composables/usePointerState'
 import { useSelectionOps } from '@/composables/useSelectionOps'
 import { useCanvasShortcuts } from '@/composables/useCanvasShortcuts'
 import { useCanvasFileActions } from '@/composables/useCanvasFileActions'
@@ -684,6 +685,10 @@ const visibleTools = computed(() => {
 })
 // Her pointermove'da overlay redraw yapma — frame başına en fazla 1 (rAF throttle).
 let rafId = 0
+// Kaydırmalı-mod zoom yerleşimi de kare başına en fazla 1: burst'te her adım
+// backing-store realloc + tam sayfa boyası demekti (kasma). Bekleyen kare varsa
+// yeni istek atlanır; rAF güncel state'i okuyup tek seferde işler.
+let zoomRaf = 0
 let lastHudAt = 0
 let lastFrameAt = 0
 
@@ -806,6 +811,33 @@ const { isPanActive, panDown, panMove, panUp, cancelPan } = usePanGesture({
   updateHud: (force) => updateHud(force),
 })
 
+// Kaydırmalı modda parmak: canvas touch-action:none tutulur (kalem çizsin diye),
+// parmak-sürükleme native scroll yerine MANUEL sürülür (scrollBox.scrollTop).
+// Tap (kımıldamayan parmak) replay ile normal araç akışına sokulur — tıkla-düzenle yaşar.
+interface PendingTouch {
+  e: PointerEvent
+  startX: number
+  startY: number
+  lastX: number
+  lastY: number
+  scrolled: boolean
+}
+let pendingTouch: PendingTouch | null = null
+let replayingTap = false
+const TAP_SLOP_SQ = 64 // 8px — blok tap eşiğiyle aynı
+
+// Kaydırmalı-mod native scroll sürüşü (el/Space/orta-tuş/parmak): scrollBox'u
+// doğrudan sürer, boya-pan YOK. viewPan'e dokunulmaz — slot/blok hizası bozulmasın
+// diye scroll modda pan her zaman sıfırdır (store tarafı da sıfırlar/korur).
+const driveScroll = (dx: number, dy: number) => {
+  const box = scrollBox.value
+  if (!box) return
+  if (dx !== 0) box.scrollLeft -= dx
+  if (dy !== 0) box.scrollTop -= dy
+}
+// El/Space/orta-tuş sürüş oturumu (fare/kalem; parmak pendingTouch yolunda).
+let panDrive: { lastX: number; lastY: number } | null = null
+
 const startDraw = (e: PointerEvent) => {
   // iPadOS ilk dokunuşu jest kararı için bekletmesin: olayı en başta sahiplen.
   // (touch-action:none ile birlikte; Apple Pencil hover'ı move tarafında zaten no-op.)
@@ -815,7 +847,9 @@ const startDraw = (e: PointerEvent) => {
   store.clearCachedRect()
   // Avuç reddi pinch'ten ÖNCE: parmak (touchPan kapalıyken) hiç işleme girmez; yoksa
   // dinlenen avuç ikinci pointer olup aktif kalem çizgisini iptal ediyordu.
-  if (e.pointerType === 'touch' && store.rejectTouch && !store.touchPan) return
+  // Kaydırmalı modda reddetme YOK: parmak scroll/pinch sayacı için izlenir, çizim
+  // zaten aşağıdaki scroll-adayı dalında engellenir.
+  if (e.pointerType === 'touch' && store.rejectTouch && !store.touchPan && !scrollMode.value) return
   ps.track(e.pointerId, ptrPos(e))
   if (ps.count() === 2) {
     store.cancelActiveStroke()
@@ -823,6 +857,8 @@ const startDraw = (e: PointerEvent) => {
     cancelTextGesture()
     cancelImageGesture()
     cancelPan()
+    pendingTouch = null
+    panDrive = null
     if (rafId !== 0) {
       cancelAnimationFrame(rafId)
       rafId = 0
@@ -832,12 +868,44 @@ const startDraw = (e: PointerEvent) => {
     return
   }
   if (ps.count() !== 1 || ps.gestureLocked()) return
+  // Kaydırmalı modda parmak = scroll adayı: araçlara girmeden bekle, sürüklenirse
+  // manuel scroll sür (draw tarafı), kımıldamazsa endDraw replay ile tap işletir.
+  // Kalem/fare etkilenmez (sıfır-gecikme çizim korunur).
+  if (scrollMode.value && e.pointerType === 'touch' && !replayingTap) {
+    try {
+      overlayCanvas.value?.setPointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
+    }
+    ps.setActive(e.pointerId)
+    pendingTouch = {
+      e,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastX: e.clientX,
+      lastY: e.clientY,
+      scrolled: false,
+    }
+    return
+  }
   // Dokun-kaydır açıksa parmak her araçta kaydırır (kalem/fare etkilenmez).
   if (e.pointerType === 'touch' && store.touchPan) {
     panDown(e)
     return
   }
   // Space-kaydırma her aracı ezer (pinch sonrası değil); el aracı dokunmayla da kaydırır.
+  // Kaydırmalı modda el/Space/orta-tuş NATIVE scroll sürer (boya-pan YOK).
+  if (scrollMode.value && (ps.spacePan() || store.currentTool === 'hand' || (e.pointerType === 'mouse' && e.button === 1))) {
+    if (e.pointerType === 'mouse' && e.button === 1) e.preventDefault()
+    try {
+      overlayCanvas.value?.setPointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
+    }
+    ps.setActive(e.pointerId)
+    panDrive = { lastX: e.clientX, lastY: e.clientY }
+    return
+  }
   if (ps.spacePan() || store.currentTool === 'hand') {
     panDown(e)
     return
@@ -873,6 +941,26 @@ const startDraw = (e: PointerEvent) => {
   scheduleRender()
 }
 
+// Pinch adımı uygulaması (canvas + scrollBox yolları ortak): görünüm-çapalı
+// zoom, saf ötelemede native scroll. Çift çağrı zararsızdır (ardışık delta).
+const applyPinchStep = (step: PinchStep) => {
+  if (step.scale > 0) {
+    // Kaydırmalı modda pinch de görünüm-çapalıdır (imleç = pinch merkezi).
+    if (scrollMode.value && overlayCanvas.value) {
+      const r = overlayCanvas.value.getBoundingClientRect()
+      anchorViewZoom(r.left + step.midX, r.top + step.midY)
+    }
+    store.pinch(step.scale, step.midX, step.midY, step.dx, step.dy)
+  }
+  // Kaydırmalı modda saf iki-parmak öteleme native scroll'u sürer (store
+  // boya-pan yapmaz).
+  if (scrollMode.value && step.scale === 1 && (step.dx !== 0 || step.dy !== 0)) {
+    driveScroll(step.dx, step.dy)
+  }
+  updateHud()
+  drawSelectionOverlay()
+}
+
 const draw = (e: PointerEvent) => {
   if (e.cancelable) e.preventDefault()
   if (ps.has(e.pointerId) && overlayCanvas.value) {
@@ -881,9 +969,32 @@ const draw = (e: PointerEvent) => {
   }
   const step = ps.stepGesture()
   if (step) {
-    if (step.scale > 0) store.pinch(step.scale, step.midX, step.midY, step.dx, step.dy)
-    updateHud()
-    drawSelectionOverlay()
+    applyPinchStep(step)
+    return
+  }
+  // Kaydırmalı modda parmak-sürükleme: mürekkep YOK, scrollBox manuel sürülür.
+  // Eşik altı kımıldama tap sayılır (bırakışta replay). Araç dallarından ÖNCE.
+  if (pendingTouch && e.pointerType === 'touch' && ps.isActive(e.pointerId)) {
+    const t = pendingTouch
+    const dx = e.clientX - t.lastX
+    const dy = e.clientY - t.lastY
+    t.lastX = e.clientX
+    t.lastY = e.clientY
+    if (!t.scrolled) {
+      const sx = e.clientX - t.startX
+      const sy = e.clientY - t.startY
+      if (sx * sx + sy * sy > TAP_SLOP_SQ) t.scrolled = true
+    }
+    if (t.scrolled) {
+      driveScroll(dx, dy)
+    }
+    return
+  }
+  // Kaydırmalı-mod el/Space/orta-tuş sürüşü: native scroll, boya-pan yok.
+  if (panDrive && ps.isActive(e.pointerId)) {
+    driveScroll(e.clientX - panDrive.lastX, e.clientY - panDrive.lastY)
+    panDrive.lastX = e.clientX
+    panDrive.lastY = e.clientY
     return
   }
   if (store.currentTool === 'select') {
@@ -921,6 +1032,33 @@ const endDraw = (e?: PointerEvent) => {
     return
   }
   if (rel.locked) return
+  // Kaydırmalı-mod sürüş oturumu: iş bitmiştir (scroll'du), kilidi bırak.
+  if (panDrive) {
+    panDrive = null
+    ps.clearActive()
+    updateHud(true)
+    return
+  }
+  // Kaydırmalı-mod parmak adayı: sürüklendiyse iş bitmiştir (scroll'du, çizim yok).
+  // Kımıldamadıysa tap'ti — down olayını replay ile normal araç akışına sok,
+  // aşağıdan standart commit yolu devam etsin (nokta/metin/seçim tıkı çalışır).
+  if (pendingTouch) {
+    const t = pendingTouch
+    pendingTouch = null
+    ps.clearActive()
+    if (t.scrolled) {
+      updateHud(true)
+      return
+    }
+    replayingTap = true
+    try {
+      startDraw(t.e)
+    } finally {
+      replayingTap = false
+    }
+    // Replay kilit kurduysa (ya da kuramadıysa) normal akışa düş: kurduysa commit,
+    // kuramadıysa isDrawing kapıları zaten kapalı, no-op.
+  }
   // Aktif pointer kilidini pahalı commit'ten ÖNCE bırak: stopDrawing (snapshotDoc
   // tam-klon + base'e işleme) bitmeden gelen pointerdown temiz görsün, yoksa
   // isDrawing/pointerId kapılarına takılıp ilk vuruş sessizce yutuluyordu.
@@ -954,6 +1092,25 @@ const endDraw = (e?: PointerEvent) => {
   updateHud(true)
 }
 
+// pointercancel = "bu jest'e güvenme": KESİNLİKLE commit yok. Tarayıcı scroll'u
+// devraldığında, kesintide vs. gelir — yarım stroke/base'e işlenmemeli.
+const cancelDraw = (e?: PointerEvent) => {
+  ps.releasePointer(e?.pointerId)
+  pendingTouch = null
+  panDrive = null
+  if (rafId !== 0) {
+    cancelAnimationFrame(rafId)
+    rafId = 0
+  }
+  if (isSelActive()) cancelSelGesture()
+  if (hasTextDown()) cancelTextGesture()
+  if (hasImgDown()) cancelImageGesture()
+  if (isPanActive()) cancelPan()
+  if (store.isDrawing) store.cancelActiveStroke()
+  ps.clearActive()
+  updateHud(true)
+}
+
 const undo = () => {
   store.undoLastStroke()
   drawSelectionOverlay()
@@ -964,6 +1121,62 @@ const redo = () => {
   store.redo()
   drawSelectionOverlay()
   updateHud(true)
+}
+
+// Kaydırmalı-mod blok/boşluk parmak takibi: canvas-dışı dokunuşlar da pinch
+// sayacına girer (her yerde pinch). Tek parmağa DOKUNULMAZ (native scroll +
+// tap-activate aynen yaşar). Canvas-sahipli pointer'lar canvas yolundadır.
+const boxOwnsPointer = (e: PointerEvent) =>
+  !(e.target instanceof Node) || !overlayCanvas.value || !overlayCanvas.value.contains(e.target)
+// Pinch mesafesi ötelemeden bağımsızdır; uzay canvas-uzayıyla aynı olmalı.
+const boxTouchPos = (e: PointerEvent) => {
+  const r = overlayCanvas.value?.getBoundingClientRect()
+  return r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: e.clientX, y: e.clientY }
+}
+const onScrollBoxPointerDown = (e: PointerEvent) => {
+  if (!scrollMode.value || e.pointerType !== 'touch') return
+  if (!boxOwnsPointer(e)) return
+  ps.track(e.pointerId, boxTouchPos(e))
+  if (ps.count() === 2) {
+    // Canvas yolundaki preemption ile birebir (çapraz parmak çifti).
+    store.cancelActiveStroke()
+    cancelSelGesture()
+    cancelTextGesture()
+    cancelImageGesture()
+    cancelPan()
+    pendingTouch = null
+    panDrive = null
+    if (rafId !== 0) {
+      cancelAnimationFrame(rafId)
+      rafId = 0
+    }
+    ps.clearActive()
+    ps.beginGesture()
+  }
+}
+const onScrollBoxPointerMove = (e: PointerEvent) => {
+  if (!scrollMode.value || e.pointerType !== 'touch') return
+  if (!boxOwnsPointer(e)) return
+  if (!ps.has(e.pointerId)) return
+  ps.moveTracked(e.pointerId, boxTouchPos(e))
+  const step = ps.stepGesture()
+  if (step) applyPinchStep(step)
+}
+const releaseBoxPointer = (e: PointerEvent | undefined, allowTap: boolean) => {
+  const rel = ps.releasePointer(e?.pointerId)
+  if (!allowTap) return
+  if (rel.tapAction === 'undo') undo()
+  else if (rel.tapAction === 'redo') redo()
+}
+const onScrollBoxPointerUp = (e: PointerEvent) => {
+  if (!scrollMode.value || e.pointerType !== 'touch') return
+  if (!boxOwnsPointer(e)) return
+  releaseBoxPointer(e, true)
+}
+const onScrollBoxPointerCancel = (e: PointerEvent) => {
+  if (!scrollMode.value || e.pointerType !== 'touch') return
+  if (!boxOwnsPointer(e)) return
+  releaseBoxPointer(e, false)
 }
 
 const { onKeyDown, onKeyUp } = useCanvasShortcuts({
@@ -1126,7 +1339,9 @@ const onPageHide = () => {
 // passive:false ŞART (sayfa-zoom'u engellemek için preventDefault).
 // Kaydırmalı modda yalın tekerlek native kayar (dokunulmaz), ctrl/cmd zoom'lar.
 const onWheel = (e: WheelEvent) => {
-  if (scrollMode.value && !e.ctrlKey && !e.metaKey) return
+  // Kaydırmalı modda tüm tekerlek scrollBox'undur (aşağıdaki dinleyici):
+  // çifte zoom/boğuşma olmasın.
+  if (scrollMode.value) return
   e.preventDefault()
   if (!overlayCanvas.value) return
   const r = overlayCanvas.value.getBoundingClientRect()
@@ -1142,19 +1357,66 @@ const onWheel = (e: WheelEvent) => {
   updateHud(true)
 }
 
+// Kaydırmalı-mod tekerlek: scrollBox'un her yerinde ctrl/cmd = app zoom
+// (pasif blok/boşluk dahil — yoksa tarayıcı-zoom kirlenmesi olur),
+// yalın tekerlek native kayar (dokunulmaz). Dinleyici manuel bağlı
+// (passive:false ŞART, koşullu preventDefault).
+const onScrollBoxWheel = (e: WheelEvent) => {
+  if (!scrollMode.value) return
+  if (!e.ctrlKey && !e.metaKey) return
+  e.preventDefault()
+  anchorViewZoom(e.clientX, e.clientY)
+  const unit = e.deltaMode === 1 ? 16 : 1
+  store.zoomBy(Math.exp(-e.deltaY * unit * 0.002), 0, 0)
+  drawSelectionOverlay()
+  updateHud(true)
+}
+const onScrollBoxWheelEntry = (e: WheelEvent) => onScrollBoxWheel(e)
+const bindScrollBoxWheel = () => {
+  const box = scrollBox.value
+  if (!box) return
+  box.removeEventListener('wheel', onScrollBoxWheelEntry)
+  if (scrollMode.value) box.addEventListener('wheel', onScrollBoxWheelEntry, { passive: false })
+}
+
+// Buton zoom'u kaydırmalı modda viewport merkezine çapalanır.
+const zoomAtViewCenter = (factor: number) => {
+  const box = scrollBox.value
+  if (box) {
+    const r = box.getBoundingClientRect()
+    anchorViewZoom(r.left + r.width / 2, r.top + r.height / 2)
+  }
+  store.zoomBy(factor, 0, 0)
+}
+
 const zoomIn = () => {
-  store.zoomStep(1.25)
+  if (scrollMode.value) {
+    zoomAtViewCenter(1.25)
+  } else {
+    store.zoomStep(1.25)
+  }
   drawSelectionOverlay()
   updateHud(true)
 }
 
 const zoomOut = () => {
-  store.zoomStep(1 / 1.25)
+  if (scrollMode.value) {
+    zoomAtViewCenter(1 / 1.25)
+  } else {
+    store.zoomStep(1 / 1.25)
+  }
   drawSelectionOverlay()
   updateHud(true)
 }
 
 const resetZoom = () => {
+  if (scrollMode.value) {
+    const box = scrollBox.value
+    if (box) {
+      const r = box.getBoundingClientRect()
+      anchorViewZoom(r.left + r.width / 2, r.top + r.height / 2)
+    }
+  }
   store.resetView()
   drawSelectionOverlay()
   updateHud(true)
@@ -1223,8 +1485,9 @@ const {
   refreshBlocks,
   toggleScroll,
   resetBlockTap,
-  getHoldScroll,
-  setHoldScroll,
+  takeHoldNav,
+  anchorViewZoom,
+  applyViewZoomCompensation,
 } = useScrollMode({
   store,
   ps,
@@ -1261,6 +1524,7 @@ let stopSettingsWatch: (() => void) | null = null
 let stopChromeWatch: (() => void) | null = null
 let stopToolWatch: (() => void) | null = null
 let stopZoomWatch: (() => void) | null = null
+let stopScrollWheelWatch: (() => void) | null = null
 let offLaunch: (() => void) | null = null
 
 // Sayfa şeridi: düşük çözünürlüklü önbellek, tick+sayfa-değişiminde debounce'lu tazelenir.
@@ -1421,15 +1685,32 @@ onMounted(() => {
     () => [store.thumbTick, store.pages, store.pageStripOpen] as const,
     refreshThumbs,
   )
+  // ScrollBox wheel dinleyici yönetimi (v-else dalı toggle ile mount/unmount olur).
+  bindScrollBoxWheel()
+  stopScrollWheelWatch = watch(scrollMode, () => {
+    nextTick(() => bindScrollBoxWheel())
+  })
   // Zoom değişince kaydırmalı yerleşimi yenile (tekli modda etkisiz).
+  // nextTick ŞART: blok genişliği (zoomFactor*100%) DOM'a işlenmeden ölçülürse
+  // slot bir kare bayat kalıyor ve zoom sonrası yerleşim bozuluyordu.
   stopZoomWatch = watch(
     () => store.zoomLabel,
     () => {
       if (!scrollMode.value) return
-      positionSlot()
-      store.resizeCanvas()
-      refreshBlocks()
-      drawSelectionOverlay()
+      if (zoomRaf !== 0) return
+      zoomRaf = requestAnimationFrame(() => {
+        zoomRaf = 0
+        if (!scrollMode.value) return
+        nextTick(() => {
+          positionSlot()
+          // resizeCanvas: taze layout + boya (tek seferde).
+          store.resizeCanvas()
+          // Görünüm çapası: imleç altındaki layout noktası sabit kalır.
+          applyViewZoomCompensation()
+          refreshBlocks()
+          drawSelectionOverlay()
+        })
+      })
     },
   )
   // PWA dosya ilişkilendirme: soğuk açılışta slottaki handle + sıcak açılışlar.
@@ -1446,8 +1727,7 @@ onMounted(() => {
         drawSelectionOverlay()
         refreshBlocks()
         // Yerinde aktivasyonda (tık/spy) görünümü zıplatma.
-        if (!getHoldScroll()) scrollActiveIntoView()
-        setHoldScroll(false)
+        if (!takeHoldNav()) scrollActiveIntoView()
       })
     },
   )
@@ -1455,6 +1735,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (rafId !== 0) cancelAnimationFrame(rafId)
+  if (zoomRaf !== 0) cancelAnimationFrame(zoomRaf)
+  zoomRaf = 0
   ps.clearActive()
   cancelSelGesture()
   cancelTextGesture()
@@ -1481,6 +1763,9 @@ onUnmounted(() => {
   stopToolWatch = null
   stopZoomWatch?.()
   stopZoomWatch = null
+  stopScrollWheelWatch?.()
+  stopScrollWheelWatch = null
+  scrollBox.value?.removeEventListener('wheel', onScrollBoxWheelEntry)
   offLaunch?.()
   offLaunch = null
   mobileMq?.removeEventListener('change', syncIsMobile)

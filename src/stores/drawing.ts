@@ -38,6 +38,7 @@ import {
   type NormRect,
 } from '../lib/select'
 import { dropTinyRuns, polylineHitsCircle, splitRunsOutside } from '../lib/erase'
+import { capBackingScale } from '../lib/canvasLimits'
 import {
   newStrokeId,
   newPageId,
@@ -712,11 +713,20 @@ export const useDrawingStore = defineStore('drawing', () => {
     viewPanY = cy - (py * fs * nz + viewOy * nz)
   }
 
+  // Kaydırmalı modda çapa görünüm katmanındadır (useScrollMode: imleç altındaki
+  // layout noktası + scroll kompanzasyonu). Burada yalnızca oran kurulur;
+  // yerleşim+boya rAF watcher'ındır. viewPan scroll modda daima sıfırdır.
   // İmleç/pinch-merkezi sabitli zoom. Tek repaint.
   const zoomBy = (factor: number, cx: number, cy: number) => {
     if (!(factor > 0) || !Number.isFinite(factor) || !Number.isFinite(cx) || !Number.isFinite(cy)) return
     const nz = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, viewZoom * factor))
     if (nz === viewZoom) return
+    if (scrollLive) {
+      viewZoom = nz
+      syncZoomLabel()
+      scheduleRerender()
+      return
+    }
     applyZoomAt(nz, cx, cy)
     clampPan()
     syncZoomLabel()
@@ -738,6 +748,15 @@ export const useDrawingStore = defineStore('drawing', () => {
   const pinch = (factor: number, midX: number, midY: number, dx: number, dy: number) => {
     if (!(factor > 0) || !Number.isFinite(factor)) return
     const nz = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, viewZoom * factor))
+    if (scrollLive) {
+      if (nz !== viewZoom && Number.isFinite(midX) && Number.isFinite(midY)) {
+        viewZoom = nz
+        syncZoomLabel()
+        scheduleRerender()
+      }
+      // Saf iki-parmak öteleme: boya-pan YOK — çağıran native scroll'u sürer.
+      return
+    }
     if (nz !== viewZoom && Number.isFinite(midX) && Number.isFinite(midY)) {
       applyZoomAt(nz, midX, midY)
     }
@@ -757,6 +776,12 @@ export const useDrawingStore = defineStore('drawing', () => {
     viewPanX = 0
     viewPanY = 0
     syncZoomLabel()
+    // Kaydırmalı modda senkron boya yok (eski geometriyle bir kare titrerdi);
+    // rAF watcher konumlandırıp boyar.
+    if (scrollLive) {
+      scheduleRerender()
+      return
+    }
     repaintBase()
     clearOverlay()
   }
@@ -1620,16 +1645,16 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   const getDPR = () => Math.min(window.devicePixelRatio || 1, DPR_CAP)
 
-  // Backing store'u CSS boyut x DPR yap. Boyut değiştiyse true döner.
+  // Backing store'u CSS boyut x DPR yap (canvas limitlerine cap'li). Boyut değiştiyse true döner.
   const setupBackingStoreFor = (canvas: HTMLCanvasElement | null): boolean => {
     if (!canvas) return false
     const w = canvas.clientWidth
     const h = canvas.clientHeight
     if (w === 0 || h === 0) return false
-    const scale = getDPR()
+    const scale = capBackingScale(w, h, getDPR())
     dpr.value = scale
-    const bw = Math.round(w * scale)
-    const bh = Math.round(h * scale)
+    const bw = Math.max(1, Math.round(w * scale))
+    const bh = Math.max(1, Math.round(h * scale))
     if (canvas.width !== bw || canvas.height !== bh) {
       canvas.width = bw
       canvas.height = bh
@@ -2605,6 +2630,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     const { w, h } = page.size
     if (!(w > 0 && h > 0)) return null
     if (!Number.isFinite(scale) || scale <= 0) return null
+    // Dev sayfa + yüksek ölçekte canvas limiti: boş çıktı yerine cap'li ölçek.
+    scale = capBackingScale(w, h, scale)
     const canvas = document.createElement('canvas')
     canvas.width = Math.max(1, Math.round(w * scale))
     canvas.height = Math.max(1, Math.round(h * scale))
@@ -2784,13 +2811,19 @@ export const useDrawingStore = defineStore('drawing', () => {
       pdfName.value = file.name
       activePageIndex.value = 0
       clearHistory()
-      selectedIds.value = []
-      activeTextId.value = null
+    selectedIds.value = []
+    activeTextId.value = null
     activeImageId.value = null
-      points.value = []
-      isDrawing.value = false
-      bb = null
-      layoutView()
+    points.value = []
+    isDrawing.value = false
+    bb = null
+    // Kaydırmalı modda boya-pan YOKTUR (gezinti native scroll'undur);
+    // sızan eski pan canlı sayfayı bloktan kaydırırdı — sigorta olarak sıfırla.
+    if (scrollLive) {
+      viewPanX = 0
+      viewPanY = 0
+    }
+    layoutView()
       recountActive()
       repaintBase()
       clearOverlay()

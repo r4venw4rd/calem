@@ -41,61 +41,139 @@ export function useScrollMode(opts: ScrollModeOptions) {
     slot.style.height = `${block.offsetHeight}px`
   }
 
-  // Programatik yumuşak kaydırma uçuşurken spy ara sayfalara takılmasın.
-  let smoothScrolling = false
-  let smoothTimer: ReturnType<typeof setTimeout> | undefined
-  const scrollActiveIntoView = (smooth = true) => {
+  // Programatik kaydırma ANİMASYONSUZ (`behavior: auto`): smooth scrollIntoView
+  // kullanıcı girdisiyle dövüşüyordu — animasyon sürerken tekerlek yutuluyor,
+  // görünüm aktif sayfadan kopuyordu (özellikle hızlı art arda eklemede).
+  // Ani iniş her zaman doğru yerdedir, dövüşecek animasyon kalmaz.
+  let suppressSpyUntil = 0
+  const scrollActiveIntoView = () => {
     if (!scrollMode.value) return
     const pg = store.pages[store.activePageIndex]
     const block = pg ? blockEls.get(pg.id) : undefined
     if (!block) return
-    const reduce = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    const useSmooth = smooth && !reduce
-    if (useSmooth) {
-      smoothScrolling = true
-      if (smoothTimer) clearTimeout(smoothTimer)
-      smoothTimer = setTimeout(() => {
-        smoothScrolling = false
-      }, 650)
-    }
-    block.scrollIntoView({ block: 'nearest', behavior: useSmooth ? 'smooth' : 'auto' })
+    suppressSpyUntil = Date.now() + 700
+    block.scrollIntoView({ block: 'nearest', behavior: 'auto' })
   }
 
   // Kaydırmalı modda sayfayı yerinde aktifleştir (görünüm kaymaz, canlı canvas taşınır).
-  let holdScroll = false
+  // Sayaç: hızlı ardışık aktivasyonlarda tek boolean yutuluyordu (ikinci gezinme
+  // yanlışlıkla kaydırıyor / programatik gezinme kaydıramıyordu).
+  let holdCount = 0
   const activatePageInPlace = (i: number) => {
     if (!scrollMode.value || i === store.activePageIndex) return
-    holdScroll = true
+    holdCount++
     store.goToPage(i)
+  }
+  /** Watcher bir yerinde-aktivasyon jetonu varsa tüketir (kaydırma atlanır). */
+  const takeHoldNav = (): boolean => {
+    if (holdCount > 0) {
+      holdCount--
+      return true
+    }
+    return false
   }
 
   // Scroll bitince en görünür bloğu aktifleştir (sürekli mod beklentisi).
   // Debounce'lu: programatik kaydırma bitince hedef zaten aktif olduğundan no-op olur.
   let scrollTimer: ReturnType<typeof setTimeout> | undefined
+  const runSpy = () => {
+    scrollTimer = undefined
+    if (!scrollMode.value || store.isDrawing || ps.spacePan()) return
+    // Programatik kaydırma (uzun smooth dahil) yerleşene kadar spy kapalı;
+    // süre dolmadıysa kalan süreye ertele, ara sayfaya takılma.
+    const wait = suppressSpyUntil - Date.now()
+    if (wait > 0) {
+      if (scrollTimer) clearTimeout(scrollTimer)
+      scrollTimer = setTimeout(runSpy, wait)
+      return
+    }
+    const box = scrollBox.value
+    if (!box) return
+    const br = box.getBoundingClientRect()
+    let best = -1
+    let bestVis = 0
+    for (let i = 0; i < store.pages.length; i++) {
+      const pg = store.pages[i]
+      if (!pg) continue
+      const el = blockEls.get(pg.id)
+      if (!el) continue
+      const r = el.getBoundingClientRect()
+      const vis = Math.max(0, Math.min(r.bottom, br.bottom) - Math.max(r.top, br.top))
+      if (vis > bestVis) {
+        bestVis = vis
+        best = i
+      }
+    }
+    if (best >= 0 && bestVis > 0) activatePageInPlace(best)
+  }
   const onScrollBox = () => {
     if (scrollTimer) clearTimeout(scrollTimer)
-    scrollTimer = setTimeout(() => {
-      scrollTimer = undefined
-      if (!scrollMode.value || store.isDrawing || ps.spacePan() || smoothScrolling) return
-      const box = scrollBox.value
-      if (!box) return
-      const br = box.getBoundingClientRect()
-      let best = -1
-      let bestVis = 0
-      for (let i = 0; i < store.pages.length; i++) {
-        const pg = store.pages[i]
-        if (!pg) continue
-        const el = blockEls.get(pg.id)
-        if (!el) continue
-        const r = el.getBoundingClientRect()
-        const vis = Math.max(0, Math.min(r.bottom, br.bottom) - Math.max(r.top, br.top))
-        if (vis > bestVis) {
-          bestVis = vis
-          best = i
+    scrollTimer = setTimeout(runSpy, 150)
+  }
+
+  // Görünüm-çapalı zoom (Xournal++ usulü): imleç altındaki layout noktası
+  // zoom boyunca sabit kalır. Boya-pan YOK — viewPan scroll modda daima sıfır.
+  // Kayıt (zoom öncesi layout+scroll ile) ve uygulama (reflow sonrası ölçümle)
+  // ayrı adımlardır; tek seferlik tüketilir.
+  interface ViewZoomAnchor {
+    blockId: string
+    fracX: number
+    fracY: number
+    viewX: number
+    viewY: number
+  }
+  let viewAnchor: ViewZoomAnchor | null = null
+
+  const anchorViewZoom = (clientX: number, clientY: number) => {
+    const box = scrollBox.value
+    if (!box || !scrollMode.value) return
+    const br = box.getBoundingClientRect()
+    const viewX = clientX - br.left
+    const viewY = clientY - br.top
+    const contentX = box.scrollLeft + viewX
+    const contentY = box.scrollTop + viewY
+    // İmleç altındaki blok (boşluktaysa en yakın kenar, oran kelepçeli).
+    let best: ViewZoomAnchor | null = null
+    let bestDist = Infinity
+    for (const pg of store.pages) {
+      const el = blockEls.get(pg.id)
+      if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) continue
+      const t = el.offsetTop
+      const l = el.offsetLeft
+      const w = el.offsetWidth
+      const h = el.offsetHeight
+      const dx = contentX < l ? l - contentX : contentX > l + w ? contentX - (l + w) : 0
+      const dy = contentY < t ? t - contentY : contentY > t + h ? contentY - (t + h) : 0
+      const d = dx * dx + dy * dy
+      if (d < bestDist) {
+        bestDist = d
+        best = {
+          blockId: pg.id,
+          fracX: Math.min(1, Math.max(0, (contentX - l) / w)),
+          fracY: Math.min(1, Math.max(0, (contentY - t) / h)),
+          viewX,
+          viewY,
         }
       }
-      if (best >= 0 && bestVis > 0) activatePageInPlace(best)
-    }, 150)
+    }
+    viewAnchor = best
+  }
+
+  const applyViewZoomCompensation = () => {
+    const a = viewAnchor
+    viewAnchor = null
+    if (!a || !scrollMode.value) return
+    const box = scrollBox.value
+    const el = blockEls.get(a.blockId)
+    if (!box || !el || el.offsetWidth === 0 || el.offsetHeight === 0) return
+    const maxTop = Math.max(0, box.scrollHeight - box.clientHeight)
+    const maxLeft = Math.max(0, box.scrollWidth - box.clientWidth)
+    box.scrollTop = Math.min(maxTop, Math.max(0, el.offsetTop + a.fracY * el.offsetHeight - a.viewY))
+    box.scrollLeft = Math.min(maxLeft, Math.max(0, el.offsetLeft + a.fracX * el.offsetWidth - a.viewX))
+    // Programatik yerleşme: spy ara sayfaya takılmasın (viewport-update ≠ navigation).
+    // Pencere kısa (150ms spy debounce + pay): inişler artık anlık, 700ms'lik körlük
+    // zoom sonrası kullanıcı kaydırmasını yutup sonra aniden sayfa atlatıyordu.
+    suppressSpyUntil = Date.now() + 250
   }
 
   // Bloğa tıklama = o sayfada çalışmaya başla. Kaydırmayı bozmamak için
@@ -115,6 +193,9 @@ export function useScrollMode(opts: ScrollModeOptions) {
   }
 
   // Pasif sayfaların statik resmi (aktif sayfa canlı canvas'la gelir, atlanır).
+  // Taze damgası: zoom+boyut anahtarıyla hangi bloğun güncel olduğu hatırlanır —
+  // sayfa geçişlerinde TÜM pasifler değil, yalnızca bayat olan boyanır.
+  const blockRenderKey = new Map<string, string>()
   let blockTimer: ReturnType<typeof setTimeout> | undefined
   const refreshBlocks = () => {
     if (!scrollMode.value) return
@@ -128,16 +209,24 @@ export function useScrollMode(opts: ScrollModeOptions) {
       }
       try {
         const activeId = store.pages[store.activePageIndex]?.id
+        // Statik resim zoom'u takip eder (bitmap tavanlı, canlı ile aynı ölçek hissi).
+        const z = Math.min(2.5, Math.max(0.5, store.zoomFactor))
         for (const p of store.pages) {
           if (p.id === activeId) continue
+          const key = `${z.toFixed(3)}:${p.size.w}x${p.size.h}`
+          if (blockRenderKey.get(p.id) === key) continue
           const el = blockEls.get(p.id)
           if (!el) continue
-          // Statik resim zoom'u takip eder (bitmap tavanlı, canlı ile aynı ölçek hissi).
-          const z = Math.min(2.5, Math.max(0.5, store.zoomFactor))
           const c = store.exportPageToCanvas(p, p.size.w > 0 ? (860 / p.size.w) * z : 0.5)
           if (!c) continue
           c.className = 'block w-full h-auto'
           el.replaceChildren(c)
+          blockRenderKey.set(p.id, key)
+        }
+        // Ölü id'leri temizle (silinen sayfalar).
+        if (blockRenderKey.size > store.pages.length) {
+          const alive = new Set(store.pages.map((pg) => pg.id))
+          for (const k of [...blockRenderKey.keys()]) if (!alive.has(k)) blockRenderKey.delete(k)
         }
       } catch {
         /* boş blok */
@@ -154,6 +243,8 @@ export function useScrollMode(opts: ScrollModeOptions) {
     await nextTick()
     bindCanvases()
     if (scrollMode.value) {
+      // Taze DOM: eski damgalar geçersiz, tüm pasifler ilk kez boyanır.
+      blockRenderKey.clear()
       refreshBlocks()
       positionSlot()
       scrollActiveIntoView()
@@ -172,12 +263,17 @@ export function useScrollMode(opts: ScrollModeOptions) {
     blockTimer = undefined
     if (scrollTimer) clearTimeout(scrollTimer)
     scrollTimer = undefined
-    if (smoothTimer) clearTimeout(smoothTimer)
-    smoothTimer = undefined
     blockEls.clear()
+    blockRenderKey.clear()
   }
 
-  const stopBlockWatch = watch(() => store.thumbTick, refreshBlocks)
+  // Mürekkep yalnızca aktif sayfada değişir: pasif damgalar taze kalır,
+  // yalnız aktif sayfanın damgası silinir (pasife düşünce boyanır).
+  const stopBlockWatch = watch(() => store.thumbTick, () => {
+    const activeId = store.pages[store.activePageIndex]?.id
+    if (activeId) blockRenderKey.delete(activeId)
+    refreshBlocks()
+  })
 
   onUnmounted(() => {
     stopBlockWatch()
@@ -200,9 +296,8 @@ export function useScrollMode(opts: ScrollModeOptions) {
     toggleScroll,
     resetBlockTap,
     cleanup,
-    getHoldScroll: () => holdScroll,
-    setHoldScroll: (v: boolean) => {
-      holdScroll = v
-    },
+    takeHoldNav,
+    anchorViewZoom,
+    applyViewZoomCompensation,
   }
 }
