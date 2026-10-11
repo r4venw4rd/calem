@@ -7,7 +7,7 @@ describe('deleteImageFilesOf', () => {
   it('preserves file ids reused by the replacement document', async () => {
     const deleted: string[] = []
     const storage = { deleteFile: async (id: string) => { deleted.push(id) } } as DocStorage
-    const image = (fileId: string) => ({ id: fileId, x: 0, y: 0, w: 20, h: 20, fileId })
+    const image = (fileId: string) => ({ id: fileId, layerId: 'layer', x: 0, y: 0, w: 20, h: 20, fileId })
     const page = (id: string, fileId: string): Page => ({
       id, size: { w: 100, h: 100 }, layers: [], activeLayerId: '', texts: [], images: [image(fileId)],
     })

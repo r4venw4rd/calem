@@ -78,7 +78,7 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
     }
     if (hasSel) {
       const bb = selectionBBox(store.activePage.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes), store.selectedIds)
-      const imageBoxes = store.activePage.images.filter((img) => store.selectedIds.includes(img.id))
+      const imageBoxes = store.visibleImages().filter((img) => store.selectedIds.includes(img.id))
       const bounds = imageBoxes.reduce((r, img) => ({
         x0: Math.min(r?.x0 ?? Infinity, img.x),
         y0: Math.min(r?.y0 ?? Infinity, img.y),
@@ -109,7 +109,7 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
   const selInside = (p: { x: number; y: number }): boolean => {
     const raw = selectionBBox(store.activePage.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes), store.selectedIds)
     let bb = raw ? { ...raw } : null
-    for (const img of store.activePage.images) {
+    for (const img of store.visibleImages()) {
       if (!store.selectedIds.includes(img.id)) continue
       if (bb) {
         bb.x0 = Math.min(bb.x0, img.x)
@@ -141,7 +141,7 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
       // 2. Bir nesneye (örneğin üçgen, çizgi, şekil) doğrudan tıklandı mı?
       const layers = store.activePage.layers.filter((layer) => layer.visible)
       const hitStroke = strokeAtPoint(layers.slice().reverse().flatMap((layer) => layer.strokes), p.x, p.y)
-      const hitImage = [...store.activePage.images].reverse().find((img) =>
+      const hitImage = [...store.visibleImages()].reverse().find((img) =>
         p.x >= img.x && p.x <= img.x + img.w && p.y >= img.y && p.y <= img.y + img.h,
       )
       const hitId = hitStroke ?? hitImage?.id ?? null

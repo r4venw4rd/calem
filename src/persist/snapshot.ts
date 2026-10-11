@@ -39,6 +39,7 @@ export const snapshotText = (t: TextItem): TextItem => ({
 
 export const snapshotImage = (t: ImageItem): ImageItem => ({
   id: t.id,
+  layerId: t.layerId,
   x: t.x,
   y: t.y,
   w: t.w,

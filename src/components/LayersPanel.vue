@@ -34,7 +34,7 @@
           :title="`${t('makeActive')}: ${l.name}`"
         >
           {{ l.name }}
-          <span class="font-mono text-[10px] text-[var(--chrome-faint)]">{{ l.strokes.length }}</span>
+          <span class="font-mono text-[10px] text-[var(--chrome-faint)]">{{ l.strokes.length + store.activePage.images.filter((img) => img.layerId === l.id).length }}</span>
         </button>
         <button
           @click="store.moveLayer(l.id, 1)"
@@ -112,8 +112,9 @@ const addLayerBtn = () => {
 const askDeleteLayer = async (id: string) => {
   const l = store.activePage.layers.find((x) => x.id === id)
   if (!l) return
-  if (store.activePage.layers.length > 1 && l.strokes.length > 0) {
-    if (!(await askConfirm(`"${l.name}" — ${t('confirmDelete')}`, tf('strokesLost', l.strokes.length))))
+  const itemCount = l.strokes.length + store.activePage.images.filter((img) => img.layerId === l.id).length
+  if (store.activePage.layers.length > 1 && itemCount > 0) {
+    if (!(await askConfirm(`"${l.name}" — ${t('confirmDelete')}`, tf('layerItemsLost', itemCount))))
       return
   }
   store.deleteLayer(id)

@@ -33,12 +33,12 @@ import {
   normRect,
   selectByLasso as selByLasso,
   selectByRect as selByRect,
-  strokeBBox,
   subRunsInRect,
   unionRect,
   type NormRect,
 } from '../lib/select'
 import { dropTinyRuns, polylineHitsCircle, splitRunsOutside } from '../lib/erase'
+import { cachedStrokeBBox, invalidateStrokeBBox } from '../lib/strokeBounds'
 import { capBackingScale } from '../lib/canvasLimits'
 import {
   newStrokeId,
@@ -925,7 +925,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     const visibleStrokes = activePage.value.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes)
     selectedIds.value = [
       ...selByRect(visibleStrokes, a, b),
-      ...activePage.value.images.filter((img) => rectsOverlap(r, { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h })).map((img) => img.id),
+      ...visibleImages().filter((img) => rectsOverlap(r, { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h })).map((img) => img.id),
     ]
     return selectedIds.value.length
   }
@@ -936,12 +936,12 @@ export const useDrawingStore = defineStore('drawing', () => {
     const visibleStrokes = activePage.value.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes)
     selectedIds.value = [
       ...selByLasso(visibleStrokes, poly),
-      ...activePage.value.images.filter((img) => rectsOverlap(box, { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h })).map((img) => img.id),
+      ...visibleImages().filter((img) => rectsOverlap(box, { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h })).map((img) => img.id),
     ]
     return selectedIds.value.length
   }
   const selectAll = (): number => {
-    selectedIds.value = [...activePage.value.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes.map((s) => s.id)), ...activePage.value.images.map((img) => img.id)]
+    selectedIds.value = [...activePage.value.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes.map((s) => s.id)), ...visibleImages().map((img) => img.id)]
     return selectedIds.value.length
   }
   // Seçiliyi sil: yapısal op — redo ölür, base baştan boyanır, autosave kuyruğa girer.
@@ -949,7 +949,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (selectedIds.value.length === 0) return 0
     const set = new Set(selectedIds.value)
     let removed = 0
-    const removedImages = activePage.value.images.filter((img) => set.has(img.id))
+    const removedImages = visibleImages().filter((img) => set.has(img.id))
+    const removedImageIds = new Set(removedImages.map((img) => img.id))
     pushHistory()
     for (const img of removedImages) brushDirty({ x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h })
     queueFileDeletes(removedImages.map((img) => img.fileId))
@@ -958,7 +959,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       layer.strokes = layer.strokes.filter((s) => !set.has(s.id))
       removed += before - layer.strokes.length
     }
-    activePage.value.images = activePage.value.images.filter((img) => !set.has(img.id))
+    activePage.value.images = activePage.value.images.filter((img) => !removedImageIds.has(img.id))
     selectedIds.value = []
     activeTextId.value = null
     activeImageId.value = null
@@ -982,8 +983,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     let y0 = Infinity
     let x1 = -Infinity
     let y1 = -Infinity
-    let count = 0
-    const movedImages = activePage.value.images.filter((img) => set.has(img.id))
+    let hasStroke = false
+    const movedImages = visibleImages().filter((img) => set.has(img.id))
     for (const img of movedImages) {
       x0 = Math.min(x0, img.x)
       y0 = Math.min(y0, img.y)
@@ -991,15 +992,16 @@ export const useDrawingStore = defineStore('drawing', () => {
       y1 = Math.max(y1, img.y + img.h)
     }
     for (const s of movedStrokes) {
-      for (const p of s.points) {
-        if (p.x < x0) x0 = p.x
-        if (p.y < y0) y0 = p.y
-        if (p.x > x1) x1 = p.x
-        if (p.y > y1) y1 = p.y
-        count++
-      }
+      const bounds = cachedStrokeBBox(s)
+      if (!bounds) continue
+      hasStroke = true
+      const pad = Math.max(s.width / 2, 2)
+      x0 = Math.min(x0, bounds.x0 + pad)
+      y0 = Math.min(y0, bounds.y0 + pad)
+      x1 = Math.max(x1, bounds.x1 - pad)
+      y1 = Math.max(y1, bounds.y1 - pad)
     }
-    if (count === 0 && movedImages.length === 0) {
+    if (!hasStroke && movedImages.length === 0) {
       selectedIds.value = []
       return false
     }
@@ -1012,6 +1014,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         p.x += dx
         p.y += dy
       }
+      invalidateStrokeBBox(s)
     }
     for (const img of movedImages) {
       img.x += dx
@@ -1042,7 +1045,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         opacity: s.opacity,
         points: s.points.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
         })),
-      images: activePage.value.images.filter((img) => set.has(img.id)).map(({ id: _id, ...img }) => ({ ...img })),
+      images: visibleImages().filter((img) => set.has(img.id)).map(({ id: _id, ...img }) => ({ ...img })),
     }
     clipboardCount.value = clipboard.strokes.length + clipboard.images.length
     return clipboardCount.value
@@ -1092,7 +1095,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (pasted.length === 0 && clipboard.images.length === 0) return 0
     pushHistory()
     for (const s of pasted) activeLayer.value.strokes.push(s)
-    const pastedImages = clipboard.images.map((img) => ({ ...img, id: newStrokeId(), x: img.x + dx, y: img.y + dy }))
+    const pastedImages = clipboard.images.map((img) => ({ ...img, id: newStrokeId(), layerId: activePage.value.activeLayerId, x: img.x + dx, y: img.y + dy }))
     activePage.value.images.push(...pastedImages)
     selectedIds.value = [...pasted.map((s) => s.id), ...pastedImages.map((img) => img.id)]
     recountActive()
@@ -1204,13 +1207,17 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // --- Resimler (Faz 4b): taşı/boyutlandır/sil; ekleme import pipeline'da ---
   const activeImageId = ref<string | null>(null)
+  const visibleImages = (page = activePage.value): ImageItem[] => {
+    const visibleLayerIds = new Set(page.layers.filter((layer) => layer.visible).map((layer) => layer.id))
+    return page.images.filter((img) => visibleLayerIds.has(img.layerId))
+  }
   const activeImage = (): ImageItem | null => {
     if (!activeImageId.value) return null
     return activePage.value.images.find((t) => t.id === activeImageId.value) ?? null
   }
   // Tıklanan noktadaki en üst resim.
   const imageAt = (x: number, y: number): ImageItem | null => {
-    const items = activePage.value.images
+    const items = visibleImages()
     for (let i = items.length - 1; i >= 0; i--) {
       const img = items[i]!
       if (x >= img.x && x <= img.x + img.w && y >= img.y && y <= img.y + img.h) return img
@@ -1304,6 +1311,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       const pos = placeImageInBounds(x, y, w, h, size)
       const item: ImageItem = {
         id: newStrokeId(),
+        layerId: activePage.value.activeLayerId,
         x: pos.x,
         y: pos.y,
         w,
@@ -1391,9 +1399,13 @@ export const useDrawingStore = defineStore('drawing', () => {
     const i = p.layers.findIndex((l) => l.id === id)
     if (i === -1) return false
     pushHistory()
+    const removedImages = p.images.filter((img) => img.layerId === id)
+    queueFileDeletes(removedImages.map((img) => img.fileId))
+    p.images = p.images.filter((img) => img.layerId !== id)
     if (p.layers.length <= 1) {
-      // Son katman silinmez — içi boşaltılır (metin/resim durur).
+      // Son katman silinmez — içi boşaltılır.
       p.layers[0]!.strokes = []
+      p.images = []
     } else {
       p.layers.splice(i, 1)
       if (p.activeLayerId === id) {
@@ -1425,6 +1437,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (!p.layers.some((l) => l.id === id)) return false
     p.activeLayerId = id
     selectedIds.value = []
+    activeImageId.value = null
     return true
   }
   const toggleLayerVisible = (id: string): boolean => {
@@ -1432,7 +1445,11 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (!l) return false
     pushHistory()
     l.visible = !l.visible
-    if (!l.visible) selectedIds.value = selectedIds.value.filter((sid) => !l.strokes.some((s) => s.id === sid))
+    if (!l.visible) {
+      const hiddenIds = new Set([...l.strokes.map((s) => s.id), ...activePage.value.images.filter((img) => img.layerId === id).map((img) => img.id)])
+      selectedIds.value = selectedIds.value.filter((sid) => !hiddenIds.has(sid))
+      if (activeImageId.value && hiddenIds.has(activeImageId.value)) activeImageId.value = null
+    }
     repaintBase()
     scheduleSave()
     return true
@@ -1839,7 +1856,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       const layer = visibleLayers[li]!
       for (let i = layer.strokes.length - 1; i >= 0; i--) {
         const stroke = layer.strokes[i]!
-        const bb = strokeBBox(stroke)
+        const bb = cachedStrokeBBox(stroke)
         if (stroke.tool !== 'eraser' && bb && x >= bb.x0 && x <= bb.x1 && y >= bb.y0 && y <= bb.y1 && polylineHitsCircle(stroke.points, x, y, eraseRadius())) {
           hitStroke = { layer, stroke }
           break
@@ -1861,7 +1878,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     if (hitStroke) {
       noteEraseMutation()
-      brushDirty(strokeBBox(hitStroke.stroke)!)
+      brushDirty(cachedStrokeBBox(hitStroke.stroke)!)
       hitStroke.layer.strokes.splice(hitStroke.layer.strokes.indexOf(hitStroke.stroke), 1)
       selectedIds.value = selectedIds.value.filter((id) => id !== hitStroke!.stroke.id)
       return true
@@ -2002,8 +2019,11 @@ export const useDrawingStore = defineStore('drawing', () => {
       const [gone] = tarr.splice(i, 1)
       if (activeTextId.value === gone!.id) activeTextId.value = null
     }
-    for (let i = activePage.value.images.length - 1; i >= 0; i--) {
+    const visibleLayerIds = new Set(layers.map((layer) => layer.id))
+    const images = activePage.value.images
+    for (let i = images.length - 1; i >= 0; i--) {
       const img = activePage.value.images[i]!
+      if (!visibleLayerIds.has(img.layerId)) continue
       const nx = Math.min(Math.max(x, img.x), img.x + img.w)
       const ny = Math.min(Math.max(y, img.y), img.y + img.h)
       const dx = x - nx
@@ -2019,7 +2039,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     let selChanged = false
     for (const layer of layers) for (let i = layer.strokes.length - 1; i >= 0; i--) {
       const s = layer.strokes[i]!
-      const bb = strokeBBox(s)
+      const bb = cachedStrokeBBox(s)
       if (!bb) continue
       if (bb.x1 < x - radius || bb.x0 > x + radius || bb.y1 < y - radius || bb.y0 > y + radius) continue
       // Gerçekten değmiyorsa pahalı kopyalı kesime girme (bbox kaba filtre yetmez).
@@ -2095,20 +2115,40 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (bucket) bucket.push(c)
       else grid.set(key, [c])
     }
-    for (let i = activePage.value.images.length - 1; i >= 0; i--) {
-      const img = activePage.value.images[i]!
-      const box = { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h }
-      if (!rectsOverlap(box, sweep)) continue
-      let hit = false
-      for (const c of path) {
-        const nx = Math.min(Math.max(c.x, box.x0), box.x1)
-        const ny = Math.min(Math.max(c.y, box.y0), box.y1)
-        if ((c.x - nx) ** 2 + (c.y - ny) ** 2 <= radius * radius) {
-          hit = true
-          break
+    const visibleLayerIds = new Set(layers.map((layer) => layer.id))
+    const images = activePage.value.images
+    const imageIsHit = (box: NormRect): boolean => {
+      const gx0 = Math.floor((box.x0 - radius) / cell)
+      const gy0 = Math.floor((box.y0 - radius) / cell)
+      const gx1 = Math.floor((box.x1 + radius) / cell)
+      const gy1 = Math.floor((box.y1 + radius) / cell)
+      const cols = gx1 - gx0 + 1
+      const cellCount = cols * (gy1 - gy0 + 1)
+      if (cellCount > grid.size) {
+        for (const c of path) {
+          const nx = Math.min(Math.max(c.x, box.x0), box.x1)
+          const ny = Math.min(Math.max(c.y, box.y0), box.y1)
+          if ((c.x - nx) ** 2 + (c.y - ny) ** 2 <= radius * radius) return true
+        }
+        return false
+      }
+      for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
+        const bucket = grid.get(`${gx}:${gy}`)
+        if (!bucket) continue
+        for (const c of bucket) {
+          const nx = Math.min(Math.max(c.x, box.x0), box.x1)
+          const ny = Math.min(Math.max(c.y, box.y0), box.y1)
+          if ((c.x - nx) ** 2 + (c.y - ny) ** 2 <= radius * radius) return true
         }
       }
-      if (!hit) continue
+      return false
+    }
+    for (let i = images.length - 1; i >= 0; i--) {
+      const img = activePage.value.images[i]!
+      if (!visibleLayerIds.has(img.layerId)) continue
+      const box = { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h }
+      if (!rectsOverlap(box, sweep)) continue
+      if (!imageIsHit(box)) continue
       touch()
       brushDirty(box)
       activePage.value.images.splice(i, 1)
@@ -2143,7 +2183,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     let selChanged = false
     for (const layer of layers) for (let i = layer.strokes.length - 1; i >= 0; i--) {
       const s = layer.strokes[i]!
-      const bb = strokeBBox(s)
+      const bb = cachedStrokeBBox(s)
       if (!bb) continue
       if (!rectsOverlap(bb, sweep)) continue
       let runs: Point[][] = [s.points]
@@ -2649,7 +2689,7 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // Metin kutuları: mürekkebin ÜSTÜNDE (silgi metni yemez — v1 kısıtı, Xournal katman sırası gibi).
   // Çok satır desteklenir; kaydırma yok, taşma kesilmez (sayfa-içi kalması kullananın işi).
-  const paintTexts = (ctx: CanvasRenderingContext2D, page: Page) => {
+  const paintTexts = (ctx: CanvasRenderingContext2D, page: Page, dirty: NormRect | null = null) => {
     const items = page.texts
     if (!items || items.length === 0) return
     ctx.save()
@@ -2658,6 +2698,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     for (const t of items) {
       if (!t.text) continue
       if (t.id === activeTextId.value) continue
+      if (dirty && !rectsOverlap(textBBoxOf(t), dirty)) continue
       ctx.fillStyle = t.color
       ctx.font = `${t.size}px sans-serif`
       const lh = t.size * 1.25
@@ -2669,11 +2710,11 @@ export const useDrawingStore = defineStore('drawing', () => {
     ctx.restore()
   }
 
-  // Resimler: arkaplanın üstü, mürekkebin altı. Bitmap yoksa (yüklenemediyse) atlanır.
-  const paintImages = (ctx: CanvasRenderingContext2D, page: Page) => {
-    const items = page.images
-    if (!items || items.length === 0) return
-    for (const img of items) {
+  // Resimler sahip oldukları katmanda, o katmanın mürekkebinden önce çizilir.
+  const paintImages = (ctx: CanvasRenderingContext2D, page: Page, layer: Layer, dirty: NormRect | null) => {
+    for (const img of page.images) {
+      if (img.layerId !== layer.id) continue
+      if (dirty && !rectsOverlap({ x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h }, dirty)) continue
       const bmp = imgBitmaps.get(img.fileId)
       if (!bmp) continue
       ctx.drawImage(bmp, img.x, img.y, img.w, img.h)
@@ -2691,15 +2732,15 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     const bg = bgCanvases.get(page.id)
     if (bg) ctx.drawImage(bg, 0, 0, page.size.w, page.size.h)
-    paintImages(ctx, page)
-    // Katmanlar sırayla (0 en alt); görünmez katman atlanır.
+    // Katmanlar sırayla (0 en alt); görseller sahip oldukları katmanı izler.
     for (const layer of page.layers) {
       if (!layer.visible) continue
+      paintImages(ctx, page, layer, dirty)
       for (const s of layer.strokes) {
         if (dirty) {
           // strokeBBox yalnız width/2 pay bırakır; vurgulayıcı w*2.5 ile çizilir
           // (bleed ~0.75*w). Komşu kalın vuruş kesik görünmesin diye marj ekle.
-          const b = strokeBBox(s)
+          const b = cachedStrokeBBox(s)
           if (!b || !rectsOverlap(expandRect(b, DIRTY_STROKE_MARGIN), dirty)) continue
           // Sayfa-kaplayan dev stroke'u her frame baştan tessellate etme: yalnız kirli
           // kutuya yakın nokta koşularını çiz (şekiller uç-noktalı, onlar tam kalır).
@@ -2721,7 +2762,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         paintStroke(ctx, s, paperHex, pressureSensitivity.value)
       }
     }
-    paintTexts(ctx, page)
+    paintTexts(ctx, page, dirty)
   }
 
   // Export sayfa boyutu = sayfanın kendi boyutu (bg'li: orijinal punto, boş: A4).
@@ -3711,7 +3752,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       layers,
       activeLayerId: layerId.get(src.activeLayerId) ?? layers[0]!.id,
       texts: src.texts.map((t) => ({ ...snapshotText(t), id: newStrokeId() })),
-      images: src.images.map((m) => ({ ...snapshotImage(m), id: newStrokeId() })),
+      images: src.images.map((m) => ({ ...snapshotImage(m), id: newStrokeId(), layerId: layerId.get(m.layerId) ?? layers[0]!.id })),
       size: { w: src.size.w, h: src.size.h },
       ...(src.pdfPageIndex !== undefined ? { pdfPageIndex: src.pdfPageIndex } : {}),
     }
@@ -3921,6 +3962,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     deleteText,
     activeImageId,
     activeImage,
+    visibleImages,
     imageAt,
     moveImage,
     resizeImage,

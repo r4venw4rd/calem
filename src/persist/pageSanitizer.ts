@@ -73,7 +73,7 @@ export const cleanTexts = (input: unknown): TextItem[] => {
   return clean
 }
 
-export const cleanImages = (input: unknown): ImageItem[] => {
+export const cleanImages = (input: unknown, layerIds: Set<string>, fallbackLayerId: string): ImageItem[] => {
   if (!Array.isArray(input)) return []
   const clean: ImageItem[] = []
   for (const t of input) {
@@ -87,6 +87,7 @@ export const cleanImages = (input: unknown): ImageItem[] => {
     if (w < 16 || h < 16 || w > 3000 || h > 3000) continue
     clean.push({
       id: typeof r.id === 'string' && r.id ? r.id : newStrokeId(),
+      layerId: typeof r.layerId === 'string' && layerIds.has(r.layerId) ? r.layerId : fallbackLayerId,
       x: r.x as number,
       y: r.y as number,
       w,
@@ -162,7 +163,7 @@ export const pageFromRaw = (
     layers,
     activeLayerId,
     texts: cleanTexts(p.texts),
-    images: cleanImages(p.images),
+    images: cleanImages(p.images, new Set(layers.map((l) => l.id)), layers[0]!.id),
     size: pageSizeOf(p, fallback),
     pdfPageIndex:
       typeof p.pdfPageIndex === 'number' && Number.isFinite(p.pdfPageIndex)

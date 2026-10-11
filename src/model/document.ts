@@ -52,14 +52,14 @@ export const TEXT_SIZE_MAX = 120
 // burada sadece referans durur (oturum external dosya gibidir).
 export interface ImageItem {
   id: string
+  layerId: string
   x: number
   y: number
   w: number
   h: number
   fileId: string
 }
-// Katman (Faz 5): mürekkep katmanlarda durur. Metin/resim sayfa-seviyesidir (v1 kısıtı).
-// layers[0] en alttır; görünmez katman boyanmaz ve seçime girmez (seçim aktif katmandadır).
+// Katmanlar sayfa nesnelerini sahiplenir; layers[0] en alttır.
 export interface Layer {
   id: string
   name: string
