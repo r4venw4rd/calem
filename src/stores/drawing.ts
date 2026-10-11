@@ -711,55 +711,15 @@ export const useDrawingStore = defineStore('drawing', () => {
     viewPanY = cy - (py * fs * nz + viewOy * nz)
   }
 
-  // Kaydırmalı-mod zoom çapası: slot CSS boyutu zoom'la büyüyüp layoutView
-  // yeniden fit yaptığı için imleç-çapası reflow ÖNCESİ hesaplanamaz. Bunun yerine
-  // reflow öncesi ESKİ eşlemeyle sayfa noktası + istemci konumu saklanır, reflow
-  // sonrası TAZE layout ile pan kurulur (resizeCanvas içinde tek seferlik tüketilir).
-  let pendingAnchor: { px: number; py: number; clientX: number; clientY: number } | null = null
-  const stashZoomAnchor = (cx: number, cy: number, dx = 0, dy = 0) => {
-    const c = canvasRef.value
-    if (!c) {
-      pendingAnchor = null
-      return
-    }
-    const fs = viewScale || 1
-    const es = fs * ze()
-    if (!(es > 0)) {
-      pendingAnchor = null
-      return
-    }
-    // (cx-dx, cy-dy): pinch'te orta-nokta sürüklemesi de çapa içinde erir.
-    const px = (cx - dx - (viewOx * ze() + viewPanX)) / es
-    const py = (cy - dy - (viewOy * ze() + viewPanY)) / es
-    if (!Number.isFinite(px) || !Number.isFinite(py)) {
-      pendingAnchor = null
-      return
-    }
-    const r = c.getBoundingClientRect()
-    pendingAnchor = { px, py, clientX: r.left + cx, clientY: r.top + cy }
-  }
-  const applyPendingAnchor = () => {
-    const a = pendingAnchor
-    pendingAnchor = null
-    if (!a || !scrollLive) return
-    const c = canvasRef.value
-    if (!c) return
-    const r = c.getBoundingClientRect()
-    const fs = viewScale || 1
-    viewPanX = a.clientX - r.left - (a.px * fs * ze() + viewOx * ze())
-    viewPanY = a.clientY - r.top - (a.py * fs * ze() + viewOy * ze())
-    clampPan()
-  }
-
+  // Kaydırmalı modda çapa görünüm katmanındadır (useScrollMode: imleç altındaki
+  // layout noktası + scroll kompanzasyonu). Burada yalnızca oran kurulur;
+  // yerleşim+boya rAF watcher'ındır. viewPan scroll modda daima sıfırdır.
   // İmleç/pinch-merkezi sabitli zoom. Tek repaint.
   const zoomBy = (factor: number, cx: number, cy: number) => {
     if (!(factor > 0) || !Number.isFinite(factor) || !Number.isFinite(cx) || !Number.isFinite(cy)) return
     const nz = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, viewZoom * factor))
     if (nz === viewZoom) return
     if (scrollLive) {
-      // Boya/watcher reflow sonrasına: eski geometriyle senkron repaint
-      // bir kare yanlış ölçek demekti (titreme). Watcher konumlandırıp boyar.
-      stashZoomAnchor(cx, cy)
       viewZoom = nz
       syncZoomLabel()
       scheduleRerender()
@@ -788,13 +748,11 @@ export const useDrawingStore = defineStore('drawing', () => {
     const nz = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, viewZoom * factor))
     if (scrollLive) {
       if (nz !== viewZoom && Number.isFinite(midX) && Number.isFinite(midY)) {
-        stashZoomAnchor(midX, midY, Number.isFinite(dx) ? dx : 0, Number.isFinite(dy) ? dy : 0)
         viewZoom = nz
         syncZoomLabel()
         scheduleRerender()
       }
-      // Saf iki-parmak öteleme: boya-pan YOK — çağıran native scroll'u sürer
-      // (slot/blok hizası için viewPan scroll modda daima sıfırdır).
+      // Saf iki-parmak öteleme: boya-pan YOK — çağıran native scroll'u sürer.
       return
     }
     if (nz !== viewZoom && Number.isFinite(midX) && Number.isFinite(midY)) {
@@ -816,6 +774,12 @@ export const useDrawingStore = defineStore('drawing', () => {
     viewPanX = 0
     viewPanY = 0
     syncZoomLabel()
+    // Kaydırmalı modda senkron boya yok (eski geometriyle bir kare titrerdi);
+    // rAF watcher konumlandırıp boyar.
+    if (scrollLive) {
+      scheduleRerender()
+      return
+    }
     repaintBase()
     clearOverlay()
   }
@@ -3703,8 +3667,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     setupBackingStoreFor(canvasRef.value)
     setupBackingStoreFor(overlayRef.value)
     layoutView()
-    // Kaydırmalı-mod zoom çapası (varsa): taze layout ile pan kurulur, sonra boya.
-    applyPendingAnchor()
     repaintBase()
     renderActiveStroke()
   }

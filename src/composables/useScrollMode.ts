@@ -111,6 +111,69 @@ export function useScrollMode(opts: ScrollModeOptions) {
     scrollTimer = setTimeout(runSpy, 150)
   }
 
+  // Görünüm-çapalı zoom (Xournal++ usulü): imleç altındaki layout noktası
+  // zoom boyunca sabit kalır. Boya-pan YOK — viewPan scroll modda daima sıfır.
+  // Kayıt (zoom öncesi layout+scroll ile) ve uygulama (reflow sonrası ölçümle)
+  // ayrı adımlardır; tek seferlik tüketilir.
+  interface ViewZoomAnchor {
+    blockId: string
+    fracX: number
+    fracY: number
+    viewX: number
+    viewY: number
+  }
+  let viewAnchor: ViewZoomAnchor | null = null
+
+  const anchorViewZoom = (clientX: number, clientY: number) => {
+    const box = scrollBox.value
+    if (!box || !scrollMode.value) return
+    const br = box.getBoundingClientRect()
+    const viewX = clientX - br.left
+    const viewY = clientY - br.top
+    const contentX = box.scrollLeft + viewX
+    const contentY = box.scrollTop + viewY
+    // İmleç altındaki blok (boşluktaysa en yakın kenar, oran kelepçeli).
+    let best: ViewZoomAnchor | null = null
+    let bestDist = Infinity
+    for (const pg of store.pages) {
+      const el = blockEls.get(pg.id)
+      if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) continue
+      const t = el.offsetTop
+      const l = el.offsetLeft
+      const w = el.offsetWidth
+      const h = el.offsetHeight
+      const dx = contentX < l ? l - contentX : contentX > l + w ? contentX - (l + w) : 0
+      const dy = contentY < t ? t - contentY : contentY > t + h ? contentY - (t + h) : 0
+      const d = dx * dx + dy * dy
+      if (d < bestDist) {
+        bestDist = d
+        best = {
+          blockId: pg.id,
+          fracX: Math.min(1, Math.max(0, (contentX - l) / w)),
+          fracY: Math.min(1, Math.max(0, (contentY - t) / h)),
+          viewX,
+          viewY,
+        }
+      }
+    }
+    viewAnchor = best
+  }
+
+  const applyViewZoomCompensation = () => {
+    const a = viewAnchor
+    viewAnchor = null
+    if (!a || !scrollMode.value) return
+    const box = scrollBox.value
+    const el = blockEls.get(a.blockId)
+    if (!box || !el || el.offsetWidth === 0 || el.offsetHeight === 0) return
+    const maxTop = Math.max(0, box.scrollHeight - box.clientHeight)
+    const maxLeft = Math.max(0, box.scrollWidth - box.clientWidth)
+    box.scrollTop = Math.min(maxTop, Math.max(0, el.offsetTop + a.fracY * el.offsetHeight - a.viewY))
+    box.scrollLeft = Math.min(maxLeft, Math.max(0, el.offsetLeft + a.fracX * el.offsetWidth - a.viewX))
+    // Programatik yerleşme: spy ara sayfaya takılmasın (viewport-update ≠ navigation).
+    suppressSpyUntil = Date.now() + 700
+  }
+
   // Bloğa tıklama = o sayfada çalışmaya başla. Kaydırmayı bozmamak için
   // sürükleme eşiği var (dokunmatik kaydırmada pointercancel zaten keser).
   let blockTap: { x: number; y: number; id: number } | null = null
@@ -232,5 +295,7 @@ export function useScrollMode(opts: ScrollModeOptions) {
     resetBlockTap,
     cleanup,
     takeHoldNav,
+    anchorViewZoom,
+    applyViewZoomCompensation,
   }
 }

@@ -947,9 +947,16 @@ const draw = (e: PointerEvent) => {
   }
   const step = ps.stepGesture()
   if (step) {
-    if (step.scale > 0) store.pinch(step.scale, step.midX, step.midY, step.dx, step.dy)
+    if (step.scale > 0) {
+      // Kaydırmalı modda pinch de görünüm-çapalıdır (imleç = pinch merkezi).
+      if (scrollMode.value && overlayCanvas.value) {
+        const r = overlayCanvas.value.getBoundingClientRect()
+        anchorViewZoom(r.left + step.midX, r.top + step.midY)
+      }
+      store.pinch(step.scale, step.midX, step.midY, step.dx, step.dy)
+    }
     // Kaydırmalı modda saf iki-parmak öteleme native scroll'u sürer (store
-    // boya-pan yapmaz; ölçekli adımın ötelemesi pinch çapasının içindedir).
+    // boya-pan yapmaz).
     if (scrollMode.value && step.scale === 1 && (step.dx !== 0 || step.dy !== 0)) {
       driveScroll(step.dx, step.dy)
     }
@@ -1268,7 +1275,9 @@ const onPageHide = () => {
 // passive:false ŞART (sayfa-zoom'u engellemek için preventDefault).
 // Kaydırmalı modda yalın tekerlek native kayar (dokunulmaz), ctrl/cmd zoom'lar.
 const onWheel = (e: WheelEvent) => {
-  if (scrollMode.value && !e.ctrlKey && !e.metaKey) return
+  // Kaydırmalı modda tüm tekerlek scrollBox'undur (aşağıdaki dinleyici):
+  // çifte zoom/boğuşma olmasın.
+  if (scrollMode.value) return
   e.preventDefault()
   if (!overlayCanvas.value) return
   const r = overlayCanvas.value.getBoundingClientRect()
@@ -1284,19 +1293,66 @@ const onWheel = (e: WheelEvent) => {
   updateHud(true)
 }
 
+// Kaydırmalı-mod tekerlek: scrollBox'un her yerinde ctrl/cmd = app zoom
+// (pasif blok/boşluk dahil — yoksa tarayıcı-zoom kirlenmesi olur),
+// yalın tekerlek native kayar (dokunulmaz). Dinleyici manuel bağlı
+// (passive:false ŞART, koşullu preventDefault).
+const onScrollBoxWheel = (e: WheelEvent) => {
+  if (!scrollMode.value) return
+  if (!e.ctrlKey && !e.metaKey) return
+  e.preventDefault()
+  anchorViewZoom(e.clientX, e.clientY)
+  const unit = e.deltaMode === 1 ? 16 : 1
+  store.zoomBy(Math.exp(-e.deltaY * unit * 0.002), 0, 0)
+  drawSelectionOverlay()
+  updateHud(true)
+}
+const onScrollBoxWheelEntry = (e: WheelEvent) => onScrollBoxWheel(e)
+const bindScrollBoxWheel = () => {
+  const box = scrollBox.value
+  if (!box) return
+  box.removeEventListener('wheel', onScrollBoxWheelEntry)
+  if (scrollMode.value) box.addEventListener('wheel', onScrollBoxWheelEntry, { passive: false })
+}
+
+// Buton zoom'u kaydırmalı modda viewport merkezine çapalanır.
+const zoomAtViewCenter = (factor: number) => {
+  const box = scrollBox.value
+  if (box) {
+    const r = box.getBoundingClientRect()
+    anchorViewZoom(r.left + r.width / 2, r.top + r.height / 2)
+  }
+  store.zoomBy(factor, 0, 0)
+}
+
 const zoomIn = () => {
-  store.zoomStep(1.25)
+  if (scrollMode.value) {
+    zoomAtViewCenter(1.25)
+  } else {
+    store.zoomStep(1.25)
+  }
   drawSelectionOverlay()
   updateHud(true)
 }
 
 const zoomOut = () => {
-  store.zoomStep(1 / 1.25)
+  if (scrollMode.value) {
+    zoomAtViewCenter(1 / 1.25)
+  } else {
+    store.zoomStep(1 / 1.25)
+  }
   drawSelectionOverlay()
   updateHud(true)
 }
 
 const resetZoom = () => {
+  if (scrollMode.value) {
+    const box = scrollBox.value
+    if (box) {
+      const r = box.getBoundingClientRect()
+      anchorViewZoom(r.left + r.width / 2, r.top + r.height / 2)
+    }
+  }
   store.resetView()
   drawSelectionOverlay()
   updateHud(true)
@@ -1366,6 +1422,8 @@ const {
   toggleScroll,
   resetBlockTap,
   takeHoldNav,
+  anchorViewZoom,
+  applyViewZoomCompensation,
 } = useScrollMode({
   store,
   ps,
@@ -1402,6 +1460,7 @@ let stopSettingsWatch: (() => void) | null = null
 let stopChromeWatch: (() => void) | null = null
 let stopToolWatch: (() => void) | null = null
 let stopZoomWatch: (() => void) | null = null
+let stopScrollWheelWatch: (() => void) | null = null
 let offLaunch: (() => void) | null = null
 
 // Sayfa şeridi: düşük çözünürlüklü önbellek, tick+sayfa-değişiminde debounce'lu tazelenir.
@@ -1562,6 +1621,11 @@ onMounted(() => {
     () => [store.thumbTick, store.pages, store.pageStripOpen] as const,
     refreshThumbs,
   )
+  // ScrollBox wheel dinleyici yönetimi (v-else dalı toggle ile mount/unmount olur).
+  bindScrollBoxWheel()
+  stopScrollWheelWatch = watch(scrollMode, () => {
+    nextTick(() => bindScrollBoxWheel())
+  })
   // Zoom değişince kaydırmalı yerleşimi yenile (tekli modda etkisiz).
   // nextTick ŞART: blok genişliği (zoomFactor*100%) DOM'a işlenmeden ölçülürse
   // slot bir kare bayat kalıyor ve zoom sonrası yerleşim bozuluyordu.
@@ -1575,12 +1639,12 @@ onMounted(() => {
         if (!scrollMode.value) return
         nextTick(() => {
           positionSlot()
-          // resizeCanvas: taze layout + bekleyen zoom çapası + boya (tek seferde).
+          // resizeCanvas: taze layout + boya (tek seferde).
           store.resizeCanvas()
+          // Görünüm çapası: imleç altındaki layout noktası sabit kalır.
+          applyViewZoomCompensation()
           refreshBlocks()
           drawSelectionOverlay()
-          // Bilerek kaydırma YOK: slot kökeni zoom'da sabittir, çapa boyayı
-          // imleçte tutar; scrollIntoView her adımda görünümü zıplatıyordu.
         })
       })
     },
@@ -1635,6 +1699,9 @@ onUnmounted(() => {
   stopToolWatch = null
   stopZoomWatch?.()
   stopZoomWatch = null
+  stopScrollWheelWatch?.()
+  stopScrollWheelWatch = null
+  scrollBox.value?.removeEventListener('wheel', onScrollBoxWheelEntry)
   offLaunch?.()
   offLaunch = null
   mobileMq?.removeEventListener('change', syncIsMobile)
