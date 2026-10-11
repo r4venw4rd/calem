@@ -1526,12 +1526,12 @@ onMounted(() => {
       if (!scrollMode.value) return
       nextTick(() => {
         positionSlot()
+        // resizeCanvas: taze layout + bekleyen zoom çapası + boya (tek seferde).
         store.resizeCanvas()
         refreshBlocks()
         drawSelectionOverlay()
-        // Zoom blok boylarını değiştirir (offsetTop kayar) — aktif sayfayı
-        // yerine sabitle, yoksa görünüm zıplamış gibi durur.
-        scrollActiveIntoView()
+        // Bilerek kaydırma YOK: slot kökeni zoom'da sabittir, çapa boyayı
+        // imleçte tutar; scrollIntoView her adımda görünümü zıplatıyordu.
       })
     },
   )
