@@ -443,6 +443,8 @@
 
       <div
         v-if="store.pages.length > 1 && !presenting && store.pageStripOpen"
+        ref="pageStrip"
+        @scroll="refreshThumbs"
         class="absolute left-2 top-2 bottom-14 z-10 w-24 overflow-y-auto flex flex-col gap-2 p-1.5 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border)]"
         role="navigation"
         :aria-label="t('pageStrip')"
@@ -450,6 +452,7 @@
         <button
           v-for="(src, i) in thumbs"
           :key="store.pages[i]?.id ?? i"
+          :ref="(el) => setPageThumbRef(el, store.pages[i]?.id ?? String(i))"
           @click="goStrip(i)"
           class="shrink-0 rounded border overflow-hidden transition"
           :class="i === store.activePageIndex ? 'border-indigo-500 ring-2 ring-indigo-500/60' : 'border-[var(--chrome-border)] opacity-70 hover:opacity-100'"
@@ -1554,9 +1557,16 @@ let offLaunch: (() => void) | null = null
 
 // Sayfa şeridi: düşük çözünürlüklü önbellek, tick+sayfa-değişiminde debounce'lu tazelenir.
 const thumbs = ref<string[]>([])
+const pageStrip = ref<HTMLElement | null>(null)
+const pageThumbEls = new Map<string, HTMLElement>()
+const setPageThumbRef = (el: unknown, id: string) => {
+  if (el instanceof HTMLElement) pageThumbEls.set(id, el)
+  else pageThumbEls.delete(id)
+}
 const thumbCache = new Map<string, { page: object; revision: number; url: string }>()
 let thumbTimer: ReturnType<typeof setTimeout> | undefined
 let stopThumbWatch: (() => void) | null = null
+const THUMB_BATCH_SIZE = 2
 const refreshThumbs = () => {
   // Şerit görünmüyorsa (tek sayfa / kapalı) thumbnail üretme: aksi halde her silme
   // bırakışında tüm sayfa render + toDataURL (GPU readback) yapılıp bir sonraki
@@ -1584,15 +1594,46 @@ const refreshThumbs = () => {
     try {
       const alive = new Set(store.pages.map((p) => p.id))
       for (const id of thumbCache.keys()) if (!alive.has(id)) thumbCache.delete(id)
-      thumbs.value = store.pages.map((p) => {
+      for (const id of pageThumbEls.keys()) if (!alive.has(id)) pageThumbEls.delete(id)
+      const urls = [...thumbs.value]
+      const strip = pageStrip.value
+      const stripRect = strip?.getBoundingClientRect()
+      const visible = stripRect
+        ? store.pages.flatMap((p, i) => {
+            const r = pageThumbEls.get(p.id)?.getBoundingClientRect()
+            return r && r.bottom > stripRect.top && r.top < stripRect.bottom ? [i] : []
+          })
+        : []
+      const visibleSet = new Set(visible)
+      const start = visible[0] ?? 0
+      const order = [
+        ...visible,
+        ...Array.from({ length: store.pages.length }, (_, i) => i)
+          .filter((i) => !visibleSet.has(i))
+          .sort((a, b) => Math.abs(a - start) - Math.abs(b - start)),
+      ]
+      let rendered = 0
+      let more = false
+      for (const i of order) {
+        const p = store.pages[i]!
         const revision = store.thumbRevision(p)
         const cached = thumbCache.get(p.id)
-        if (cached?.page === p && cached.revision === revision) return cached.url
+        if (cached?.page === p && cached.revision === revision) {
+          urls[i] = cached.url
+          continue
+        }
+        if (rendered >= THUMB_BATCH_SIZE) {
+          more = true
+          continue
+        }
         const c = store.exportPageToCanvas(p, p.size.w > 0 ? 96 / p.size.w : 0.15)
         const url = c ? c.toDataURL() : ''
         thumbCache.set(p.id, { page: p, revision, url })
-        return url
-      })
+        urls[i] = url
+        rendered++
+      }
+      thumbs.value = urls.slice(0, store.pages.length)
+      if (more) refreshThumbs()
     } catch {
       /* boş şerit */
     }
