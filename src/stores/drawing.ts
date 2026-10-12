@@ -704,11 +704,21 @@ export const useDrawingStore = defineStore('drawing', () => {
     zoomLabel.value = `${Math.round(viewZoom * 100)}%`
   }
 
+  // Pan kelepçesi: sayfa görünümle kesişmek zorunda. Aralık zoom'la büyür —
+  // sabit ±canvas aralığı zoom>~2'de gereken pan'i kesip ankrajı bozuyordu
+  // (içerik imleçten kaçıyordu). Ankrajlı durumlar bu aralığı hep sağlar,
+  // kelepçe yalnızca el-pan taşmalarını toplar.
   const clampPan = () => {
     const c = canvasRef.value
-    if (!c) return
-    viewPanX = Math.min(c.clientWidth, Math.max(-c.clientWidth, viewPanX))
-    viewPanY = Math.min(c.clientHeight, Math.max(-c.clientHeight, viewPanY))
+    const page = activePage.value
+    if (!c || !page) return
+    const es = (viewScale || 1) * ze()
+    const pw = page.size.w * es
+    const ph = page.size.h * es
+    const bx = viewOx * ze()
+    const by = viewOy * ze()
+    viewPanX = Math.min(c.clientWidth - bx, Math.max(-pw - bx, viewPanX))
+    viewPanY = Math.min(c.clientHeight - by, Math.max(-ph - by, viewPanY))
   }
 
   // İç çekirdek: verilen ekran noktasının altındaki sayfa noktası sabit kalır.
