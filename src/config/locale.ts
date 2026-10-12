@@ -471,8 +471,6 @@ const EN: UIDict = {
 export const UI_STRINGS: Record<Locale, UIDict> = { tr: { ...TR }, en: EN }
 
 /** Çeviri: eksik anahtar Türkçe'ye, o da yoksa anahtarın kendisine düşer. */
-export const tr = (locale: Locale, key: UIKey): string =>
-  UI_STRINGS[locale]?.[key] ?? UI_STRINGS.tr[key] ?? key
+export const tr = (locale: Locale, key: UIKey): string => UI_STRINGS[locale]?.[key] ?? UI_STRINGS.tr[key] ?? key
 
-export const toolLabel = (locale: Locale, tool: Tool): ToolLabel =>
-  TOOL_LABELS[locale]?.[tool] ?? TOOL_LABELS.tr[tool]!
+export const toolLabel = (locale: Locale, tool: Tool): ToolLabel => TOOL_LABELS[locale]?.[tool] ?? TOOL_LABELS.tr[tool]!

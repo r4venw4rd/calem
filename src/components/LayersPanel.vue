@@ -8,8 +8,14 @@
       :aria-label="t('layersDialog')"
     >
       <div class="flex items-center justify-between mb-2">
-        <span class="font-medium text-[var(--chrome-title)]">{{ t('layersDialog') }} <span class="text-[var(--chrome-faint)]">{{ t('layersOnTop') }}</span></span>
-        <button @click="$emit('close')" class="text-[var(--chrome-faint)] hover:text-[var(--chrome-title)]" :title="t('close')">
+        <span class="font-medium text-[var(--chrome-title)]"
+          >{{ t('layersDialog') }} <span class="text-[var(--chrome-faint)]">{{ t('layersOnTop') }}</span></span
+        >
+        <button
+          @click="$emit('close')"
+          class="text-[var(--chrome-faint)] hover:text-[var(--chrome-title)]"
+          :title="t('close')"
+        >
           {{ t('close') }}
         </button>
       </div>
@@ -30,11 +36,17 @@
         <button
           @click="activateLayer(l.id)"
           class="flex-1 min-w-0 text-left truncate px-1 py-0.5 rounded"
-          :class="l.id === store.activePage.activeLayerId ? 'text-[var(--chrome-title)] font-medium' : 'text-[var(--chrome-text)]'"
+          :class="
+            l.id === store.activePage.activeLayerId
+              ? 'text-[var(--chrome-title)] font-medium'
+              : 'text-[var(--chrome-text)]'
+          "
           :title="`${t('makeActive')}: ${l.name}`"
         >
           {{ l.name }}
-          <span class="font-mono text-[10px] text-[var(--chrome-faint)]">{{ l.strokes.length + store.activePage.images.filter((img) => img.layerId === l.id).length }}</span>
+          <span class="font-mono text-[10px] text-[var(--chrome-faint)]">{{
+            l.strokes.length + store.activePage.images.filter((img) => img.layerId === l.id).length
+          }}</span>
         </button>
         <button
           @click="store.moveLayer(l.id, 1)"
@@ -59,11 +71,7 @@
         >
           {{ t('rename') }}
         </button>
-        <button
-          @click="askDeleteLayer(l.id)"
-          class="px-1 rounded hover:bg-red-600/40"
-          :title="t('deleteLayer')"
-        >
+        <button @click="askDeleteLayer(l.id)" class="px-1 rounded hover:bg-red-600/40" :title="t('deleteLayer')">
           {{ t('delete') }}
         </button>
       </div>
@@ -114,8 +122,7 @@ const askDeleteLayer = async (id: string) => {
   if (!l) return
   const itemCount = l.strokes.length + store.activePage.images.filter((img) => img.layerId === l.id).length
   if (store.activePage.layers.length > 1 && itemCount > 0) {
-    if (!(await askConfirm(`"${l.name}" — ${t('confirmDelete')}`, tf('layerItemsLost', itemCount))))
-      return
+    if (!(await askConfirm(`"${l.name}" — ${t('confirmDelete')}`, tf('layerItemsLost', itemCount)))) return
   }
   store.deleteLayer(id)
   emit('changed')

@@ -1,11 +1,6 @@
 // PDF import and rasterization helpers using pdfjs-dist.
 // Dinamik import edilir: ilk sayfa yüklemesine bundle ağırlığı eklenmez.
-import {
-  PDF_MANY_THRESHOLD,
-  PDF_RENDER_BASE,
-  PDF_RENDER_MANY,
-  PDF_MAX_TOTAL_PIXELS,
-} from '../config/engine'
+import { PDF_MANY_THRESHOLD, PDF_RENDER_BASE, PDF_RENDER_MANY, PDF_MAX_TOTAL_PIXELS } from '../config/engine'
 import { pdfRasterScale } from './geometry'
 
 let workerReady = false
@@ -19,18 +14,13 @@ export interface RenderedPdfPage {
 export const ensurePdfWorker = async () => {
   const pdfjs = await import('pdfjs-dist')
   if (!workerReady) {
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-      'pdfjs-dist/build/pdf.worker.min.mjs',
-      import.meta.url,
-    ).href
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href
     workerReady = true
   }
   return pdfjs
 }
 
-export const renderPdfPages = async (
-  bytes: Uint8Array,
-): Promise<{ rendered: RenderedPdfPage[]; scale: number }> => {
+export const renderPdfPages = async (bytes: Uint8Array): Promise<{ rendered: RenderedPdfPage[]; scale: number }> => {
   const pdfjs = await ensurePdfWorker()
   const pdf = await pdfjs.getDocument({ data: bytes }).promise
   try {

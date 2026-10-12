@@ -113,7 +113,11 @@
       >
         <span v-if="store.pdfName" :title="store.pdfName">
           {{ store.pdfName }}
-          <button @click="emit('close-pdf')" class="text-[var(--chrome-muted)] hover:text-[var(--chrome-title)] underline" :title="t('closePdf')">
+          <button
+            @click="emit('close-pdf')"
+            class="text-[var(--chrome-muted)] hover:text-[var(--chrome-title)] underline"
+            :title="t('closePdf')"
+          >
             {{ t('close') }}
           </button>
         </span>

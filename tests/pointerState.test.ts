@@ -134,4 +134,3 @@ describe('releasePointer', () => {
     expect(rel3.tapAction).toBe('redo')
   })
 })
-

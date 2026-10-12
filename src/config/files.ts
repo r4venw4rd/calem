@@ -1,24 +1,19 @@
 // Dosya adları, accept filtreleri, PWA yolu: indirme/kayıt UI'ı buradan beslenir.
 
 /** Aktif sayfa PNG indirilirken. */
-export const pngFileName = (d = new Date()): string =>
-  `calem-${d.toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`
+export const pngFileName = (d = new Date()): string => `calem-${d.toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`
 
 /** Ayar yedeği indirilirken. */
-export const settingsBackupName = (d = new Date()): string =>
-  `calem-ayarlar-${d.toISOString().slice(0, 10)}.json`
+export const settingsBackupName = (d = new Date()): string => `calem-ayarlar-${d.toISOString().slice(0, 10)}.json`
 
 /** PDF yazılırken. */
-export const pdfFileName = (d = new Date()): string =>
-  `calem-${d.toISOString().slice(0, 10)}.pdf`
+export const pdfFileName = (d = new Date()): string => `calem-${d.toISOString().slice(0, 10)}.pdf`
 
 /** .calem belgesi yazılırken. */
-export const calemFileName = (d = new Date()): string =>
-  `calem-${d.toISOString().slice(0, 10)}.calem`
+export const calemFileName = (d = new Date()): string => `calem-${d.toISOString().slice(0, 10)}.calem`
 
 /** .xopp (Xournal++) belgesi yazılırken. */
-export const xoppFileName = (d = new Date()): string =>
-  `calem-${d.toISOString().slice(0, 10)}.xopp`
+export const xoppFileName = (d = new Date()): string => `calem-${d.toISOString().slice(0, 10)}.xopp`
 
 export const PDF_ACCEPT = 'application/pdf,.pdf'
 export const IMAGE_ACCEPT = 'image/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg'

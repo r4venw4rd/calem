@@ -19,13 +19,17 @@ const addImage = async (page: Page, color: string, fileName: string, x: number, 
   await page.waitForTimeout(300)
 }
 
-const pixelAt = (page: Page, x: number, y: number) => page.evaluate(({ x, y }) => {
-  const canvas = document.querySelector('canvas') as HTMLCanvasElement
-  const rect = canvas.getBoundingClientRect()
-  const px = Math.floor((x - rect.left) * canvas.width / rect.width)
-  const py = Math.floor((y - rect.top) * canvas.height / rect.height)
-  return [...canvas.getContext('2d')!.getImageData(px, py, 1, 1).data]
-}, { x, y })
+const pixelAt = (page: Page, x: number, y: number) =>
+  page.evaluate(
+    ({ x, y }) => {
+      const canvas = document.querySelector('canvas') as HTMLCanvasElement
+      const rect = canvas.getBoundingClientRect()
+      const px = Math.floor(((x - rect.left) * canvas.width) / rect.width)
+      const py = Math.floor(((y - rect.top) * canvas.height) / rect.height)
+      return [...canvas.getContext('2d')!.getImageData(px, py, 1, 1).data]
+    },
+    { x, y },
+  )
 
 test('görsel görünürlüğü ve sahipliği katmanla birlikte değişir', async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 760 })

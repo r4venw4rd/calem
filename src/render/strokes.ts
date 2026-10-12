@@ -7,7 +7,13 @@ import { shapeEndpoints as shapeEndpointsLocal } from '../lib/geometry'
 
 export const hexToRgba = (hex: string, alpha: number): string => {
   const h = hex.replace('#', '')
-  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
+  const full =
+    h.length === 3
+      ? h
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : h
   const n = parseInt(full, 16)
   if (Number.isNaN(n)) return `rgba(255,255,0,${alpha})`
   const r = (n >> 16) & 255
@@ -64,7 +70,15 @@ export const applyStyleForStroke = (
 // Kesikli desen (kalem + şekiller; vurgu/silgi düz). Genişliğe oranlı tireler.
 export const dashFor = (tool: Tool, dash: DashStyle, w: number): number[] => {
   if (dash === 'solid') return []
-  if (tool === 'highlighter' || tool === 'eraser' || tool === 'select' || tool === 'text' || tool === 'image' || tool === 'hand') return []
+  if (
+    tool === 'highlighter' ||
+    tool === 'eraser' ||
+    tool === 'select' ||
+    tool === 'text' ||
+    tool === 'image' ||
+    tool === 'hand'
+  )
+    return []
   if (dash === 'dash') return [Math.max(5, w * 3), Math.max(3, w * 1.8)]
   return [0.5, Math.max(2.5, w * 1.5)]
 }
@@ -137,15 +151,7 @@ export const paintShape = (ctx: CanvasRenderingContext2D, tool: ShapeTool, a: Po
   }
   // ellipse: köşegenin tanımladığı kutuya iç teğet elips.
   ctx.beginPath()
-  ctx.ellipse(
-    (a.x + b.x) / 2,
-    (a.y + b.y) / 2,
-    Math.abs(b.x - a.x) / 2,
-    Math.abs(b.y - a.y) / 2,
-    0,
-    0,
-    Math.PI * 2,
-  )
+  ctx.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.abs(b.x - a.x) / 2, Math.abs(b.y - a.y) / 2, 0, 0, Math.PI * 2)
 }
 
 export const paintStroke = (
@@ -217,8 +223,12 @@ export const paintStrokeTail = (
     const p2 = s.points[i + 1]!
     const p3 = s.points[Math.min(s.points.length - 1, i + 2)]!
     ctx.bezierCurveTo(
-      p1.x + ((p2.x - p0.x) / 12), p1.y + ((p2.y - p0.y) / 12),
-      p2.x - ((p3.x - p1.x) / 12), p2.y - ((p3.y - p1.y) / 12), p2.x, p2.y,
+      p1.x + (p2.x - p0.x) / 12,
+      p1.y + (p2.y - p0.y) / 12,
+      p2.x - (p3.x - p1.x) / 12,
+      p2.y - (p3.y - p1.y) / 12,
+      p2.x,
+      p2.y,
     )
   }
   ctx.stroke()

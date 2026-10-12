@@ -22,16 +22,10 @@
         @keydown.enter.prevent="dialogOk"
       />
       <div class="flex justify-end gap-1">
-        <button
-          @click="dialogCancel"
-          class="px-2 py-1 rounded hover:bg-[var(--chrome-bg-soft)]"
-        >
+        <button @click="dialogCancel" class="px-2 py-1 rounded hover:bg-[var(--chrome-bg-soft)]">
           {{ t('cancel') }}
         </button>
-        <button
-          @click="dialogOk"
-          class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
-        >
+        <button @click="dialogOk" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium">
           {{ t('ok') }}
         </button>
       </div>

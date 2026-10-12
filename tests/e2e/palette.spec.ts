@@ -13,8 +13,6 @@ test.describe('Mobil palet (MobileOptionsSheet)', () => {
 
     // Damlalık (renk girdisi) ve ilk boş slottaki "+" düğmesi
     await expect(sheet.locator('input[type="color"]')).toBeVisible()
-    await expect(
-      sheet.locator('button[title*="Open color picker"], button[title*="Renk seçici"]'),
-    ).toBeVisible()
+    await expect(sheet.locator('button[title*="Open color picker"], button[title*="Renk seçici"]')).toBeVisible()
   })
 })

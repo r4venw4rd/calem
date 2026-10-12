@@ -1,28 +1,13 @@
 import { ALL_TOOLS } from '../config/tools'
-import {
-  CUSTOM_SLOT_COUNT,
-  PALETTE_MAX_COLORS,
-  PALETTE_MAX_COUNT,
-} from '../config/palettes'
-import {
-  PAGE_FORMATS,
-  type PageFormat,
-  type PageOrientation,
-} from '../config/paper'
+import { CUSTOM_SLOT_COUNT, PALETTE_MAX_COLORS, PALETTE_MAX_COUNT } from '../config/palettes'
+import { PAGE_FORMATS, type PageFormat, type PageOrientation } from '../config/paper'
 import { cleanPaperBackground, type PaperBackground } from '../lib/paper'
 import { PAGE_MAX, PAGE_MIN } from '../config/engine'
 import { isLocale, type Locale } from '../config/locale'
 import { SLIDERS } from '../config/ui'
 import { storage } from '../lib/idb'
 import { newStrokeId } from './snapshot'
-import type {
-  AppSettings,
-  ColorPalette,
-  EraserMode,
-  Tool,
-  ToolbarConfig,
-  UiTheme,
-} from '../model/document'
+import type { AppSettings, ColorPalette, EraserMode, Tool, ToolbarConfig, UiTheme } from '../model/document'
 
 export const SETTINGS_KEY = 'calem-app-settings'
 export type { AppSettings }
@@ -60,10 +45,7 @@ export const cleanPalettes = (input: unknown): ColorPalette[] => {
     if (colors.length === 0) continue
     out.push({
       id: typeof r.id === 'string' && r.id ? r.id : newStrokeId(),
-      name:
-        typeof r.name === 'string' && r.name.trim()
-          ? r.name.trim().slice(0, 24)
-          : `Palet ${out.length + 1}`,
+      name: typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 24) : `Palet ${out.length + 1}`,
       colors,
       customs: cleanCustomList(r.customs),
     })
@@ -78,11 +60,7 @@ export const cleanToolbar = (input: unknown): ToolbarConfig => {
   const order: Tool[] = []
   if (Array.isArray(r.order)) {
     for (const t of r.order) {
-      if (
-        typeof t === 'string' &&
-        (ALL_TOOLS as string[]).includes(t) &&
-        !order.includes(t as Tool)
-      ) {
+      if (typeof t === 'string' && (ALL_TOOLS as string[]).includes(t) && !order.includes(t as Tool)) {
         order.push(t as Tool)
       }
     }
@@ -91,11 +69,7 @@ export const cleanToolbar = (input: unknown): ToolbarConfig => {
   const hidden: Tool[] = []
   if (Array.isArray(r.hidden)) {
     for (const t of r.hidden) {
-      if (
-        typeof t === 'string' &&
-        (ALL_TOOLS as string[]).includes(t) &&
-        !hidden.includes(t as Tool)
-      ) {
+      if (typeof t === 'string' && (ALL_TOOLS as string[]).includes(t) && !hidden.includes(t as Tool)) {
         hidden.push(t as Tool)
       }
     }

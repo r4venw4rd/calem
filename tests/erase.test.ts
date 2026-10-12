@@ -82,7 +82,11 @@ describe('polylineHitsCircle', () => {
 describe('splitPolylineOutsideSweep', () => {
   it('swept disk cuts a long stroke in one sweep and keeps both outside runs', () => {
     const pts = Array.from({ length: 101 }, (_, i) => P(i, 0))
-    const runs = splitPolylineOutsideSweep(pts, Array.from({ length: 11 }, (_, i) => P(40 + i * 2, 0)), 3)
+    const runs = splitPolylineOutsideSweep(
+      pts,
+      Array.from({ length: 11 }, (_, i) => P(40 + i * 2, 0)),
+      3,
+    )
     expect(runs).toHaveLength(2)
     expect(runs[0]!.at(-1)!.x).toBeCloseTo(37, 5)
     expect(runs[1]![0]!.x).toBeCloseTo(63, 5)

@@ -12,9 +12,17 @@ test('page strip renders the visible thumbnail batch first, then the remaining p
   await expect(strip).toBeVisible()
   const images = strip.locator('img')
   await expect(images).toHaveCount(4)
-  await strip.evaluate((el) => { el.scrollTop = 0 })
+  await strip.evaluate((el) => {
+    el.scrollTop = 0
+  })
   await strip.dispatchEvent('scroll')
 
-  await expect.poll(async () => images.evaluateAll((els) => els.slice(0, 2).every((el) => (el as HTMLImageElement).src.startsWith('data:')))).toBe(true)
-  await expect.poll(async () => images.evaluateAll((els) => els.filter((el) => (el as HTMLImageElement).src).length)).toBe(4)
+  await expect
+    .poll(async () =>
+      images.evaluateAll((els) => els.slice(0, 2).every((el) => (el as HTMLImageElement).src.startsWith('data:'))),
+    )
+    .toBe(true)
+  await expect
+    .poll(async () => images.evaluateAll((els) => els.filter((el) => (el as HTMLImageElement).src).length))
+    .toBe(4)
 })

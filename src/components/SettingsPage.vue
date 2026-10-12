@@ -1,6 +1,8 @@
 <template>
   <SettingsSection :title="t('secPage')">
-    <div class="mb-1 text-[var(--chrome-muted)]">{{ t('pageFormat') }} <span class="text-[var(--chrome-faint)]">{{ t('newPages') }}</span></div>
+    <div class="mb-1 text-[var(--chrome-muted)]">
+      {{ t('pageFormat') }} <span class="text-[var(--chrome-faint)]">{{ t('newPages') }}</span>
+    </div>
     <select
       :value="store.pageFormat"
       @change="$emit('page-layout', store.setPageFormat(($event.target as HTMLSelectElement).value))"
@@ -14,14 +16,22 @@
       <button
         @click="$emit('page-layout', store.setPageOrientation('portrait'))"
         class="flex-1 px-2 py-1 rounded transition"
-        :class="store.pageOrientation === 'portrait' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
+        :class="
+          store.pageOrientation === 'portrait'
+            ? 'bg-indigo-600 text-white'
+            : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'
+        "
       >
         {{ t('portrait') }}
       </button>
       <button
         @click="$emit('page-layout', store.setPageOrientation('landscape'))"
         class="flex-1 px-2 py-1 rounded transition"
-        :class="store.pageOrientation === 'landscape' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
+        :class="
+          store.pageOrientation === 'landscape'
+            ? 'bg-indigo-600 text-white'
+            : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'
+        "
       >
         {{ t('landscape') }}
       </button>
@@ -35,7 +45,9 @@
           :min="PAGE_MIN"
           :max="PAGE_MAX"
           :value="store.customW"
-          @change="$emit('page-layout', store.setCustomSize(Number(($event.target as HTMLInputElement).value), store.customH))"
+          @change="
+            $emit('page-layout', store.setCustomSize(Number(($event.target as HTMLInputElement).value), store.customH))
+          "
           class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
         />
       </label>
@@ -46,7 +58,9 @@
           :min="PAGE_MIN"
           :max="PAGE_MAX"
           :value="store.customH"
-          @change="$emit('page-layout', store.setCustomSize(store.customW, Number(($event.target as HTMLInputElement).value)))"
+          @change="
+            $emit('page-layout', store.setCustomSize(store.customW, Number(($event.target as HTMLInputElement).value)))
+          "
           class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
         />
       </label>

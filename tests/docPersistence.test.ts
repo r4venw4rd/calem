@@ -6,7 +6,11 @@ import { snapshotDoc } from '../src/persist/snapshot'
 
 describe('document persistence', () => {
   const page = (): Page => ({
-    id: 'p', activeLayerId: 'l', size: { w: 100, h: 100 }, texts: [], images: [],
+    id: 'p',
+    activeLayerId: 'l',
+    size: { w: 100, h: 100 },
+    texts: [],
+    images: [],
     layers: [{ id: 'l', name: 'Layer', visible: true, strokes: [] }],
   })
 
@@ -14,7 +18,10 @@ describe('document persistence', () => {
     const source = page()
     const snapshot = snapshotDoc([source], 0)
     const doc = buildPersistedDoc({
-      pages: [source], widths: {} as Record<Tool, number>, activePageIndex: 0, snapshot,
+      pages: [source],
+      widths: {} as Record<Tool, number>,
+      activePageIndex: 0,
+      snapshot,
     })
     expect(doc.pages).toBe(snapshot.pages)
   })
@@ -22,7 +29,9 @@ describe('document persistence', () => {
   it('continues to snapshot input pages when no cached snapshot is supplied', () => {
     const source = page()
     const doc = buildPersistedDoc({
-      pages: [source], widths: {} as Record<Tool, number>, activePageIndex: 0,
+      pages: [source],
+      widths: {} as Record<Tool, number>,
+      activePageIndex: 0,
     })
     expect(doc.pages[0]).not.toBe(source)
   })
@@ -32,10 +41,20 @@ describe('document persistence', () => {
       doc: {
         v: 1,
         savedAt: 12,
-        strokes: [{
-          id: 's1', tool: 'pen', color: '#fff', width: 3, dash: 'solid', opacity: 1,
-          points: [{ x: 10, y: 20 }, { x: 30, y: 40 }],
-        }],
+        strokes: [
+          {
+            id: 's1',
+            tool: 'pen',
+            color: '#fff',
+            width: 3,
+            dash: 'solid',
+            opacity: 1,
+            points: [
+              { x: 10, y: 20 },
+              { x: 30, y: 40 },
+            ],
+          },
+        ],
       } as PersistedDoc,
       viewFallback: { w: 600, h: 800 },
       newPageId: () => 'migrated-page',
@@ -53,11 +72,21 @@ describe('document persistence', () => {
   it('clamps the active page and restores the PDF reference from a v5 document', () => {
     const result = deserializePersistedDoc({
       doc: {
-        v: 5, savedAt: 12, pages: [{
-          id: 'p1', layers: [{ id: 'l1', name: 'Ink', visible: true, strokes: [] }],
-          activeLayerId: 'l1', texts: [], images: [], size: { w: 600, h: 800 },
-        }],
-        activePageIndex: 10, pdfId: 'pdf-1', pdfName: 'notes.pdf',
+        v: 5,
+        savedAt: 12,
+        pages: [
+          {
+            id: 'p1',
+            layers: [{ id: 'l1', name: 'Ink', visible: true, strokes: [] }],
+            activeLayerId: 'l1',
+            texts: [],
+            images: [],
+            size: { w: 600, h: 800 },
+          },
+        ],
+        activePageIndex: 10,
+        pdfId: 'pdf-1',
+        pdfName: 'notes.pdf',
       } as PersistedDoc,
       viewFallback: { w: 500, h: 700 },
       newPageId: () => 'unused',
@@ -72,7 +101,9 @@ describe('document persistence', () => {
     const fmt = (time: number) => String(time)
     expect(summarizePersistedDoc({ v: 1, savedAt: 7, strokes: [] }, fmt)).toBeNull()
     expect(summarizePersistedDoc({ v: 1, savedAt: 7, strokes: [{} as Stroke] }, fmt)).toEqual({
-      when: '7', pages: 1, strokes: 1,
+      when: '7',
+      pages: 1,
+      strokes: 1,
     })
   })
 })

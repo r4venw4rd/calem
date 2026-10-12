@@ -21,7 +21,13 @@ export type PdfDoc = InstanceType<typeof jsPDF>
 
 export const hexToRgb = (hex: string): [number, number, number] => {
   const h = hex.replace('#', '')
-  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
+  const full =
+    h.length === 3
+      ? h
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : h
   const n = parseInt(full, 16)
   if (Number.isNaN(n)) return [255, 255, 0]
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
@@ -117,12 +123,7 @@ export const paintStrokesVector = (
   }
 }
 
-export const paintPatternVector = (
-  doc: PdfDoc,
-  page: Page,
-  bg: PaperBackground,
-  hasBgCanvas: boolean,
-) => {
+export const paintPatternVector = (doc: PdfDoc, page: Page, bg: PaperBackground, hasBgCanvas: boolean) => {
   if (bg.type === 'blank' && !bg.margin) return
   if (hasBgCanvas) return
   const { w, h } = page.size

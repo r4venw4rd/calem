@@ -23,12 +23,7 @@ import {
 } from '../src/config/engine'
 import { A4, DEFAULT_PAPER_BACKGROUND, PAGE_FORMATS, PAPER_THEMES } from '../src/config/paper'
 import { ALL_TOOLS, DEFAULT_WIDTHS, TOOL_META, WIDTH_MAX, WIDTH_MIN } from '../src/config/tools'
-import {
-  CUSTOM_SLOT_COUNT,
-  DEFAULT_PALETTES,
-  PALETTE_MAX_COLORS,
-  PALETTE_MAX_COUNT,
-} from '../src/config/palettes'
+import { CUSTOM_SLOT_COUNT, DEFAULT_PALETTES, PALETTE_MAX_COLORS, PALETTE_MAX_COUNT } from '../src/config/palettes'
 import {
   CALEM_ACCEPT,
   IMAGE_ACCEPT,

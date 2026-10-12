@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  ANONYMOUS_USER_ID,
-  LocalAuthProvider,
-  getAuth,
-  getUser,
-  setAuthProvider,
-} from '../src/lib/auth'
+import { ANONYMOUS_USER_ID, LocalAuthProvider, getAuth, getUser, setAuthProvider } from '../src/lib/auth'
 
 describe('auth', () => {
   it('local: tek anonim kullanıcı', () => {

@@ -215,11 +215,15 @@ export function useScrollMode(opts: ScrollModeOptions) {
         const z = Math.min(2.5, Math.max(0.5, store.zoomFactor))
         const pages = store.pages.filter((p) => p.id !== activeId && blockEls.has(p.id))
         const box = scrollBox.value?.getBoundingClientRect()
-        const visible = box ? pages.filter((p) => {
-          const r = blockEls.get(p.id)?.getBoundingClientRect()
-          return Boolean(r && r.bottom >= box.top - box.height && r.top <= box.bottom + box.height)
-        }) : pages
-        const needsRender = visible.filter((p) => blockRenderKey.get(p.id) !== `${z.toFixed(3)}:${p.size.w}x${p.size.h}`)
+        const visible = box
+          ? pages.filter((p) => {
+              const r = blockEls.get(p.id)?.getBoundingClientRect()
+              return Boolean(r && r.bottom >= box.top - box.height && r.top <= box.bottom + box.height)
+            })
+          : pages
+        const needsRender = visible.filter(
+          (p) => blockRenderKey.get(p.id) !== `${z.toFixed(3)}:${p.size.w}x${p.size.h}`,
+        )
         const batch = needsRender.slice(0, 2)
         more = needsRender.length > batch.length
         for (const p of batch) {
@@ -279,11 +283,14 @@ export function useScrollMode(opts: ScrollModeOptions) {
 
   // Mürekkep yalnızca aktif sayfada değişir: pasif damgalar taze kalır,
   // yalnız aktif sayfanın damgası silinir (pasife düşünce boyanır).
-  const stopBlockWatch = watch(() => store.thumbTick, () => {
-    const activeId = store.pages[store.activePageIndex]?.id
-    if (activeId) blockRenderKey.delete(activeId)
-    refreshBlocks()
-  })
+  const stopBlockWatch = watch(
+    () => store.thumbTick,
+    () => {
+      const activeId = store.pages[store.activePageIndex]?.id
+      if (activeId) blockRenderKey.delete(activeId)
+      refreshBlocks()
+    },
+  )
 
   onUnmounted(() => {
     stopBlockWatch()

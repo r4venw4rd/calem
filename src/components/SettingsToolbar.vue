@@ -55,7 +55,9 @@
         <button
           @click="store.setActivePalette(p.id)"
           class="flex-1 min-w-0 text-left truncate px-1 py-0.5 rounded"
-          :class="p.id === store.activePaletteId ? 'text-[var(--chrome-title)] font-medium' : 'text-[var(--chrome-text)]'"
+          :class="
+            p.id === store.activePaletteId ? 'text-[var(--chrome-title)] font-medium' : 'text-[var(--chrome-text)]'
+          "
           :title="`${t('makeActive')}: ${p.name} (${p.colors.length})`"
         >
           {{ p.name }}

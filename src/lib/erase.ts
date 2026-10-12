@@ -48,12 +48,7 @@ const copyPt = (p: Point): Point => ({ x: p.x, y: p.y, pressure: p.pressure })
 // Polyline daireye DEĞİYOR MU (herhangi nokta içeride veya herhangi segment daireyi kesiyor)?
 // splitRunsOutside ile AYNI değişim koşulu, ama HİÇ AYIRIM YAPMAZ (no-op kopya/GC yok).
 // Yoğun sayfa-kaplayan stroke'larda silgi yolunun nokta başına tam kopyasını önler.
-export const polylineHitsCircle = (
-  pts: Point[],
-  cx: number,
-  cy: number,
-  r: number,
-): boolean => {
+export const polylineHitsCircle = (pts: Point[], cx: number, cy: number, r: number): boolean => {
   const n = pts.length
   if (n === 0) return false
   if (!(r > 0)) return false
@@ -133,7 +128,9 @@ export const splitRunsOutside = (pts: Point[], cx: number, cy: number, r: number
 
 // Cut a sampled circular eraser sweep in one pass per stroke segment.
 export const splitPolylineOutsideSweep = (
-  pts: Point[], path: { x: number; y: number }[], radius: number,
+  pts: Point[],
+  path: { x: number; y: number }[],
+  radius: number,
 ): Point[][] => {
   if (!pts.length || !path.length || !(radius > 0)) return pts.length ? [pts] : []
   const cell = Math.max(radius * 2, 1)
@@ -147,9 +144,21 @@ export const splitPolylineOutsideSweep = (
   const candidatesFor = (a: Point, b: Point) => {
     const out: { x: number; y: number }[] = []
     const seen = new Set<{ x: number; y: number }>()
-    for (let y = Math.floor((Math.min(a.y, b.y) - radius) / cell); y <= Math.floor((Math.max(a.y, b.y) + radius) / cell); y++) {
-      for (let x = Math.floor((Math.min(a.x, b.x) - radius) / cell); x <= Math.floor((Math.max(a.x, b.x) + radius) / cell); x++) {
-        for (const p of grid.get(`${x}:${y}`) ?? []) if (!seen.has(p)) { seen.add(p); out.push(p) }
+    for (
+      let y = Math.floor((Math.min(a.y, b.y) - radius) / cell);
+      y <= Math.floor((Math.max(a.y, b.y) + radius) / cell);
+      y++
+    ) {
+      for (
+        let x = Math.floor((Math.min(a.x, b.x) - radius) / cell);
+        x <= Math.floor((Math.max(a.x, b.x) + radius) / cell);
+        x++
+      ) {
+        for (const p of grid.get(`${x}:${y}`) ?? [])
+          if (!seen.has(p)) {
+            seen.add(p)
+            out.push(p)
+          }
       }
     }
     return out
@@ -157,7 +166,10 @@ export const splitPolylineOutsideSweep = (
   const out: Point[][] = []
   let run: Point[] = []
   let changed = false
-  const end = () => { if (run.length) out.push(run); run = [] }
+  const end = () => {
+    if (run.length) out.push(run)
+    run = []
+  }
   if (pts.length === 1) return polylineHitsCircle(path, pts[0]!.x, pts[0]!.y, radius) ? [] : [pts]
   for (let i = 1; i < pts.length; i++) {
     const a = pts[i - 1]!
@@ -172,7 +184,7 @@ export const splitPolylineOutsideSweep = (
     const pointAt = (t: number): Point => ({
       x: a.x + dx * t,
       y: a.y + dy * t,
-      ...((a.pressure !== undefined || b.pressure !== undefined)
+      ...(a.pressure !== undefined || b.pressure !== undefined
         ? { pressure: (a.pressure ?? 1) + ((b.pressure ?? 1) - (a.pressure ?? 1)) * t }
         : {}),
     })

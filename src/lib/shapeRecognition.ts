@@ -48,7 +48,9 @@ export const pathLength = (pts: Point[]): number => {
 }
 
 /** Noktaların eksen hizalı sınırlayıcı kutusunu bulur. */
-export const boundingBox = (pts: Point[]): { minX: number; minY: number; maxX: number; maxY: number; w: number; h: number } => {
+export const boundingBox = (
+  pts: Point[],
+): { minX: number; minY: number; maxX: number; maxY: number; w: number; h: number } => {
   if (pts.length === 0) return { minX: 0, minY: 0, maxX: 0, maxY: 0, w: 0, h: 0 }
   let minX = pts[0]!.x
   let maxX = pts[0]!.x
@@ -118,7 +120,10 @@ export const detectLine = (pts: Point[], opts: Required<ShapeRecognitionOptions>
 
   return {
     tool: 'line',
-    points: [{ x: p0.x, y: p0.y, pressure: p0.pressure }, { x: endX, y: endY, pressure: pEnd.pressure }],
+    points: [
+      { x: p0.x, y: p0.y, pressure: p0.pressure },
+      { x: endX, y: endY, pressure: pEnd.pressure },
+    ],
     confidence: straightness,
   }
 }
@@ -182,7 +187,10 @@ export const detectArrow = (pts: Point[], opts: Required<ShapeRecognitionOptions
 
   return {
     tool: 'arrow',
-    points: [{ x: p0.x, y: p0.y, pressure: p0.pressure }, { x: endX, y: endY, pressure: pStemEnd.pressure }],
+    points: [
+      { x: p0.x, y: p0.y, pressure: p0.pressure },
+      { x: endX, y: endY, pressure: pStemEnd.pressure },
+    ],
     confidence: stemStraightness,
   }
 }
@@ -246,7 +254,10 @@ export const detectEllipse = (pts: Point[], opts: Required<ShapeRecognitionOptio
 
   return {
     tool: 'ellipse',
-    points: [{ x: minX, y: minY }, { x: maxX, y: maxY }],
+    points: [
+      { x: minX, y: minY },
+      { x: maxX, y: maxY },
+    ],
     confidence: 1 - meanErr,
   }
 }
@@ -330,7 +341,10 @@ export const detectRectangle = (pts: Point[], opts: Required<ShapeRecognitionOpt
 
   return {
     tool: 'rect',
-    points: [{ x: bbox.minX, y: bbox.minY }, { x: bbox.maxX, y: bbox.maxY }],
+    points: [
+      { x: bbox.minX, y: bbox.minY },
+      { x: bbox.maxX, y: bbox.maxY },
+    ],
     confidence: 1 - meanEdgeDist / perimeter,
   }
 }
@@ -339,10 +353,7 @@ export const detectRectangle = (pts: Point[], opts: Required<ShapeRecognitionOpt
  * Verilen serbest çizim noktalarından geometrik primitifi tanır.
  * Öncelik sırası: Ok -> Düz Çizgi -> Dikdörtgen/Kutu -> Daire/Elips.
  */
-export const recognizeShape = (
-  pts: Point[],
-  options?: ShapeRecognitionOptions
-): RecognizedShape | null => {
+export const recognizeShape = (pts: Point[], options?: ShapeRecognitionOptions): RecognizedShape | null => {
   if (pts.length < 2) return null
   const opts = { ...DEFAULT_OPTIONS, ...options }
 

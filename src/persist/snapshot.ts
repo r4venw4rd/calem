@@ -8,14 +8,11 @@ let strokeSeq = 0
 export const newStrokeId = () =>
   `s-${Date.now().toString(36)}-${(strokeSeq++).toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
 
-export const newPageId = () =>
-  `p-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+export const newPageId = () => `p-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
 
-export const newLayerId = () =>
-  `l-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+export const newLayerId = () => `l-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
 
-export const newTextId = () =>
-  `t-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+export const newTextId = () => `t-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
 
 export const snapshotStroke = (s: Stroke): Stroke => ({
   id: typeof s.id === 'string' && s.id ? s.id : newStrokeId(),
@@ -78,7 +75,9 @@ export const createPageSnapshotCache = () => {
   const revision = (page: Page) => versions.get(page) ?? 0
   return {
     revision,
-    invalidate(page: Page) { versions.set(page, revision(page) + 1) },
+    invalidate(page: Page) {
+      versions.set(page, revision(page) + 1)
+    },
     snapshot(pages: Page[], activePageIndex: number): DocSnap {
       return {
         pages: pages.map((page) => {

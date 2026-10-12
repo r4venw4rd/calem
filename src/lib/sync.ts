@@ -37,9 +37,7 @@ export function mergePages<T extends SyncablePage>(local: T[], remote: T[]): T[]
   for (const p of remote) {
     if (p && typeof p.id === 'string' && !order.has(p.id)) order.set(p.id, next++)
   }
-  return [...byId.values()].sort(
-    (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
-  )
+  return [...byId.values()].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
 }
 
 /** Tombstone birleşimi: aynı id'de deletedAt büyük olan kazanır. */
@@ -47,8 +45,7 @@ export function mergeTombstones(local: Tombstone[], remote: Tombstone[]): Tombst
   const byId = new Map<string, Tombstone>()
   for (const t of [...local, ...remote]) {
     if (!t || typeof t.id !== 'string') continue
-    const at =
-      typeof t.deletedAt === 'number' && Number.isFinite(t.deletedAt) ? t.deletedAt : 0
+    const at = typeof t.deletedAt === 'number' && Number.isFinite(t.deletedAt) ? t.deletedAt : 0
     const cur = byId.get(t.id)
     if (!cur || at > cur.deletedAt) byId.set(t.id, { id: t.id, deletedAt: at })
   }
@@ -144,10 +141,7 @@ export function missingFileIds(localIds: string[], remoteIds: string[]): string[
 }
 
 /** Doküman kazananı: savedAt büyük olan (eşitlikte local — flap önlenir). */
-export function isRemoteNewer(
-  local: { savedAt: number },
-  remote: { savedAt: number },
-): boolean {
+export function isRemoteNewer(local: { savedAt: number }, remote: { savedAt: number }): boolean {
   const l = typeof local.savedAt === 'number' ? local.savedAt : 0
   const r = typeof remote.savedAt === 'number' ? remote.savedAt : 0
   return r > l

@@ -77,14 +77,20 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
       ctx.stroke()
     }
     if (hasSel) {
-      const bb = selectionBBox(store.activePage.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes), store.selectedIds)
+      const bb = selectionBBox(
+        store.activePage.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes),
+        store.selectedIds,
+      )
       const imageBoxes = store.visibleImages().filter((img) => store.selectedIds.includes(img.id))
-      const bounds = imageBoxes.reduce((r, img) => ({
-        x0: Math.min(r?.x0 ?? Infinity, img.x),
-        y0: Math.min(r?.y0 ?? Infinity, img.y),
-        x1: Math.max(r?.x1 ?? -Infinity, img.x + img.w),
-        y1: Math.max(r?.y1 ?? -Infinity, img.y + img.h),
-      }), bb)
+      const bounds = imageBoxes.reduce(
+        (r, img) => ({
+          x0: Math.min(r?.x0 ?? Infinity, img.x),
+          y0: Math.min(r?.y0 ?? Infinity, img.y),
+          x1: Math.max(r?.x1 ?? -Infinity, img.x + img.w),
+          y1: Math.max(r?.y1 ?? -Infinity, img.y + img.h),
+        }),
+        bb,
+      )
       if (bounds) {
         const x0 = sx(bounds.x0)
         const y0 = sy(bounds.y0)
@@ -98,7 +104,12 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
         // Köşe tutamaçları
         ctx.setLineDash([])
         ctx.fillStyle = '#6366f1'
-        for (const [hx, hy] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]] as const) {
+        for (const [hx, hy] of [
+          [x0, y0],
+          [x1, y0],
+          [x0, y1],
+          [x1, y1],
+        ] as const) {
           ctx.fillRect(hx - 3, hy - 3, 6, 6)
         }
       }
@@ -107,7 +118,10 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
   }
 
   const selInside = (p: { x: number; y: number }): boolean => {
-    const raw = selectionBBox(store.activePage.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes), store.selectedIds)
+    const raw = selectionBBox(
+      store.activePage.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes),
+      store.selectedIds,
+    )
     let bb = raw ? { ...raw } : null
     for (const img of store.visibleImages()) {
       if (!store.selectedIds.includes(img.id)) continue
@@ -140,10 +154,17 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
     } else {
       // 2. Bir nesneye (örneğin üçgen, çizgi, şekil) doğrudan tıklandı mı?
       const layers = store.activePage.layers.filter((layer) => layer.visible)
-      const hitStroke = strokeAtPoint(layers.slice().reverse().flatMap((layer) => layer.strokes), p.x, p.y)
-      const hitImage = [...store.visibleImages()].reverse().find((img) =>
-        p.x >= img.x && p.x <= img.x + img.w && p.y >= img.y && p.y <= img.y + img.h,
+      const hitStroke = strokeAtPoint(
+        layers
+          .slice()
+          .reverse()
+          .flatMap((layer) => layer.strokes),
+        p.x,
+        p.y,
       )
+      const hitImage = [...store.visibleImages()]
+        .reverse()
+        .find((img) => p.x >= img.x && p.x <= img.x + img.w && p.y >= img.y && p.y <= img.y + img.h)
       const hitId = hitStroke ?? hitImage?.id ?? null
       if (hitId) {
         store.selectedIds = [hitId]

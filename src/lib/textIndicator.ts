@@ -1,6 +1,6 @@
 /**
  * Live Text Input (Paint-style)
- * 
+ *
  * Text tool click → Dashed border kutu sabit kalır
  * Kutu ALTında HTML textarea açılır
  * Yazılan metin hem textarea'ya hem canvas kutuya yazılır
@@ -50,12 +50,7 @@ export class TextInputManager {
   /**
    * Text input başlat
    */
-  startEditing(
-    x: number,
-    y: number,
-    fontSize: number,
-    color: string,
-  ) {
+  startEditing(x: number, y: number, fontSize: number, color: string) {
     this.state.x = x
     this.state.y = y
     this.state.fontSize = fontSize
@@ -205,15 +200,9 @@ export class TextInputManager {
     height: number
   } {
     const rect = canvasElement.getBoundingClientRect()
-    const screenX =
-      rect.left +
-      this.state.canvasOffsetX +
-      this.state.x * this.state.canvasScale
+    const screenX = rect.left + this.state.canvasOffsetX + this.state.x * this.state.canvasScale
     const screenY =
-      rect.top +
-      this.state.canvasOffsetY +
-      (this.state.y + this.state.initialHeight) * this.state.canvasScale +
-      8 // Box altında 8px boşluk
+      rect.top + this.state.canvasOffsetY + (this.state.y + this.state.initialHeight) * this.state.canvasScale + 8 // Box altında 8px boşluk
 
     return {
       left: screenX,
@@ -235,12 +224,7 @@ export function useLiveTextInput() {
   const isEditing = computed(() => manager.getState().isActive)
   const currentText = computed(() => manager.getState().currentText)
 
-  const startEditing = (
-    x: number,
-    y: number,
-    fontSize: number,
-    color: string,
-  ) => {
+  const startEditing = (x: number, y: number, fontSize: number, color: string) => {
     manager.startEditing(x, y, fontSize, color)
     nextTick(() => manager.focusInput())
   }
@@ -292,16 +276,16 @@ export function useLiveTextInput() {
 
 /**
  * Kullanım (CanvasView.vue):
- * 
+ *
  * ```vue
  * <template>
  *   <div class="relative">
- *     <canvas 
+ *     <canvas
  *       ref="canvasRef"
  *       @click="onCanvasClick"
  *       @mousemove="onCanvasMouseMove"
  *     ></canvas>
- *     
+ *
  *     <!-- HTML textarea (box altında, paint style) -->
  *     <textarea
  *       v-if="isEditing"
@@ -314,11 +298,11 @@ export function useLiveTextInput() {
  *     />
  *   </div>
  * </template>
- * 
+ *
  * <script setup lang="ts">
  * import { ref } from 'vue'
  * import { useLiveTextInput } from '@/lib/textInputManager'
- * 
+ *
  * const {
  *   manager,
  *   textInputRef,
@@ -331,41 +315,41 @@ export function useLiveTextInput() {
  *   updateText,
  *   setCanvasTransform,
  * } = useLiveTextInput()
- * 
+ *
  * const canvas = ref<HTMLCanvasElement>()
  * let pageScale = 1
  * let pageOffsetX = 0
  * let pageOffsetY = 0
- * 
+ *
  * function onCanvasClick(e: MouseEvent) {
  *   if (store.currentTool !== 'text') return
- *   
+ *
  *   const rect = canvas.value!.getBoundingClientRect()
  *   const screenX = e.clientX - rect.left
  *   const screenY = e.clientY - rect.top
- *   
+ *
  *   // Page koordinatlarına dönüştür
  *   const pageX = (screenX - pageOffsetX) / pageScale
  *   const pageY = (screenY - pageOffsetY) / pageScale
- *   
+ *
  *   // Text input başlat
  *   startEditing(pageX, pageY, store.textSize, store.textColor)
  *   setCanvasTransform(pageScale, pageOffsetX, pageOffsetY)
- *   
+ *
  *   renderCanvas()
  * }
- * 
+ *
  * function onCanvasMouseMove() {
  *   if (!isEditing.value) return
  *   renderCanvas()
  * }
- * 
+ *
  * function renderCanvas() {
  *   const ctx = canvas.value!.getContext('2d')!
  *   // ... page çiz ...
  *   manager.drawTextBox(ctx, pageScale)
  * }
- * 
+ *
  * function onTextInputBlur() {
  *   const text = finishEditing()
  *   if (text) {
@@ -380,7 +364,7 @@ export function useLiveTextInput() {
  *   }
  *   renderCanvas()
  * }
- * 
+ *
  * function onTextInputCancel() {
  *   finishEditing()
  *   renderCanvas()
@@ -388,6 +372,3 @@ export function useLiveTextInput() {
  * </script>
  * ```
  */
-
-
-

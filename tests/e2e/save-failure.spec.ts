@@ -34,7 +34,12 @@ test('a failed autosave is reported and leaves the last saved document intact', 
       return new Promise<number>((resolve, reject) => {
         const req = db.transaction('docs').objectStore('docs').get('default')
         req.onsuccess = () =>
-          resolve(req.result?.pages?.[0]?.layers?.reduce((n: number, layer: { strokes: unknown[] }) => n + layer.strokes.length, 0) ?? 0)
+          resolve(
+            req.result?.pages?.[0]?.layers?.reduce(
+              (n: number, layer: { strokes: unknown[] }) => n + layer.strokes.length,
+              0,
+            ) ?? 0,
+          )
         req.onerror = () => reject(req.error)
       })
     })

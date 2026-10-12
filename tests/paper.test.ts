@@ -17,16 +17,7 @@ import {
 
 describe('isPaperBackgroundType', () => {
   it('gecerli tipleri kabul eder', () => {
-    for (const t of [
-      'blank',
-      'ruled',
-      'graph',
-      'dotted',
-      'staff',
-      'isometric',
-      'cornell',
-      'planner',
-    ]) {
+    for (const t of ['blank', 'ruled', 'graph', 'dotted', 'staff', 'isometric', 'cornell', 'planner']) {
       expect(isPaperBackgroundType(t)).toBe(true)
     }
   })
@@ -49,9 +40,7 @@ describe('cleanPaperBackground', () => {
     expect(cleanPaperBackground({ spacing: 30 }).spacing).toBe(30)
   })
   it('bozuk rengi defaultlar', () => {
-    expect(cleanPaperBackground({ lineColor: 'kirmizi' }).lineColor).toBe(
-      DEFAULT_PAPER_BACKGROUND.lineColor,
-    )
+    expect(cleanPaperBackground({ lineColor: 'kirmizi' }).lineColor).toBe(DEFAULT_PAPER_BACKGROUND.lineColor)
     expect(cleanPaperBackground({ lineColor: '#ff0000' }).lineColor).toBe('#ff0000')
   })
   it('tipi korur, bilinmeyeni blank yapar', () => {

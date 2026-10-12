@@ -13,7 +13,11 @@
     >
       <div class="flex items-center justify-between px-3 pt-3 pb-2">
         <span class="font-medium text-[var(--chrome-title)]">{{ t('settings') }}</span>
-        <button @click="$emit('close')" class="text-[var(--chrome-faint)] hover:text-[var(--chrome-title)]" :title="t('doneTitle')">
+        <button
+          @click="$emit('close')"
+          class="text-[var(--chrome-faint)] hover:text-[var(--chrome-title)]"
+          :title="t('doneTitle')"
+        >
           {{ t('close') }}
         </button>
       </div>

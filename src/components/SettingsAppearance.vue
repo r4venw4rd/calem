@@ -5,14 +5,22 @@
       <button
         @click="store.setUiTheme('koyu')"
         class="flex-1 px-2 py-1 rounded transition"
-        :class="store.uiTheme === 'koyu' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
+        :class="
+          store.uiTheme === 'koyu'
+            ? 'bg-indigo-600 text-white'
+            : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'
+        "
       >
         {{ t('dark') }}
       </button>
       <button
         @click="store.setUiTheme('acik')"
         class="flex-1 px-2 py-1 rounded transition"
-        :class="store.uiTheme === 'acik' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'"
+        :class="
+          store.uiTheme === 'acik'
+            ? 'bg-indigo-600 text-white'
+            : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'
+        "
       >
         {{ t('light') }}
       </button>
@@ -40,7 +48,9 @@
         class="flex-1 accent-indigo-600"
         :title="t('uiScale')"
       />
-      <span class="text-xs text-[var(--chrome-text)] w-10 text-right font-mono">{{ Math.round(store.uiScale * 100) }}%</span>
+      <span class="text-xs text-[var(--chrome-text)] w-10 text-right font-mono"
+        >{{ Math.round(store.uiScale * 100) }}%</span
+      >
     </div>
 
     <div class="mb-1 text-[var(--chrome-muted)]">{{ t('paperTheme') }}</div>
@@ -51,7 +61,11 @@
         @click="store.setPaper(hex)"
         :title="String(name)"
         class="w-8 h-8 rounded-full border-2 transition"
-        :class="store.paper === hex ? 'border-[var(--chrome-title)]' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
+        :class="
+          store.paper === hex
+            ? 'border-[var(--chrome-title)]'
+            : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'
+        "
         :style="{ background: hex }"
       ></button>
     </div>
@@ -59,7 +73,11 @@
     <div class="flex gap-1 mb-2">
       <select
         :value="store.paperBackground.type"
-        @change="store.setPaperBackground({ type: ($event.target as HTMLSelectElement).value as typeof store.paperBackground.type })"
+        @change="
+          store.setPaperBackground({
+            type: ($event.target as HTMLSelectElement).value as typeof store.paperBackground.type,
+          })
+        "
         class="flex-1 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
         :title="t('paperPattern')"
       >
@@ -93,7 +111,9 @@
         class="flex-1 accent-indigo-600"
         :title="t('spacingTitle')"
       />
-      <span class="text-xs text-[var(--chrome-text)] w-6 text-right font-mono">{{ store.paperBackground.spacing }}</span>
+      <span class="text-xs text-[var(--chrome-text)] w-6 text-right font-mono">{{
+        store.paperBackground.spacing
+      }}</span>
     </div>
 
     <label class="flex items-center gap-2 mb-3 cursor-pointer" :title="t('marginLineTitle')">

@@ -1,9 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('Kaydırmalı görünüm (Scroll Mode)', () => {
-  test('hızlı sayfa ekleme + hemen yukarı: programatik kayış kullanıcı girdisini yenemez', async ({
-    page,
-  }) => {
+  test('hızlı sayfa ekleme + hemen yukarı: programatik kayış kullanıcı girdisini yenemez', async ({ page }) => {
     await page.goto('/')
 
     // Kaydırmalı modu aç
@@ -104,9 +102,7 @@ test.describe('Kaydırmalı görünüm (Scroll Mode)', () => {
       })
     const strokes = () =>
       page.evaluate(() => {
-        const hud = [...document.querySelectorAll('div')].find((d) =>
-          d.textContent?.includes('strokes'),
-        )
+        const hud = [...document.querySelectorAll('div')].find((d) => d.textContent?.includes('strokes'))
         const m = /(\d+) strokes/.exec(hud?.textContent ?? '')
         return m ? Number(m[1]) : -1
       })
@@ -138,8 +134,7 @@ test.describe('Kaydırmalı görünüm (Scroll Mode)', () => {
     const state = () =>
       page.evaluate(() => {
         const nav = document.querySelector('[aria-label="Sayfalar"]')
-        const zoom =
-          nav?.querySelectorAll('button.font-mono')[2]?.textContent?.trim() ?? '?'
+        const zoom = nav?.querySelectorAll('button.font-mono')[2]?.textContent?.trim() ?? '?'
         const blocks = [...document.querySelectorAll('div[style*="aspect-ratio"]')] as HTMLElement[]
         return {
           zoom,
@@ -230,18 +225,21 @@ test.describe('Kaydırmalı görünüm (Scroll Mode)', () => {
     await page.keyboard.up('Control')
     await page.waitForTimeout(800)
 
-    const after = await page.evaluate(({ x, y, fracX, fracY }) => {
-      const block = [...document.querySelectorAll('div[style*="aspect-ratio"]')][0] as HTMLElement
-      const box = document.querySelector('.overflow-y-auto') as HTMLElement
-      const r = block.getBoundingClientRect()
-      return {
-        width: r.width,
-        driftX: Math.abs(r.left + fracX * r.width - x),
-        driftY: Math.abs(r.top + fracY * r.height - y),
-        scrollLeft: box.scrollLeft,
-        maxLeft: box.scrollWidth - box.clientWidth,
-      }
-    }, { ...anchor, fracX: before.fracX, fracY: before.fracY })
+    const after = await page.evaluate(
+      ({ x, y, fracX, fracY }) => {
+        const block = [...document.querySelectorAll('div[style*="aspect-ratio"]')][0] as HTMLElement
+        const box = document.querySelector('.overflow-y-auto') as HTMLElement
+        const r = block.getBoundingClientRect()
+        return {
+          width: r.width,
+          driftX: Math.abs(r.left + fracX * r.width - x),
+          driftY: Math.abs(r.top + fracY * r.height - y),
+          scrollLeft: box.scrollLeft,
+          maxLeft: box.scrollWidth - box.clientWidth,
+        }
+      },
+      { ...anchor, fracX: before.fracX, fracY: before.fracY },
+    )
 
     expect(after.width).toBeGreaterThan(800)
     expect(after.scrollLeft).toBeGreaterThan(0)

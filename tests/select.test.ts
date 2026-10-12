@@ -105,10 +105,7 @@ describe('subRunsInRect', () => {
 })
 
 describe('selectByRect', () => {
-  const strokes = [
-    S('a', [{ x: 5, y: 5 }]),
-    S('b', [{ x: 50, y: 50 }]),
-  ]
+  const strokes = [S('a', [{ x: 5, y: 5 }]), S('b', [{ x: 50, y: 50 }])]
   it('kesenleri toplar', () => {
     expect(selectByRect(strokes, { x: 0, y: 0 }, { x: 60, y: 60 })).toEqual(['a', 'b'])
     expect(selectByRect(strokes, { x: 40, y: 40 }, { x: 60, y: 60 })).toEqual(['b'])
@@ -180,4 +177,3 @@ describe('strokeAtPoint & pointNearStroke', () => {
     expect(strokeAtPoint([s], 50, 60)).toBe('tri')
   })
 })
-

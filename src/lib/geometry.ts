@@ -19,10 +19,7 @@ export const shapeEndpoints = (pts: Point[]): [Point, Point] | null => {
 // Test edilebilir saf kural: ihtiyaç mevcudun %20 üstündeyse yeniden render et.
 // (Sürekli üret-tüket döngüsüne girmemesi için histerezis şart.)
 export const needsPdfRerender = (current: number, need: number): boolean =>
-  Number.isFinite(current) &&
-  Number.isFinite(need) &&
-  current > 0 &&
-  need > current * 1.2
+  Number.isFinite(current) && Number.isFinite(need) && current > 0 && need > current * 1.2
 
 export const pdfRasterScale = (unitPixels: number, preferredScale: number, maxPixels: number): number =>
   unitPixels > 0 ? Math.min(preferredScale, Math.sqrt(maxPixels / unitPixels)) : preferredScale

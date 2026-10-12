@@ -60,17 +60,7 @@ export const DEFAULT_WIDTHS: Record<Tool, number> = {
 }
 
 export type ToolIcon =
-  | 'pen'
-  | 'hl'
-  | 'eraser'
-  | 'hand'
-  | 'select'
-  | 'line'
-  | 'rect'
-  | 'ellipse'
-  | 'arrow'
-  | 'text'
-  | 'image'
+  'pen' | 'hl' | 'eraser' | 'hand' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text' | 'image'
 
 export interface ToolMeta {
   label: string

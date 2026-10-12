@@ -126,9 +126,7 @@ async function boot(page: Page) {
   return { info, errors }
 }
 
-test('kes-silgi: boş kâğıtta önizleme nihaidir (repaint atlanır, şerit dışı değişmez)', async ({
-  page,
-}) => {
+test('kes-silgi: boş kâğıtta önizleme nihaidir (repaint atlanır, şerit dışı değişmez)', async ({ page }) => {
   const { info, errors } = await boot(page)
   const pb = info.bounds
   const w = pb.x1 - pb.x0
@@ -215,9 +213,7 @@ test('kes-silgi: boş kâğıtta önizleme nihaidir (repaint atlanır, şerit d�
   expect(errors, 'konsol/sayfa hatası yok').toEqual([])
 })
 
-test('kes-silgi: önizleme nihai değilse (metin var) repaint çalışır ve görüntü doğru kalır', async ({
-  page,
-}) => {
+test('kes-silgi: önizleme nihai değilse (metin var) repaint çalışır ve görüntü doğru kalır', async ({ page }) => {
   const { info, errors } = await boot(page)
   const pb = info.bounds
   const w = pb.x1 - pb.x0
@@ -368,9 +364,7 @@ async function sweepLine(
   return { before, during, after, inkBefore, inkDuring }
 }
 
-test('kes-silgi: her kenarda ve köşede sayfa dışına tek piksel taşmaz (yatay + dikey letterbox)', async ({
-  page,
-}) => {
+test('kes-silgi: her kenarda ve köşede sayfa dışına tek piksel taşmaz (yatay + dikey letterbox)', async ({ page }) => {
   const { info, errors } = await boot(page)
   const pb = info.bounds
   const w = pb.x1 - pb.x0
@@ -414,14 +408,7 @@ test('kes-silgi: her kenarda ve köşede sayfa dışına tek piksel taşmaz (yat
   const cornerInk: Rect = { x: pb.x0 + 1, y: cornerY - 6, w: 12, h: 12 }
   const cornerStrip: Rect = { x: pb.x0 - 30, y: pb.y1 - 90, w: 26, h: 60 }
   await page.keyboard.press('e') // süpürmeden önce silgiye dön
-  const corner = await sweepLine(
-    page,
-    info,
-    [pb.x0 + 6, pb.y1 - 90],
-    [pb.x0 + 90, pb.y1 - 6],
-    cornerStrip,
-    cornerInk,
-  )
+  const corner = await sweepLine(page, info, [pb.x0 + 6, pb.y1 - 90], [pb.x0 + 90, pb.y1 - 6], cornerStrip, cornerInk)
   expect(corner.inkBefore, 'köşe: mürekkep var').toBeGreaterThan(60)
   expect(corner.inkDuring, 'köşe: önizleme örttü').toBeLessThan(corner.inkBefore - 40)
   expect(corner.during, 'köşe: sürükleme sırasında taşma yok').toBe(0)
@@ -469,9 +456,7 @@ test('kes-silgi: her kenarda ve köşede sayfa dışına tek piksel taşmaz (yat
   expect(errors, 'konsol/sayfa hatası yok').toEqual([])
 })
 
-test('kes-silgi: desenli kâğıtta önizleme deseni korur (bant sonradan "kaybolmaz")', async ({
-  page,
-}) => {
+test('kes-silgi: desenli kâğıtta önizleme deseni korur (bant sonradan "kaybolmaz")', async ({ page }) => {
   const { info, errors } = await boot(page)
   const pb = info.bounds
   const w = pb.x1 - pb.x0

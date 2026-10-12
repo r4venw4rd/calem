@@ -21,7 +21,9 @@ export const cleanStrokes = (input: unknown): Stroke[] => {
     if (!s || typeof s !== 'object' || !Array.isArray(s.points)) continue
     const pts = s.points.filter((p: unknown) => {
       const pt = p as { x?: unknown; y?: unknown }
-      return pt && typeof pt.x === 'number' && Number.isFinite(pt.x) && typeof pt.y === 'number' && Number.isFinite(pt.y)
+      return (
+        pt && typeof pt.x === 'number' && Number.isFinite(pt.x) && typeof pt.y === 'number' && Number.isFinite(pt.y)
+      )
     })
     if (pts.length === 0) continue
     clean.push({
@@ -38,9 +40,7 @@ export const cleanStrokes = (input: unknown): Stroke[] => {
         x: p.x,
         y: p.y,
         pressure:
-          typeof p.pressure === 'number' && Number.isFinite(p.pressure)
-            ? Math.min(1, Math.max(0, p.pressure))
-            : 0.5,
+          typeof p.pressure === 'number' && Number.isFinite(p.pressure) ? Math.min(1, Math.max(0, p.pressure)) : 0.5,
       })),
     })
   }
@@ -65,9 +65,7 @@ export const cleanTexts = (input: unknown): TextItem[] => {
         typeof r.size === 'number' && Number.isFinite(r.size)
           ? Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, Math.round(r.size)))
           : 24,
-      ...(typeof r.w === 'number' && Number.isFinite(r.w) && r.w >= 40
-        ? { w: Math.round(r.w) }
-        : {}),
+      ...(typeof r.w === 'number' && Number.isFinite(r.w) && r.w >= 40 ? { w: Math.round(r.w) } : {}),
     })
   }
   return clean
@@ -121,15 +119,25 @@ export const pageSizeOf = (
 ): { w: number; h: number } => {
   const s = raw.size as { w?: unknown; h?: unknown } | undefined
   if (
-    s && typeof s.w === 'number' && Number.isFinite(s.w) &&
-    typeof s.h === 'number' && Number.isFinite(s.h) && s.w > 0 && s.h > 0
+    s &&
+    typeof s.w === 'number' &&
+    Number.isFinite(s.w) &&
+    typeof s.h === 'number' &&
+    Number.isFinite(s.h) &&
+    s.w > 0 &&
+    s.h > 0
   ) {
     return { w: s.w, h: s.h }
   }
   const b = raw.bgSize as { w?: unknown; h?: unknown } | undefined
   if (
-    b && typeof b.w === 'number' && Number.isFinite(b.w) &&
-    typeof b.h === 'number' && Number.isFinite(b.h) && b.w > 0 && b.h > 0
+    b &&
+    typeof b.w === 'number' &&
+    Number.isFinite(b.w) &&
+    typeof b.h === 'number' &&
+    Number.isFinite(b.h) &&
+    b.w > 0 &&
+    b.h > 0
   ) {
     return { w: b.w, h: b.h }
   }
@@ -166,9 +174,7 @@ export const pageFromRaw = (
     images: cleanImages(p.images, new Set(layers.map((l) => l.id)), layers[0]!.id),
     size: pageSizeOf(p, fallback),
     pdfPageIndex:
-      typeof p.pdfPageIndex === 'number' && Number.isFinite(p.pdfPageIndex)
-        ? Math.floor(p.pdfPageIndex)
-        : undefined,
+      typeof p.pdfPageIndex === 'number' && Number.isFinite(p.pdfPageIndex) ? Math.floor(p.pdfPageIndex) : undefined,
   }
 }
 

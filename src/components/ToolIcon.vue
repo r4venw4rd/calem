@@ -1,15 +1,35 @@
 <template>
   <svg v-if="icon === 'pen'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+    <path
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+    />
   </svg>
   <svg v-else-if="icon === 'hl'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 11l3 3m-2.5-2.5L4 17l5-1.5L19.5 5 15 3.5 9.5 8.5z M4 20l4-1" />
+    <path
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      d="M9 11l3 3m-2.5-2.5L4 17l5-1.5L19.5 5 15 3.5 9.5 8.5z M4 20l4-1"
+    />
   </svg>
   <svg v-else-if="icon === 'eraser'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10M5.5 14.5L14 6l4.5 4.5-8.5 8.5H5.5v-4.5z" />
+    <path
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      d="M7 21h10M5.5 14.5L14 6l4.5 4.5-8.5 8.5H5.5v-4.5z"
+    />
   </svg>
   <svg v-else-if="icon === 'hand'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11V7a2 2 0 014 0v4m0-2a2 2 0 014 0v3m0-2a2 2 0 014 0v5a7 7 0 01-14 0V9a2 2 0 014 0v3" />
+    <path
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      d="M7 11V7a2 2 0 014 0v4m0-2a2 2 0 014 0v3m0-2a2 2 0 014 0v5a7 7 0 01-14 0V9a2 2 0 014 0v3"
+    />
   </svg>
   <svg v-else-if="icon === 'select'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 7-6 2-2 6-6-15z" />

@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  detectEllipse,
-  detectLine,
-  detectRectangle,
-  recognizeShape,
-} from '../src/lib/shapeRecognition'
+import { detectEllipse, detectLine, detectRectangle, recognizeShape } from '../src/lib/shapeRecognition'
 import type { Point } from '../src/model/document'
 
 describe('shapeRecognition', () => {
@@ -217,4 +212,3 @@ describe('shapeRecognition', () => {
     })
   })
 })
-

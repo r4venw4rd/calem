@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  NoopBillingProvider,
-  getBilling,
-  setBillingProvider,
-} from '../src/lib/billing'
+import { NoopBillingProvider, getBilling, setBillingProvider } from '../src/lib/billing'
 
 describe('billing', () => {
   it('noop: her zaman free + kurucusuz', async () => {

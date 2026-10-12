@@ -2,10 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { test, expect } from '@playwright/test'
 
-test('keeps autosaved work through a service worker update and offline restart', async ({
-  page,
-  context,
-}) => {
+test('keeps autosaved work through a service worker update and offline restart', async ({ page, context }) => {
   let mainNavigations = 0
   page.on('framenavigated', (frame) => {
     if (frame === page.mainFrame()) mainNavigations += 1

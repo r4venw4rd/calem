@@ -5,11 +5,11 @@ import type { PaperBackground } from '../lib/paper'
 import type { Locale } from '../config/locale'
 import type { PageFormat, PageOrientation } from '../config/paper'
 
-export type Tool = 'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text' | 'image' | 'hand'
+export type Tool =
+  'pen' | 'eraser' | 'highlighter' | 'select' | 'line' | 'rect' | 'ellipse' | 'arrow' | 'text' | 'image' | 'hand'
 export type ShapeTool = 'line' | 'rect' | 'ellipse' | 'arrow'
 // Şekil araçları: serbest path değil, ilk+son noktadan primitif çizilir.
-export const isShapeTool = (t: Tool): t is ShapeTool =>
-  t === 'line' || t === 'rect' || t === 'ellipse' || t === 'arrow'
+export const isShapeTool = (t: Tool): t is ShapeTool => t === 'line' || t === 'rect' || t === 'ellipse' || t === 'arrow'
 export interface ToolbarConfig {
   order: Tool[]
   hidden: Tool[]
@@ -23,7 +23,11 @@ export interface ColorPalette {
   colors: string[]
   customs: string[]
 }
-export interface Point { x: number; y: number; pressure?: number }
+export interface Point {
+  x: number
+  y: number
+  pressure?: number
+}
 // Çizgi stili: kalem + şekillerde kesikli/noktalı ve opaklık. Vurgu/silgi sabit stillidir.
 export type DashStyle = 'solid' | 'dash' | 'dot'
 export interface Stroke {
@@ -143,4 +147,14 @@ export interface PerfStats {
 // Bilerek reaktivite DIŞI (modül seviyesi): her frame yazılır.
 // Pinia state'i içinde olsaydı her yazım tüm store'u (tüm stroke'lar dahil)
 // reaktivite/devtools hattından geçirir → çizgi sayısı arttıkça kasar.
-export const drawingPerf: PerfStats = { lastMs: 0, emaMs: 0, frameMs: 0, renders: 0, totalPoints: 0, eraseMs: 0, cutMs: 0, repaintPoints: 0, snapshotMs: 0 }
+export const drawingPerf: PerfStats = {
+  lastMs: 0,
+  emaMs: 0,
+  frameMs: 0,
+  renders: 0,
+  totalPoints: 0,
+  eraseMs: 0,
+  cutMs: 0,
+  repaintPoints: 0,
+  snapshotMs: 0,
+}

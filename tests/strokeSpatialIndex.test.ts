@@ -4,7 +4,13 @@ import { normRect, subRunsInRect } from '../src/lib/select'
 import { indexedSubRunsInRect, invalidateStrokeSpatialIndex } from '../src/lib/strokeSpatialIndex'
 
 const stroke = (points: Stroke['points']): Stroke => ({
-  id: 'test', tool: 'pen', color: '#000000', width: 2, dash: 'solid', opacity: 1, points,
+  id: 'test',
+  tool: 'pen',
+  color: '#000000',
+  width: 2,
+  dash: 'solid',
+  opacity: 1,
+  points,
 })
 
 describe('indexedSubRunsInRect', () => {

@@ -36,12 +36,7 @@ export const strokeBBox = (s: BBoxStroke): NormRect | null => {
 }
 
 // İki ucu normalize et (sürükleme her yöne olabilir).
-export const normRect = (
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
-): NormRect => ({
+export const normRect = (ax: number, ay: number, bx: number, by: number): NormRect => ({
   x0: Math.min(ax, bx),
   y0: Math.min(ay, by),
   x1: Math.max(ax, bx),
@@ -79,11 +74,7 @@ export const pointInRect = (x: number, y: number, r: NormRect): boolean =>
   x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1
 
 // Klasik ray-casting. Kenar üstü tanımsız sayılır (içinde kabul).
-export const pointInPolygon = (
-  x: number,
-  y: number,
-  poly: { x: number; y: number }[],
-): boolean => {
+export const pointInPolygon = (x: number, y: number, poly: { x: number; y: number }[]): boolean => {
   let inside = false
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const xi = poly[i]!.x
@@ -102,12 +93,7 @@ export const pointInPolygon = (
 // noktalar çizilir. neighborPad = Catmull-Rom kontrol-komşusu payı (kesişen segmentin
 // eğrisi birebir aynı çıksın diye +-2 nokta).
 // NOT: Dönen koşular ORIJINAL dizinin dilimleri (element referansları korunur).
-export const subRunsInRect = (
-  pts: readonly Point[],
-  rect: NormRect,
-  inflate: number,
-  neighborPad = 2,
-): Point[][] => {
+export const subRunsInRect = (pts: readonly Point[], rect: NormRect, inflate: number, neighborPad = 2): Point[][] => {
   const n = pts.length
   if (n === 0) return []
   const r = expandRect(rect, inflate)
@@ -182,10 +168,7 @@ export const selectByRect = (
 // Lasso seçim: herhangi bir noktası poligon içinde kalan stroke'lar.
 // Not: noktasız-kesişim (uzun çizgi lassoyu keser ama noktası içerde değil)
 // v1'de yakalanmaz — desimasyon aralığı küçük, pratikte sorun değil.
-export const selectByLasso = (
-  strokes: Pick<Stroke, 'id' | 'points'>[],
-  poly: { x: number; y: number }[],
-): string[] => {
+export const selectByLasso = (strokes: Pick<Stroke, 'id' | 'points'>[], poly: { x: number; y: number }[]): string[] => {
   if (poly.length < 3) return []
   let px0 = Infinity
   let py0 = Infinity
@@ -252,12 +235,7 @@ const distToSeg = (px: number, py: number, ax: number, ay: number, bx: number, b
 /**
  * Bir noktanın belirli bir stroke'un çizgisine veya kapalı iç bölgesine yakın olup olmadığını test eder.
  */
-export const pointNearStroke = (
-  x: number,
-  y: number,
-  s: Pick<Stroke, 'points' | 'width'>,
-  hitRadius = 14,
-): boolean => {
+export const pointNearStroke = (x: number, y: number, s: Pick<Stroke, 'points' | 'width'>, hitRadius = 14): boolean => {
   const pts = s.points
   if (!pts || pts.length === 0) return false
   const bb = strokeBBox(s)
@@ -271,7 +249,8 @@ export const pointNearStroke = (
   // 1. Kapalı poligon ise (örneğin üçgen/kutu) iç bölgesine tıklandığında da seçilebilmeli!
   const first = pts[0]!
   const last = pts[pts.length - 1]!
-  const isClosed = pts.length >= 3 && Math.hypot(first.x - last.x, first.y - last.y) < Math.max(24, (bb.x1 - bb.x0) * 0.25)
+  const isClosed =
+    pts.length >= 3 && Math.hypot(first.x - last.x, first.y - last.y) < Math.max(24, (bb.x1 - bb.x0) * 0.25)
   if (isClosed && pointInPolygon(x, y, pts)) {
     return true
   }

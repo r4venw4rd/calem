@@ -200,7 +200,10 @@ export function useTextGesture(options: UseTextGestureOptions) {
     const pad = 12
     const maxW = typeof window !== 'undefined' ? window.innerWidth - pad * 2 : 600
     const width = Math.min(r.width, maxW)
-    const left = Math.max(pad, Math.min(r.left, typeof window !== 'undefined' ? window.innerWidth - width - pad : r.left))
+    const left = Math.max(
+      pad,
+      Math.min(r.left, typeof window !== 'undefined' ? window.innerWidth - width - pad : r.left),
+    )
     // Üst menü çubuğunun (toolbar) altına girmemesi için desktop'ta en az 72px pay
     const top = Math.max(76, r.top)
     return {

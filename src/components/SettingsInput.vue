@@ -1,7 +1,9 @@
 <template>
   <SettingsSection :title="t('secInput')">
     <div class="mt-3 pt-2 border-t border-[var(--chrome-border)]">
-      <div class="mb-1 text-[var(--chrome-muted)]">{{ t('pressure') }} <span class="text-[var(--chrome-faint)]">{{ t('pressureOff') }}</span></div>
+      <div class="mb-1 text-[var(--chrome-muted)]">
+        {{ t('pressure') }} <span class="text-[var(--chrome-faint)]">{{ t('pressureOff') }}</span>
+      </div>
       <input
         type="range"
         :min="SLIDERS.pressure.min"
@@ -12,7 +14,9 @@
         class="w-full accent-indigo-600"
         :title="t('pressureTitle')"
       />
-      <div class="mb-1 mt-2 text-[var(--chrome-muted)]">{{ t('smoothing') }} <span class="text-[var(--chrome-faint)]">{{ t('smoothingHint') }}</span></div>
+      <div class="mb-1 mt-2 text-[var(--chrome-muted)]">
+        {{ t('smoothing') }} <span class="text-[var(--chrome-faint)]">{{ t('smoothingHint') }}</span>
+      </div>
       <input
         type="range"
         :min="SLIDERS.smoothing.min"

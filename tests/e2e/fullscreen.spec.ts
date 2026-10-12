@@ -10,7 +10,9 @@ test('fullscreen giriş/çıkışında canvas boyutu ve çizimi korunur', async 
   const fullscreenCanvas = await page.evaluate(() => {
     const canvas = document.querySelector('canvas') as HTMLCanvasElement
     const rect = canvas.getBoundingClientRect()
-    const pixel = canvas.getContext('2d')!.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data
+    const pixel = canvas
+      .getContext('2d')!
+      .getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data
     return { width: canvas.width, height: canvas.height, cssWidth: rect.width, cssHeight: rect.height, alpha: pixel[3] }
   })
   expect(fullscreenCanvas.cssWidth).toBeGreaterThan(0)
@@ -21,5 +23,12 @@ test('fullscreen giriş/çıkışında canvas boyutu ve çizimi korunur', async 
 
   await page.keyboard.press('Escape')
   await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(false)
-  await expect.poll(() => page.locator('canvas').first().evaluate((canvas) => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(0)
+  await expect
+    .poll(() =>
+      page
+        .locator('canvas')
+        .first()
+        .evaluate((canvas) => (canvas as HTMLCanvasElement).width),
+    )
+    .toBeGreaterThan(0)
 })

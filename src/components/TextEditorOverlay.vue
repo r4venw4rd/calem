@@ -21,7 +21,9 @@
       }"
     ></textarea>
     <!-- Text altında floating şekilde duran kontrol çubuğu -->
-    <div class="mt-1.5 flex items-center gap-2 p-1.5 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] shadow-xl backdrop-blur select-none w-max max-w-[calc(100vw-2rem)]">
+    <div
+      class="mt-1.5 flex items-center gap-2 p-1.5 rounded-lg bg-[var(--chrome-bg)] border border-[var(--chrome-border-strong)] shadow-xl backdrop-blur select-none w-max max-w-[calc(100vw-2rem)]"
+    >
       <input
         type="range"
         :min="SLIDERS.textSize.min"

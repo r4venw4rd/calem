@@ -26,9 +26,7 @@ describe('mergePages (sayfa LWW)', () => {
     expect(mergePages(l, r)).toEqual([{ id: 'a', updatedAt: 5, v: 'l' }])
   })
   it('updatedAt yoksa 0 sayılır', () => {
-    expect(mergePages([{ id: 'a' }], [{ id: 'a', updatedAt: 1 }])).toEqual([
-      { id: 'a', updatedAt: 1 },
-    ])
+    expect(mergePages([{ id: 'a' }], [{ id: 'a', updatedAt: 1 }])).toEqual([{ id: 'a', updatedAt: 1 }])
   })
   it('sıra deterministik: local sıra + yeni uzak sona', () => {
     const out = mergePages([{ id: 'b' }, { id: 'a' }], [{ id: 'c' }, { id: 'a', updatedAt: 9 }])
@@ -45,7 +43,10 @@ describe('tombstone', () => {
   it('birleşim: büyük deletedAt kazanır', () => {
     const out = mergeTombstones(
       [{ id: 'a', deletedAt: 3 }],
-      [{ id: 'a', deletedAt: 7 }, { id: 'b', deletedAt: 1 }],
+      [
+        { id: 'a', deletedAt: 7 },
+        { id: 'b', deletedAt: 1 },
+      ],
     )
     expect(out).toEqual([
       { id: 'a', deletedAt: 7 },
@@ -53,11 +54,7 @@ describe('tombstone', () => {
     ])
   })
   it('uygulama: eski sayfa düşer, sonra yazılan dirilir', () => {
-    const pages = [
-      { id: 'old', updatedAt: 2 },
-      { id: 'new', updatedAt: 9 },
-      { id: 'kept' },
-    ]
+    const pages = [{ id: 'old', updatedAt: 2 }, { id: 'new', updatedAt: 9 }, { id: 'kept' }]
     const out = applyTombstones(pages, [
       { id: 'old', deletedAt: 5 },
       { id: 'new', deletedAt: 5 },
@@ -68,7 +65,10 @@ describe('tombstone', () => {
   it('mergeDocuments uçtan uca', () => {
     const { pages, tombstones } = mergeDocuments(
       [{ id: 'a', updatedAt: 1 }],
-      [{ id: 'a', updatedAt: 2 }, { id: 'b', updatedAt: 1 }],
+      [
+        { id: 'a', updatedAt: 2 },
+        { id: 'b', updatedAt: 1 },
+      ],
       [],
       [{ id: 'b', deletedAt: 3 }],
     )
@@ -106,11 +106,7 @@ describe('outbox', () => {
     expect(enqueueOp(q, null as never)).toBe(q)
   })
   it('ackOps + pendingFileIds', () => {
-    const q: SyncOp[] = [
-      op('1', 'put-file', 'f1'),
-      op('2', 'put-file', 'f1'),
-      op('3', 'upsert-page', 'p'),
-    ]
+    const q: SyncOp[] = [op('1', 'put-file', 'f1'), op('2', 'put-file', 'f1'), op('3', 'upsert-page', 'p')]
     expect(pendingFileIds(q)).toEqual(['f1'])
     expect(ackOps(q, ['1', '3']).map((o) => o.id)).toEqual(['2'])
   })

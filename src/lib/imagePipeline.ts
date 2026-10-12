@@ -7,10 +7,7 @@ export const isImageFile = (file: File): boolean => {
   return file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name)
 }
 
-export const bytesToCanvas = async (
-  bytes: ArrayBuffer,
-  maxDim = IMAGE_MAX_DIM,
-): Promise<HTMLCanvasElement | null> => {
+export const bytesToCanvas = async (bytes: ArrayBuffer, maxDim = IMAGE_MAX_DIM): Promise<HTMLCanvasElement | null> => {
   try {
     const bmp = await createImageBitmap(new Blob([bytes]))
     try {
@@ -32,11 +29,7 @@ export const bytesToCanvas = async (
   }
 }
 
-export const fitImageDimensions = (
-  canvasW: number,
-  canvasH: number,
-  maxW: number,
-): { w: number; h: number } => {
+export const fitImageDimensions = (canvasW: number, canvasH: number, maxW: number): { w: number; h: number } => {
   let w = canvasW
   let h = canvasH
   if (w > maxW) {

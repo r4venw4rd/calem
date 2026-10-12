@@ -100,7 +100,10 @@ describe('xopp adapter', () => {
     )
     expect(pages[0]!.size).toEqual({ w: 595, h: 842 })
     expect(pages[0]!.layers[0]!.strokes[0]!.width).toBe(2)
-    expect(pages[0]!.layers[0]!.strokes[0]!.points).toEqual([{ x: 0, y: 1 }, { x: 3, y: 4 }])
+    expect(pages[0]!.layers[0]!.strokes[0]!.points).toEqual([
+      { x: 0, y: 1 },
+      { x: 3, y: 4 },
+    ])
   })
 
   it('compresses to gzip and decompresses bytes roundtrip', async () => {
@@ -171,7 +174,10 @@ describe('xopp adapter', () => {
                 width: 2,
                 dash: 'solid',
                 opacity: 1,
-                points: [{ x: 10, y: 10 }, { x: 110, y: 80 }],
+                points: [
+                  { x: 10, y: 10 },
+                  { x: 110, y: 80 },
+                ],
               },
               {
                 id: 's_ellipse',
@@ -180,7 +186,10 @@ describe('xopp adapter', () => {
                 width: 2,
                 dash: 'solid',
                 opacity: 1,
-                points: [{ x: 50, y: 50 }, { x: 150, y: 150 }],
+                points: [
+                  { x: 50, y: 50 },
+                  { x: 150, y: 150 },
+                ],
               },
               {
                 id: 's_arrow',
@@ -189,7 +198,10 @@ describe('xopp adapter', () => {
                 width: 2,
                 dash: 'solid',
                 opacity: 1,
-                points: [{ x: 20, y: 20 }, { x: 120, y: 20 }],
+                points: [
+                  { x: 20, y: 20 },
+                  { x: 120, y: 20 },
+                ],
               },
             ],
           },
@@ -206,4 +218,3 @@ describe('xopp adapter', () => {
     expect(strokeCount).toBe(3)
   })
 })
-

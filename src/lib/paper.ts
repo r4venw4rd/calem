@@ -6,15 +6,7 @@ import { DEFAULT_PAPER_BACKGROUND, PAPER_SPACING_MAX, PAPER_SPACING_MIN } from '
 
 export { DEFAULT_PAPER_BACKGROUND, PAPER_SPACING_MAX, PAPER_SPACING_MIN }
 
-export type PaperBackgroundType =
-  | 'blank'
-  | 'ruled'
-  | 'graph'
-  | 'dotted'
-  | 'staff'
-  | 'isometric'
-  | 'cornell'
-  | 'planner'
+export type PaperBackgroundType = 'blank' | 'ruled' | 'graph' | 'dotted' | 'staff' | 'isometric' | 'cornell' | 'planner'
 
 export interface PaperBackground {
   type: PaperBackgroundType
@@ -44,8 +36,7 @@ const clampSpacing = (n: unknown): number => {
   return Math.min(PAPER_SPACING_MAX, Math.max(PAPER_SPACING_MIN, Math.round(n)))
 }
 
-const cleanHex = (v: unknown, fallback: string): string =>
-  typeof v === 'string' && HEX_RE.test(v) ? v : fallback
+const cleanHex = (v: unknown, fallback: string): string => (typeof v === 'string' && HEX_RE.test(v) ? v : fallback)
 
 // Bozuk kayda karşı alan alan doğrular; her zaman geçerli bir background döner.
 export const cleanPaperBackground = (input: unknown): PaperBackground => {
@@ -81,11 +72,7 @@ export const graphLineXs = (pageW: number, spacing: number): number[] => {
 }
 
 // Nokta grid (dotted).
-export const dottedPoints = (
-  pageW: number,
-  pageH: number,
-  spacing: number,
-): { x: number; y: number }[] => {
+export const dottedPoints = (pageW: number, pageH: number, spacing: number): { x: number; y: number }[] => {
   const s = clampSpacing(spacing)
   if (!(pageW > 0) || !(pageH > 0)) return []
   const out: { x: number; y: number }[] = []
@@ -125,11 +112,7 @@ export interface IsoLine {
   y2: number
 }
 
-export const isometricLines = (
-  pageW: number,
-  pageH: number,
-  spacing: number,
-): IsoLine[] => {
+export const isometricLines = (pageW: number, pageH: number, spacing: number): IsoLine[] => {
   const s = clampSpacing(spacing)
   if (!(pageW > 0) || !(pageH > 0)) return []
   const lines: IsoLine[] = []
@@ -207,11 +190,7 @@ export interface CornellLayout {
   ruledLines: { x1: number; y: number; x2: number }[]
 }
 
-export const cornellLayout = (
-  pageW: number,
-  pageH: number,
-  spacing: number,
-): CornellLayout | null => {
+export const cornellLayout = (pageW: number, pageH: number, spacing: number): CornellLayout | null => {
   if (pageW < 200 || pageH < 250) return null
   const s = clampSpacing(spacing)
   const headerY = Math.min(60, pageH * 0.12)
@@ -243,11 +222,7 @@ export interface PlannerLayout {
   sideColX: number | null
 }
 
-export const plannerLayout = (
-  pageW: number,
-  pageH: number,
-  spacing: number,
-): PlannerLayout | null => {
+export const plannerLayout = (pageW: number, pageH: number, spacing: number): PlannerLayout | null => {
   if (pageW < 160 || pageH < 200) return null
   const s = clampSpacing(spacing)
   const headerY = Math.min(50, pageH * 0.12)

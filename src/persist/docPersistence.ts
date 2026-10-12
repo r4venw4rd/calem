@@ -85,7 +85,18 @@ export const deserializePersistedDoc = (options: DeserializeDocOptions): Deseria
   const widths: Record<string, number> = {}
   const rawWidths = (doc as { widths?: unknown }).widths as Record<string, unknown> | undefined
   if (rawWidths) {
-    for (const t of ['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow', 'text', 'image', 'hand'] as const) {
+    for (const t of [
+      'pen',
+      'highlighter',
+      'eraser',
+      'line',
+      'rect',
+      'ellipse',
+      'arrow',
+      'text',
+      'image',
+      'hand',
+    ] as const) {
       const v = rawWidths[t]
       if (typeof v === 'number' && Number.isFinite(v)) {
         widths[t] = Math.min(WIDTH_MAX[t], Math.max(WIDTH_MIN[t], Math.round(v)))
@@ -109,9 +120,7 @@ export const deserializePersistedDoc = (options: DeserializeDocOptions): Deseria
 
   const idx = (doc as { activePageIndex?: unknown }).activePageIndex
   const activePageIndex =
-    typeof idx === 'number' && Number.isFinite(idx)
-      ? Math.min(loaded.length - 1, Math.max(0, Math.floor(idx)))
-      : 0
+    typeof idx === 'number' && Number.isFinite(idx) ? Math.min(loaded.length - 1, Math.max(0, Math.floor(idx))) : 0
 
   const hasPdf = (doc.v === 2 || doc.v === 3 || doc.v === 4 || doc.v === 5) && Boolean(doc.pdfId)
 
@@ -119,8 +128,8 @@ export const deserializePersistedDoc = (options: DeserializeDocOptions): Deseria
     pages: loaded,
     widths: Object.keys(widths).length > 0 ? widths : undefined,
     activePageIndex,
-    pdfId: hasPdf ? doc.pdfId ?? null : null,
-    pdfName: hasPdf ? doc.pdfName ?? '' : '',
+    pdfId: hasPdf ? (doc.pdfId ?? null) : null,
+    pdfName: hasPdf ? (doc.pdfName ?? '') : '',
     savedAt: typeof doc.savedAt === 'number' ? doc.savedAt : Date.now(),
   }
 }

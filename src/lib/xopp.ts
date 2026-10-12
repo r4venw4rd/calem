@@ -24,7 +24,10 @@ export const toXoppColor = (color: string, opacity = 1): string => {
   let hex = color.trim()
   if (hex.startsWith('#')) hex = hex.slice(1)
   if (hex.length === 3) {
-    hex = hex.split('').map((c) => c + c).join('')
+    hex = hex
+      .split('')
+      .map((c) => c + c)
+      .join('')
   }
   if (hex.length !== 6) hex = '000000'
   const alpha = Math.round(Math.min(1, Math.max(0, opacity)) * 255)
@@ -143,7 +146,7 @@ export const serializeXoppXml = (pages: Page[], paperHex = '#ffffff'): string =>
         const colorStr = toXoppColor(t.color, 1)
         lines.push(
           `      <text font="Sans" size="${t.size}" x="${t.x.toFixed(2)}" y="${t.y.toFixed(2)}" color="${colorStr}">` +
-            `${escapeXml(t.text)}</text>`
+            `${escapeXml(t.text)}</text>`,
         )
       }
       lines.push('    </layer>')
@@ -337,7 +340,9 @@ export const exportXoppBytes = async (pages: Page[], paperHex?: string): Promise
 }
 
 /** .xopp (gzipped veya düz XML) ikili verisini Calem sayfalarına dönüştürür. */
-export const importXoppBytes = async (bytes: ArrayBuffer | Uint8Array): Promise<{ pages: Page[]; paperHex: string }> => {
+export const importXoppBytes = async (
+  bytes: ArrayBuffer | Uint8Array,
+): Promise<{ pages: Page[]; paperHex: string }> => {
   const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
   let xmlText = ''
 

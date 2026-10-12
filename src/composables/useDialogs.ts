@@ -59,9 +59,7 @@ const dialogCancel = () => {
 const trapIn = (panel: HTMLElement | null, e: KeyboardEvent) => {
   if (!panel) return
   const nodes = [
-    ...panel.querySelectorAll<HTMLElement>(
-      'button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    ),
+    ...panel.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex]:not([tabindex="-1"])'),
   ].filter((n) => !n.hasAttribute('disabled') && n.offsetParent !== null)
   if (nodes.length === 0) return
   const first = nodes[0]!

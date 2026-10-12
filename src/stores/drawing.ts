@@ -53,12 +53,15 @@ import {
 } from '../persist/snapshot'
 import { takeObsoletePdfIds } from '../persist/pdfFileCleanup'
 import { isLatestSave } from '../persist/saveRevision'
-import { redoErase, redoStrokeAdd, undoErase, undoStrokeAdd, type ErasePatch, type HistoryEntry } from '../persist/history'
 import {
-  buildPersistedDoc,
-  summarizePersistedDoc,
-  deserializePersistedDoc,
-} from '../persist/docPersistence'
+  redoErase,
+  redoStrokeAdd,
+  undoErase,
+  undoStrokeAdd,
+  type ErasePatch,
+  type HistoryEntry,
+} from '../persist/history'
+import { buildPersistedDoc, summarizePersistedDoc, deserializePersistedDoc } from '../persist/docPersistence'
 import {
   bytesToCanvas,
   fitImageDimensions,
@@ -84,12 +87,7 @@ import { fitContain, needsPdfRerender, shapeEndpoints } from '../lib/geometry'
 import { recognizeShape } from '../lib/shapeRecognition'
 import { exportXoppBytes, importXoppBytes } from '../lib/xopp'
 import { renderPdfPages, renderPdfPageAt, type RenderedPdfPage } from '../lib/pdf'
-import {
-  bufToB64,
-  b64ToBuf,
-  writeCalemToHandle,
-  type CalemFileHandle,
-} from '../lib/calemFile'
+import { bufToB64, b64ToBuf, writeCalemToHandle, type CalemFileHandle } from '../lib/calemFile'
 import {
   hexToRgb,
   paintStrokeVector,
@@ -123,12 +121,7 @@ import {
   ZOOM_MAX,
   ZOOM_MIN,
 } from '../config/engine'
-import {
-  CUSTOM_SLOT_COUNT,
-  DEFAULT_PALETTES,
-  PALETTE_MAX_COLORS,
-  PALETTE_MAX_COUNT,
-} from '../config/palettes'
+import { CUSTOM_SLOT_COUNT, DEFAULT_PALETTES, PALETTE_MAX_COLORS, PALETTE_MAX_COUNT } from '../config/palettes'
 import { DEFAULT_LOCALE, isLocale, type Locale } from '../config/locale'
 import { SLIDERS } from '../config/ui'
 
@@ -387,11 +380,11 @@ export const useDrawingStore = defineStore('drawing', () => {
       orientation: pageOrientation.value,
       customW: customW.value,
       customH: customH.value,
-        uiTheme: uiTheme.value,
-        locale: locale.value,
-        uiScale: uiScale.value,
-        pageStripOpen: pageStripOpen.value,
-        autoShapeSnap: autoShapeSnap.value,
+      uiTheme: uiTheme.value,
+      locale: locale.value,
+      uiScale: uiScale.value,
+      pageStripOpen: pageStripOpen.value,
+      autoShapeSnap: autoShapeSnap.value,
     }
     return JSON.stringify(doc)
   }
@@ -440,8 +433,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     // Eski üst-seviye custom satırı aktif palete taşınır (veri kaybı yok).
     if (Array.isArray(r.customColors)) {
-      const target =
-        palettes.value.find((x) => x.id === activePaletteId.value) ?? palettes.value[0]
+      const target = palettes.value.find((x) => x.id === activePaletteId.value) ?? palettes.value[0]
       if (target) {
         let moved = false
         for (const h of cleanCustomList(r.customColors)) {
@@ -527,7 +519,10 @@ export const useDrawingStore = defineStore('drawing', () => {
       if ((raw.v === 2 || raw.v === 3 || raw.v === 4 || raw.v === 5 || raw.v === 6) && raw.background !== undefined) {
         paperBackground.value = cleanPaperBackground(raw.background)
       }
-      if ((raw.v === 3 || raw.v === 4 || raw.v === 5 || raw.v === 6) && (raw.eraserMode === 'standard' || raw.eraserMode === 'stroke')) {
+      if (
+        (raw.v === 3 || raw.v === 4 || raw.v === 5 || raw.v === 6) &&
+        (raw.eraserMode === 'standard' || raw.eraserMode === 'stroke')
+      ) {
         eraserMode.value = raw.eraserMode
       }
       if (typeof raw.smoothing === 'number' && Number.isFinite(raw.smoothing)) {
@@ -546,8 +541,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       // Eski üst-seviye custom satırı aktif palete taşınır (veri kaybı yok).
       if (Array.isArray(raw.customColors)) {
-        const target =
-          palettes.value.find((x) => x.id === activePaletteId.value) ?? palettes.value[0]
+        const target = palettes.value.find((x) => x.id === activePaletteId.value) ?? palettes.value[0]
         if (target) {
           for (const h of cleanCustomList(raw.customColors)) {
             if (!target.customs.includes(h) && target.customs.length < CUSTOM_SLOT_COUNT) {
@@ -644,16 +638,29 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // --- Sayfa modeli (PDF çok-sayfa + sayfa şeridinin zemini) ---
   // Stroke'lar sayfalarda durur; tüm çizim op'ları AKTİF sayfaya işler.
-  const newPageId = () =>
-    `p-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+  const newPageId = () => `p-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
   const blankPage = (): Page => {
     const layerId = newStrokeId()
-    return { id: newPageId(), layers: [{ id: layerId, name: 'Katman 1', visible: true, strokes: [] }], activeLayerId: layerId, texts: [], images: [], size: defaultPageSize() }
+    return {
+      id: newPageId(),
+      layers: [{ id: layerId, name: 'Katman 1', visible: true, strokes: [] }],
+      activeLayerId: layerId,
+      texts: [],
+      images: [],
+      size: defaultPageSize(),
+    }
   }
   // Tek katmanlı göç/sıfırlama yardımcısı (v4 kayıtlar, PDF sayfaları).
   const singleLayerPage = (id: string, strokes: Stroke[], size: { w: number; h: number }): Page => {
     const layerId = newStrokeId()
-    return { id, layers: [{ id: layerId, name: 'Katman 1', visible: true, strokes }], activeLayerId: layerId, texts: [], images: [], size }
+    return {
+      id,
+      layers: [{ id: layerId, name: 'Katman 1', visible: true, strokes }],
+      activeLayerId: layerId,
+      texts: [],
+      images: [],
+      size,
+    }
   }
 
   // View transform (non-reactive): aktif sayfa → ekran contain-fit.
@@ -905,12 +912,7 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // Yıkıcı dosya op'ları öncesi soru: herhangi bir sayfada mürekkep/metin/resim var mı.
   const hasInk = computed(() =>
-    pages.value.some(
-      (p) =>
-        p.texts.length > 0 ||
-        p.images.length > 0 ||
-        p.layers.some((l) => l.strokes.length > 0),
-    ),
+    pages.value.some((p) => p.texts.length > 0 || p.images.length > 0 || p.layers.some((l) => l.strokes.length > 0)),
   )
 
   // Sayaçlar aktif sayfadan yeniden hesaplanır (nadir op'larda O(sayfa) — drift yok).
@@ -943,7 +945,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     const visibleStrokes = activePage.value.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes)
     selectedIds.value = [
       ...selByRect(visibleStrokes, a, b),
-      ...visibleImages().filter((img) => rectsOverlap(r, { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h })).map((img) => img.id),
+      ...visibleImages()
+        .filter((img) => rectsOverlap(r, { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h }))
+        .map((img) => img.id),
     ]
     return selectedIds.value.length
   }
@@ -954,12 +958,17 @@ export const useDrawingStore = defineStore('drawing', () => {
     const visibleStrokes = activePage.value.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes)
     selectedIds.value = [
       ...selByLasso(visibleStrokes, poly),
-      ...visibleImages().filter((img) => rectsOverlap(box, { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h })).map((img) => img.id),
+      ...visibleImages()
+        .filter((img) => rectsOverlap(box, { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h }))
+        .map((img) => img.id),
     ]
     return selectedIds.value.length
   }
   const selectAll = (): number => {
-    selectedIds.value = [...activePage.value.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes.map((s) => s.id)), ...visibleImages().map((img) => img.id)]
+    selectedIds.value = [
+      ...activePage.value.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes.map((s) => s.id)),
+      ...visibleImages().map((img) => img.id),
+    ]
     return selectedIds.value.length
   }
   // Seçiliyi sil: yapısal op — redo ölür, base baştan boyanır, autosave kuyruğa girer.
@@ -1054,17 +1063,20 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (selectedIds.value.length === 0) return 0
     const set = new Set(selectedIds.value)
     clipboard = {
-      strokes: activePage.value.layers.flatMap((layer) => layer.strokes)
+      strokes: activePage.value.layers
+        .flatMap((layer) => layer.strokes)
         .filter((s) => set.has(s.id))
         .map((s) => ({
-        tool: s.tool,
-        color: s.color,
-        width: s.width,
-        dash: s.dash,
-        opacity: s.opacity,
-        points: s.points.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
+          tool: s.tool,
+          color: s.color,
+          width: s.width,
+          dash: s.dash,
+          opacity: s.opacity,
+          points: s.points.map((p) => ({ x: p.x, y: p.y, pressure: p.pressure })),
         })),
-      images: visibleImages().filter((img) => set.has(img.id)).map(({ id: _id, ...img }) => ({ ...img })),
+      images: visibleImages()
+        .filter((img) => set.has(img.id))
+        .map(({ id: _id, ...img }) => ({ ...img })),
     }
     clipboardCount.value = clipboard.strokes.length + clipboard.images.length
     return clipboardCount.value
@@ -1114,7 +1126,13 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (pasted.length === 0 && clipboard.images.length === 0) return 0
     pushHistory()
     for (const s of pasted) activeLayer.value.strokes.push(s)
-    const pastedImages = clipboard.images.map((img) => ({ ...img, id: newStrokeId(), layerId: activePage.value.activeLayerId, x: img.x + dx, y: img.y + dy }))
+    const pastedImages = clipboard.images.map((img) => ({
+      ...img,
+      id: newStrokeId(),
+      layerId: activePage.value.activeLayerId,
+      x: img.x + dx,
+      y: img.y + dy,
+    }))
     activePage.value.images.push(...pastedImages)
     selectedIds.value = [...pasted.map((s) => s.id), ...pastedImages.map((img) => img.id)]
     recountActive()
@@ -1156,8 +1174,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
   const createText = (x: number, y: number, w?: number): string => {
     const size = activePage.value.size
-    const boxW =
-      typeof w === 'number' && Number.isFinite(w) && w >= 40 ? Math.min(size.w, Math.round(w)) : undefined
+    const boxW = typeof w === 'number' && Number.isFinite(w) && w >= 40 ? Math.min(size.w, Math.round(w)) : undefined
     const item: TextItem = {
       id: newStrokeId(),
       x: Math.min(size.w - 8, Math.max(0, x)),
@@ -1281,7 +1298,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     const img = activePage.value.images.find((x) => x.id === id)
     if (!img) return false
     pushHistory()
-    activePage.value.images.splice(activePage.value.images.findIndex((t) => t.id === id), 1)
+    activePage.value.images.splice(
+      activePage.value.images.findIndex((t) => t.id === id),
+      1,
+    )
     queueFileDeletes([img.fileId])
     if (activeImageId.value === id) activeImageId.value = null
     // Bytes SİLİNMEZ: undo referansı geri getirebilir (tekil silinti yetimleri IDB'de kalır).
@@ -1293,18 +1313,12 @@ export const useDrawingStore = defineStore('drawing', () => {
     return true
   }
 
-
-
   // --- Resim import pipeline: dosya → decode → cap → IDB → sayfaya yerleştir ---
   // Bitmap cap'i: config/engine (IMAGE_MAX_DIM, oran korunur).
   const imgBusy = ref(false)
 
   // Tıklanan noktaya ortalanmış yerleştirir (taşma payı moveImage sınırlarında).
-  const addImage = async (
-    file: File,
-    x: number,
-    y: number,
-  ): Promise<{ id: string } | { error: string }> => {
+  const addImage = async (file: File, x: number, y: number): Promise<{ id: string } | { error: string }> => {
     if (imgBusy.value) return { error: 'işlem sürüyor' }
     if (!isImageFile(file)) return { error: 'resim dosyası seç' }
     imgBusy.value = true
@@ -1465,7 +1479,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     pushHistory()
     l.visible = !l.visible
     if (!l.visible) {
-      const hiddenIds = new Set([...l.strokes.map((s) => s.id), ...activePage.value.images.filter((img) => img.layerId === id).map((img) => img.id)])
+      const hiddenIds = new Set([
+        ...l.strokes.map((s) => s.id),
+        ...activePage.value.images.filter((img) => img.layerId === id).map((img) => img.id),
+      ])
       selectedIds.value = selectedIds.value.filter((sid) => !hiddenIds.has(sid))
       if (activeImageId.value && hiddenIds.has(activeImageId.value)) activeImageId.value = null
     }
@@ -1525,13 +1542,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // --- Renk paletleri: kayıtlı setler, switchlenebilir ---
-  const palettes = ref<ColorPalette[]>(
-    DEFAULT_PALETTES.map((p) => ({ ...p, colors: [...p.colors] })),
-  )
+  const palettes = ref<ColorPalette[]>(DEFAULT_PALETTES.map((p) => ({ ...p, colors: [...p.colors] })))
   const activePaletteId = ref<string>(DEFAULT_PALETTES[0]!.id)
-  const activePalette = computed(
-    () => palettes.value.find((p) => p.id === activePaletteId.value) ?? palettes.value[0]!,
-  )
+  const activePalette = computed(() => palettes.value.find((p) => p.id === activePaletteId.value) ?? palettes.value[0]!)
   const setActivePalette = (id: string) => {
     if (activePaletteId.value === id) return
     if (!palettes.value.some((p) => p.id === id)) return
@@ -1855,7 +1868,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (lastPushedSession !== eraseSession) {
       lastPushedSession = eraseSession
       const entry: Extract<HistoryEntry, { type: 'erase' }> = {
-        type: 'erase', pageId: activePage.value.id, patches: [],
+        type: 'erase',
+        pageId: activePage.value.id,
+        patches: [],
       }
       undoStack.value.push(entry)
       if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
@@ -1889,7 +1904,15 @@ export const useDrawingStore = defineStore('drawing', () => {
       for (let i = layer.strokes.length - 1; i >= 0; i--) {
         const stroke = layer.strokes[i]!
         const bb = cachedStrokeBBox(stroke)
-        if (stroke.tool !== 'eraser' && bb && x >= bb.x0 && x <= bb.x1 && y >= bb.y0 && y <= bb.y1 && polylineHitsCircle(stroke.points, x, y, eraseRadius())) {
+        if (
+          stroke.tool !== 'eraser' &&
+          bb &&
+          x >= bb.x0 &&
+          x <= bb.x1 &&
+          y >= bb.y0 &&
+          y <= bb.y1 &&
+          polylineHitsCircle(stroke.points, x, y, eraseRadius())
+        ) {
           hitStroke = { layer, stroke }
           break
         }
@@ -1897,7 +1920,12 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (hitStroke) break
     }
     const hitImage = imageAt(x, y)
-    const imgBox = hitImage && { x0: hitImage.x, y0: hitImage.y, x1: hitImage.x + hitImage.w, y1: hitImage.y + hitImage.h }
+    const imgBox = hitImage && {
+      x0: hitImage.x,
+      y0: hitImage.y,
+      x1: hitImage.x + hitImage.w,
+      y1: hitImage.y + hitImage.h,
+    }
     const imageHit = imgBox && x >= imgBox.x0 && x <= imgBox.x1 && y >= imgBox.y0 && y <= imgBox.y1
     if (hitImage && (imageHit || !hitStroke)) {
       const images = activePage.value.images
@@ -1916,7 +1944,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       brushDirty(cachedStrokeBBox(hitStroke.stroke)!)
       const index = hitStroke.layer.strokes.indexOf(hitStroke.stroke)
       const [gone] = hitStroke.layer.strokes.splice(index, 1)
-      if (gone) recordErasePatch({ collection: 'strokes', layerId: hitStroke.layer.id, index, removed: [gone], inserted: [] })
+      if (gone)
+        recordErasePatch({ collection: 'strokes', layerId: hitStroke.layer.id, index, removed: [gone], inserted: [] })
       selectedIds.value = selectedIds.value.filter((id) => id !== hitStroke!.stroke.id)
       return true
     }
@@ -1951,11 +1980,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // Önizleme boyaması: base'e kâğıt rengi kalın çizgi/nokta (veri değişmez, repaint yok).
-  const paintFastErase = (
-    a: { x: number; y: number } | null,
-    b: { x: number; y: number },
-    radius: number,
-  ) => {
+  const paintFastErase = (a: { x: number; y: number } | null, b: { x: number; y: number }, radius: number) => {
     const paperHex = paperFor(activePage.value)
     if (!paperHex || radius <= 0) return
     const ctx = getCtx(canvasRef.value)
@@ -2076,43 +2101,44 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     const keptSel = new Set(selectedIds.value)
     let selChanged = false
-    for (const layer of layers) for (let i = layer.strokes.length - 1; i >= 0; i--) {
-      const s = layer.strokes[i]!
-      const bb = cachedStrokeBBox(s)
-      if (!bb) continue
-      if (bb.x1 < x - radius || bb.x0 > x + radius || bb.y1 < y - radius || bb.y0 > y + radius) continue
-      // Gerçekten değmiyorsa pahalı kopyalı kesime girme (bbox kaba filtre yetmez).
-      // Yoğun sayfa-kaplayan stroke'ta yol noktası başına tam-dizi kopyasını önler.
-      if (!polylineHitsCircle(s.points, x, y, radius)) continue
-      const runs = splitRunsOutside(s.points, x, y, radius)
-      if (runs.length === 1 && runs[0]!.length === s.points.length) continue // değmedi
-      touch()
-      // Daire + atılan kırıntı uzantısı + kalınlık taşması tek kutuda toplanır.
-      brushDirtyAround(x, y, radius * 2 + s.width)
-      layer.strokes.splice(i, 1)
-      const pieces: Stroke[] = []
-      // Kesim artığı eleme: 1-2pt'lik kırıntılar nokta gibi çizilip
-      // "2 küçük yuvarlak" bırakıyordu. Eşik silgi yarıçapına oranlı.
-      for (const run of dropTinyRuns(runs, Math.max(2, radius * 0.5))) {
-        const piece: Stroke = {
-          id: newStrokeId(),
-          tool: s.tool,
-          color: s.color,
-          width: s.width,
-          dash: s.dash,
-          opacity: s.opacity,
-          points: run,
+    for (const layer of layers)
+      for (let i = layer.strokes.length - 1; i >= 0; i--) {
+        const s = layer.strokes[i]!
+        const bb = cachedStrokeBBox(s)
+        if (!bb) continue
+        if (bb.x1 < x - radius || bb.x0 > x + radius || bb.y1 < y - radius || bb.y0 > y + radius) continue
+        // Gerçekten değmiyorsa pahalı kopyalı kesime girme (bbox kaba filtre yetmez).
+        // Yoğun sayfa-kaplayan stroke'ta yol noktası başına tam-dizi kopyasını önler.
+        if (!polylineHitsCircle(s.points, x, y, radius)) continue
+        const runs = splitRunsOutside(s.points, x, y, radius)
+        if (runs.length === 1 && runs[0]!.length === s.points.length) continue // değmedi
+        touch()
+        // Daire + atılan kırıntı uzantısı + kalınlık taşması tek kutuda toplanır.
+        brushDirtyAround(x, y, radius * 2 + s.width)
+        layer.strokes.splice(i, 1)
+        const pieces: Stroke[] = []
+        // Kesim artığı eleme: 1-2pt'lik kırıntılar nokta gibi çizilip
+        // "2 küçük yuvarlak" bırakıyordu. Eşik silgi yarıçapına oranlı.
+        for (const run of dropTinyRuns(runs, Math.max(2, radius * 0.5))) {
+          const piece: Stroke = {
+            id: newStrokeId(),
+            tool: s.tool,
+            color: s.color,
+            width: s.width,
+            dash: s.dash,
+            opacity: s.opacity,
+            points: run,
+          }
+          pieces.push(piece)
         }
-        pieces.push(piece)
+        // Parçalar orijinal sıraya (z-düzeni korunur).
+        layer.strokes.splice(i, 0, ...pieces)
+        recordErasePatch({ collection: 'strokes', layerId: layer.id, index: i, removed: [s], inserted: pieces })
+        if (keptSel.delete(s.id)) {
+          for (const p of pieces) keptSel.add(p.id)
+          selChanged = true
+        }
       }
-      // Parçalar orijinal sıraya (z-düzeni korunur).
-      layer.strokes.splice(i, 0, ...pieces)
-      recordErasePatch({ collection: 'strokes', layerId: layer.id, index: i, removed: [s], inserted: pieces })
-      if (keptSel.delete(s.id)) {
-        for (const p of pieces) keptSel.add(p.id)
-        selChanged = true
-      }
-    }
     if (!touched) return false
     if (selChanged) selectedIds.value = [...keptSel]
     return true
@@ -2172,15 +2198,16 @@ export const useDrawingStore = defineStore('drawing', () => {
         }
         return false
       }
-      for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
-        const bucket = grid.get(`${gx}:${gy}`)
-        if (!bucket) continue
-        for (const c of bucket) {
-          const nx = Math.min(Math.max(c.x, box.x0), box.x1)
-          const ny = Math.min(Math.max(c.y, box.y0), box.y1)
-          if ((c.x - nx) ** 2 + (c.y - ny) ** 2 <= radius * radius) return true
+      for (let gy = gy0; gy <= gy1; gy++)
+        for (let gx = gx0; gx <= gx1; gx++) {
+          const bucket = grid.get(`${gx}:${gy}`)
+          if (!bucket) continue
+          for (const c of bucket) {
+            const nx = Math.min(Math.max(c.x, box.x0), box.x1)
+            const ny = Math.min(Math.max(c.y, box.y0), box.y1)
+            if ((c.x - nx) ** 2 + (c.y - ny) ** 2 <= radius * radius) return true
+          }
         }
-      }
       return false
     }
     for (let i = images.length - 1; i >= 0; i--) {
@@ -2223,37 +2250,38 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     const keptSel = new Set(selectedIds.value)
     let selChanged = false
-    for (const layer of layers) for (let i = layer.strokes.length - 1; i >= 0; i--) {
-      const s = layer.strokes[i]!
-      const bb = cachedStrokeBBox(s)
-      if (!bb) continue
-      if (!rectsOverlap(bb, sweep)) continue
-      const runs = splitPolylineOutsideSweep(s.points, path, radius)
-      if (runs.length === 1 && runs[0] === s.points) continue
-      brushDirty(expandRect(sweep, radius + s.width))
-      touch()
-      layer.strokes.splice(i, 1)
-      const pieces: Stroke[] = []
-      for (const run of dropTinyRuns(runs, minRun)) {
-        const piece: Stroke = {
-          id: newStrokeId(),
-          tool: s.tool,
-          color: s.color,
-          width: s.width,
-          dash: s.dash,
-          opacity: s.opacity,
-          points: run,
+    for (const layer of layers)
+      for (let i = layer.strokes.length - 1; i >= 0; i--) {
+        const s = layer.strokes[i]!
+        const bb = cachedStrokeBBox(s)
+        if (!bb) continue
+        if (!rectsOverlap(bb, sweep)) continue
+        const runs = splitPolylineOutsideSweep(s.points, path, radius)
+        if (runs.length === 1 && runs[0] === s.points) continue
+        brushDirty(expandRect(sweep, radius + s.width))
+        touch()
+        layer.strokes.splice(i, 1)
+        const pieces: Stroke[] = []
+        for (const run of dropTinyRuns(runs, minRun)) {
+          const piece: Stroke = {
+            id: newStrokeId(),
+            tool: s.tool,
+            color: s.color,
+            width: s.width,
+            dash: s.dash,
+            opacity: s.opacity,
+            points: run,
+          }
+          pieces.push(piece)
         }
-        pieces.push(piece)
+        // Parçalar orijinal sıraya (z-düzeni korunur).
+        layer.strokes.splice(i, 0, ...pieces)
+        recordErasePatch({ collection: 'strokes', layerId: layer.id, index: i, removed: [s], inserted: pieces })
+        if (keptSel.delete(s.id)) {
+          for (const p of pieces) keptSel.add(p.id)
+          selChanged = true
+        }
       }
-      // Parçalar orijinal sıraya (z-düzeni korunur).
-      layer.strokes.splice(i, 0, ...pieces)
-      recordErasePatch({ collection: 'strokes', layerId: layer.id, index: i, removed: [s], inserted: pieces })
-      if (keptSel.delete(s.id)) {
-        for (const p of pieces) keptSel.add(p.id)
-        selChanged = true
-      }
-    }
     if (!touched) return false
     if (selChanged) selectedIds.value = [...keptSel]
     return true
@@ -2263,7 +2291,13 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Sayfa DIŞINA basım yok sayılır (kenar dışı nokta tıklamasından mürekkep doğmaz).
   const startDrawing = (e: PointerEvent): boolean => {
     if (!canvasRef.value || isDrawing.value) return false
-    if (currentTool.value === 'select' || currentTool.value === 'text' || currentTool.value === 'image' || currentTool.value === 'hand') return false
+    if (
+      currentTool.value === 'select' ||
+      currentTool.value === 'text' ||
+      currentTool.value === 'image' ||
+      currentTool.value === 'hand'
+    )
+      return false
     if (shouldIgnoreEvent(e)) return false
     // Bayat hızlı-silgi bayrağı kalmasın (yalnız aktif silgi sürüklemesinde true).
     fastErase = false
@@ -2320,9 +2354,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     // İlk vuruş tohumu: donanımın biriktirdiği ara noktaları da al. Hızlı kalem
     // girişinde tek nokta, çizginin başını yutuyordu. Basınç her noktanın kendi
     // event'inden; liste boşsa/tekse davranış birebir aynı (mouse'ta no-op).
-    const seedPts: { x: number; y: number; pressure: number }[] = [
-      { x: cx, y: cy, pressure: readPressure(e) },
-    ]
+    const seedPts: { x: number; y: number; pressure: number }[] = [{ x: cx, y: cy, pressure: readPressure(e) }]
     if (typeof e.getCoalescedEvents === 'function') {
       const minD = MIN_DIST_SCREEN / (effScale() || 1)
       for (const ev of e.getCoalescedEvents()) {
@@ -2481,11 +2513,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (isDrawing.value && points.value.length > 0) {
       const snapped = activeShapeSnap.value
       // Şekiller uç-noktayla saklanır (ara noktalar sürükleme artığıdır, export'u şişirmesin).
-      const shapeEnds = snapped
-        ? snapped.points
-        : isShapeTool(currentTool.value)
-          ? shapeEndpoints(points.value)
-          : null
+      const shapeEnds = snapped ? snapped.points : isShapeTool(currentTool.value) ? shapeEndpoints(points.value) : null
       const strokeTool = snapped ? snapped.tool : currentTool.value
       const stroke: Stroke = {
         id: newStrokeId(),
@@ -2508,7 +2536,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       layer.strokes.push(stroke)
       selectedIds.value = []
       activeTextId.value = null
-    activeImageId.value = null
+      activeImageId.value = null
       recountActive()
       if (stroke.tool !== 'eraser') {
         const ctx = getCtx(canvasRef.value)
@@ -2547,7 +2575,9 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   const clearOverlayRect = (ctx: CanvasRenderingContext2D, box: NormRect, pad: number) => {
-    applyView(ctx, () => ctx.clearRect(box.x0 - pad, box.y0 - pad, box.x1 - box.x0 + pad * 2, box.y1 - box.y0 + pad * 2))
+    applyView(ctx, () =>
+      ctx.clearRect(box.x0 - pad, box.y0 - pad, box.x1 - box.x0 + pad * 2, box.y1 - box.y0 + pad * 2),
+    )
   }
 
   // Base katmanını geçmişten baştan çiz — sadece undo/clear/resize/setup/sayfa geçişinde (nadir).
@@ -2569,11 +2599,7 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Bir sayfayı verilen ctx'e çiz: kâğıt dolgusu + desen + arkaplan tam kanama + stroke'lar.
   // Transform dışarıda kurulur (ekran: view-fit, export: sayfa boyutu).
   // Desen SADECE boş sayfada: PDF bitmap'i varsa (veya kâğıt şeffafsa) çizilmez.
-  const paintPaperPattern = (
-    ctx: CanvasRenderingContext2D,
-    page: Page,
-    bg: PaperBackground,
-  ) => {
+  const paintPaperPattern = (ctx: CanvasRenderingContext2D, page: Page, bg: PaperBackground) => {
     if (bg.type === 'blank' && !bg.margin) return
     if (bgCanvases.has(page.id)) return
     const { w, h } = page.size
@@ -2770,10 +2796,7 @@ export const useDrawingStore = defineStore('drawing', () => {
             if (runs.length === 0) continue
             // Genişlik TÜM noktalardan hesaplanır (basınç ortalaması) — koşuya bölününce
             // değişmesin diye tam genişliği geçir, hassasiyeti 0 ver.
-            const fullW =
-              s.tool === 'eraser'
-                ? s.width
-                : effectiveWidth(s.points, s.width, pressureSensitivity.value)
+            const fullW = s.tool === 'eraser' ? s.width : effectiveWidth(s.points, s.width, pressureSensitivity.value)
             for (const run of runs) {
               paintStroke(ctx, { ...s, width: fullW, points: run }, paperHex, 0)
             }
@@ -2826,7 +2849,14 @@ export const useDrawingStore = defineStore('drawing', () => {
   // ✅ Aktif çizgiyi overlay'e çiz — per-frame tek maliyet bu (O(aktif çizgi), sahneden bağımsız).
   // Silgi overlay kullanmaz (doğrudan base'e işlenir) → burada iş yok.
   const renderActiveStroke = () => {
-    if (currentTool.value === 'eraser' || currentTool.value === 'select' || currentTool.value === 'text' || currentTool.value === 'image' || currentTool.value === 'hand') return
+    if (
+      currentTool.value === 'eraser' ||
+      currentTool.value === 'select' ||
+      currentTool.value === 'text' ||
+      currentTool.value === 'image' ||
+      currentTool.value === 'hand'
+    )
+      return
     const t0 = performance.now()
     const ctx = getCtx(overlayRef.value)
     if (!ctx) return
@@ -2838,7 +2868,14 @@ export const useDrawingStore = defineStore('drawing', () => {
       const styleKey = `${currentTool.value}:${color.value}:${strokeWidth.value}:${strokeDash.value}:${strokeOpacity.value}:${pressureSensitivity.value}:${paperHex}`
       // Pressure averaged over the whole stroke changes its width while drawing;
       // dashed strokes also need a continuous dash phase. Keep those on full redraw.
-      if (activeShapeSnap.value || isShapeTool(currentTool.value) || currentTool.value === 'highlighter' || pressureSensitivity.value > 0 || strokeDash.value !== 'solid' || renderedActiveStyle !== styleKey) {
+      if (
+        activeShapeSnap.value ||
+        isShapeTool(currentTool.value) ||
+        currentTool.value === 'highlighter' ||
+        pressureSensitivity.value > 0 ||
+        strokeDash.value !== 'solid' ||
+        renderedActiveStyle !== styleKey
+      ) {
         const strokeToPaint: Stroke = {
           id: 'preview-active',
           tool: activeShapeSnap.value?.tool ?? currentTool.value,
@@ -2855,8 +2892,12 @@ export const useDrawingStore = defineStore('drawing', () => {
       } else if (points.value.length !== renderedActivePoints) {
         if (renderedActivePoints === 0 && points.value.length === 1) {
           const strokeToPaint: Stroke = {
-            id: 'preview-active', tool: currentTool.value, color: color.value,
-            width: strokeWidth.value, dash: strokeDash.value, opacity: strokeOpacity.value,
+            id: 'preview-active',
+            tool: currentTool.value,
+            color: color.value,
+            width: strokeWidth.value,
+            dash: strokeDash.value,
+            opacity: strokeOpacity.value,
             points: points.value,
           }
           applyView(ctx, () => paintStroke(ctx, strokeToPaint, paperHex, 0))
@@ -2875,14 +2916,22 @@ export const useDrawingStore = defineStore('drawing', () => {
           clearOverlayRect(ctx, tailBox, Math.max(strokeWidth.value * 2, DIRTY_PAD_SCREEN / (effScale() || 1)))
           applyView(ctx, () => {
             const end = points.value.length - 1
-            paintStrokeTail(ctx, {
-              tool: currentTool.value,
-              color: color.value,
-              width: strokeWidth.value,
-              dash: strokeDash.value,
-              opacity: strokeOpacity.value,
-              points: points.value,
-            }, paperHex, 0, start, 1, end)
+            paintStrokeTail(
+              ctx,
+              {
+                tool: currentTool.value,
+                color: color.value,
+                width: strokeWidth.value,
+                dash: strokeDash.value,
+                opacity: strokeOpacity.value,
+                points: points.value,
+              },
+              paperHex,
+              0,
+              start,
+              1,
+              end,
+            )
           })
           renderedActivePoints = points.value.length
           renderedActiveStyle = styleKey
@@ -3006,19 +3055,19 @@ export const useDrawingStore = defineStore('drawing', () => {
       pdfName.value = file.name
       activePageIndex.value = 0
       clearHistory()
-    selectedIds.value = []
-    activeTextId.value = null
-    activeImageId.value = null
-    points.value = []
-    isDrawing.value = false
-    bb = null
-    // Kaydırmalı modda boya-pan YOKTUR (gezinti native scroll'undur);
-    // sızan eski pan canlı sayfayı bloktan kaydırırdı — sigorta olarak sıfırla.
-    if (scrollLive) {
-      viewPanX = 0
-      viewPanY = 0
-    }
-    layoutView()
+      selectedIds.value = []
+      activeTextId.value = null
+      activeImageId.value = null
+      points.value = []
+      isDrawing.value = false
+      bb = null
+      // Kaydırmalı modda boya-pan YOKTUR (gezinti native scroll'undur);
+      // sızan eski pan canlı sayfayı bloktan kaydırırdı — sigorta olarak sıfırla.
+      if (scrollLive) {
+        viewPanX = 0
+        viewPanY = 0
+      }
+      layoutView()
       recountActive()
       repaintBase()
       clearOverlay()
@@ -3120,9 +3169,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
   }
 
-  const exportPdf = async (opts: { prompt?: boolean } = {}): Promise<
-    { pages: number } | { error: string } | { cancelled: true }
-  > => {
+  const exportPdf = async (
+    opts: { prompt?: boolean } = {},
+  ): Promise<{ pages: number } | { error: string } | { cancelled: true }> => {
     if (pdfBusy.value) return { error: 'işlem sürüyor' }
     pdfBusy.value = true
     try {
@@ -3410,7 +3459,8 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (!raw || typeof raw !== 'object') return { error: 'calem dosyası değil' }
     const r = raw as Record<string, unknown>
     if (r.app !== 'calem' || r.v !== 1) return { error: 'desteklenmeyen calem sürümü' }
-    const d = r.doc as { pages?: unknown; widths?: unknown; activePageIndex?: unknown; pdfId?: unknown; pdfName?: unknown } | undefined
+    const d = r.doc as
+      { pages?: unknown; widths?: unknown; activePageIndex?: unknown; pdfId?: unknown; pdfName?: unknown } | undefined
     if (!d || !Array.isArray(d.pages)) return { error: 'sayfa yok' }
     pdfBusy.value = true
     try {
@@ -3424,7 +3474,10 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (clean.length === 0) return { error: 'sayfa yok' }
       // Bytes'lar ÖNCE: başarısızsa mevcut sahne korunur.
       const written = new Set<string>()
-      const files = (r.files ?? {}) as Record<string, { kind?: unknown; name?: unknown; w?: unknown; h?: unknown; pageCount?: unknown; b64?: unknown }>
+      const files = (r.files ?? {}) as Record<
+        string,
+        { kind?: unknown; name?: unknown; w?: unknown; h?: unknown; pageCount?: unknown; b64?: unknown }
+      >
       for (const [fid, f] of Object.entries(files)) {
         if (!f || typeof f !== 'object' || typeof f.b64 !== 'string') continue
         let buf: ArrayBuffer
@@ -3463,7 +3516,18 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       const w = d.widths as Record<string, unknown> | undefined
       if (w) {
-        for (const t of ['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow', 'text', 'image', 'hand'] as const) {
+        for (const t of [
+          'pen',
+          'highlighter',
+          'eraser',
+          'line',
+          'rect',
+          'ellipse',
+          'arrow',
+          'text',
+          'image',
+          'hand',
+        ] as const) {
           const v = w[t]
           if (typeof v === 'number' && Number.isFinite(v)) {
             widths.value[t] = Math.min(WIDTH_MAX[t], Math.max(WIDTH_MIN[t], Math.round(v)))
@@ -3480,9 +3544,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       pages.value = clean
       const idx = d.activePageIndex
       activePageIndex.value =
-        typeof idx === 'number' && Number.isFinite(idx)
-          ? Math.min(clean.length - 1, Math.max(0, Math.floor(idx)))
-          : 0
+        typeof idx === 'number' && Number.isFinite(idx) ? Math.min(clean.length - 1, Math.max(0, Math.floor(idx))) : 0
       clearHistory()
       selectedIds.value = []
       activeTextId.value = null
@@ -3773,8 +3835,11 @@ export const useDrawingStore = defineStore('drawing', () => {
       const page = pages.value.find((p) => p.id === entry.pageId)
       if (page) pageSnapshotCache.invalidate(page)
       undoStack.value.push({
-        type: 'stroke-add', pageId: entry.pageId, layerId: entry.layerId,
-        strokeId: entry.strokeId, index: entry.index,
+        type: 'stroke-add',
+        pageId: entry.pageId,
+        layerId: entry.layerId,
+        strokeId: entry.strokeId,
+        index: entry.index,
       })
       if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
       flushFileDeletes()
@@ -3862,7 +3927,11 @@ export const useDrawingStore = defineStore('drawing', () => {
       layers,
       activeLayerId: layerId.get(src.activeLayerId) ?? layers[0]!.id,
       texts: src.texts.map((t) => ({ ...snapshotText(t), id: newStrokeId() })),
-      images: src.images.map((m) => ({ ...snapshotImage(m), id: newStrokeId(), layerId: layerId.get(m.layerId) ?? layers[0]!.id })),
+      images: src.images.map((m) => ({
+        ...snapshotImage(m),
+        id: newStrokeId(),
+        layerId: layerId.get(m.layerId) ?? layers[0]!.id,
+      })),
       size: { w: src.size.w, h: src.size.h },
       ...(src.pdfPageIndex !== undefined ? { pdfPageIndex: src.pdfPageIndex } : {}),
     }
