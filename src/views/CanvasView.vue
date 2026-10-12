@@ -433,14 +433,6 @@
         @zoom-out="zoomOut"
         @reset-zoom="resetZoom"
       />
-      <!-- Perf HUD: reaktivite dışı güncellenir (kendisi render tetiklemez) -->
-      <div
-        v-if="!presenting"
-        ref="hud"
-        class="absolute right-2 text-[10px] leading-tight text-[var(--chrome-faint)] bg-[var(--chrome-bg)] rounded px-1.5 py-0.5 pointer-events-none font-mono"
-        :class="isNarrow && !isMobile ? 'top-[68px]' : 'top-2'"
-      ></div>
-
       <div
         v-if="store.pages.length > 1 && !presenting && store.pageStripOpen"
         ref="pageStrip"
