@@ -1,7 +1,7 @@
 // Üyelik katmanı: tier rozeti + kota kapıları (saf fonksiyonlar).
 // Local'da özellik kilidi YOKTUR — üyelik yalnızca bulutu açar (sync/kota/paylaşım).
-// Free kota Supabase free tavanına göre yerden seçildi (doğrulama: 2026-10,
-// supabase.com/docs + /pricing); pro sayı placeholder'dır, billing öncesi kesinleşir.
+// Free kota bulut sağlayıcısının free tavanına göre yerden seçildi
+// (doğrulama: 2026-10); pro sayı placeholder'dır, billing öncesi kesinleşir.
 // Davranış değişikliği burada yapılır, tests/membership.test.ts kilitler.
 
 /** Üyelik katmanı (bulut rozeti; local'da kapı açmaz). */
@@ -23,7 +23,7 @@ export interface TierQuota {
 // TÜM kullanıcılara toplam — kullanıcı başına değil) rahat altında tutulur.
 // 25MB: vektör mürekkep KB'ler mertebesindedir, binlerce sayfa + birkaç resim alır;
 // 40 kullanıcı × 25MB = 1GB proje tavanı. Tavan yaklaşınca ücretsiz kullanıcı alımı
-// durur veya Pro plana ($25/ay) geçilir — ilk sabit gider kalemidir (bkz. BACKEND.md).
+// durur veya Pro plana geçilir — ilk sabit gider kalemidir.
 // Pro kota ücretli proje tavanına göre placeholder'dır (100GB storage).
 export const TIER_QUOTAS: Record<MembershipTier, TierQuota> = {
   free: { maxPages: 50, quotaBytes: 25 * 1024 * 1024 },
@@ -31,18 +31,14 @@ export const TIER_QUOTAS: Record<MembershipTier, TierQuota> = {
 }
 
 /** Katman geçerliliği (bozuk string → false; çağrıcı DEFAULT_TIER'e düşer). */
-export const isTier = (t: unknown): t is MembershipTier =>
-  t === 'free' || t === 'pro'
+export const isTier = (t: unknown): t is MembershipTier => t === 'free' || t === 'pro'
 
 /** Bulut kotası: bu katmanda o kadar sayfa daha eklenebilir mi? (local'da çağrılmaz). */
 export const canAddPage = (currentPages: number, tier: MembershipTier): boolean =>
-  Number.isFinite(currentPages) &&
-  currentPages >= 0 &&
-  currentPages < (TIER_QUOTAS[tier] ?? TIER_QUOTAS.free).maxPages
+  Number.isFinite(currentPages) && currentPages >= 0 && currentPages < (TIER_QUOTAS[tier] ?? TIER_QUOTAS.free).maxPages
 
 /** Bulut dosya kotası (bayt). */
-export const storageQuotaBytes = (tier: MembershipTier): number =>
-  (TIER_QUOTAS[tier] ?? TIER_QUOTAS.free).quotaBytes
+export const storageQuotaBytes = (tier: MembershipTier): number => (TIER_QUOTAS[tier] ?? TIER_QUOTAS.free).quotaBytes
 
 /** Bulut özelliği bu katmana açık mı? (bugün: sync/pro-paylaşım yalnızca pro değil,
  *  free de sync alır — kapı kota ile çizilir, tier ile değil. Fonksiyon dikiş içindir.) */

@@ -71,19 +71,22 @@ npm run test
 ### IDE Setup
 
 **VS Code** (recommended):
-- Install [Vue - Official](https://marketplace.visualstudio.com/items?itemName=Vue.volar)
+
+- Install the "Vue - Official" extension
 - Disable Vetur if installed
 - Enable Custom Object Formatter in DevTools for better debugging
 
 ### Browser DevTools
 
 **Chromium-based (Chrome, Edge, Brave):**
-- Install [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-- [Enable Custom Object Formatter](http://bit.ly/object-formatters) for cleaner debugging
+
+- Install the Vue.js devtools extension
+- Enable Custom Object Formatter for cleaner debugging
 
 **Firefox:**
-- Install [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-- [Enable Custom Object Formatter](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+
+- Install the Vue.js devtools add-on
+- Enable Custom Object Formatter
 
 ## Project Structure
 
@@ -116,6 +119,7 @@ All behavior tuning (limits, tool metadata, UI ranges) lives in `src/config/` �
 ## Contributing
 
 Community contributions are welcome! Please:
+
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/your-idea`)
 3. Write tests for new logic
@@ -133,8 +137,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - [ ] Billing (Stripe or Polar integration)
 - [ ] Shared documents & collaboration (low priority)
 
-See [BACKEND.md](BACKEND.md) for detailed architecture and cloud plans.
-
 ## License
 
 Calem is licensed under the **GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)**.
@@ -146,9 +148,9 @@ See [LICENSE](LICENSE) for details.
 
 ## Support
 
-- 📖 **Documentation** — See [BACKEND.md](BACKEND.md) for architecture details
+- 📖 **Documentation** — See [ARCHITECTURE.md](ARCHITECTURE.md) for architecture details
 - 🧪 **Tests** — See [TEST.md](TEST.md) for testing guide
-- 🐛 **Issues** — Found a bug? [Open an issue](https://github.com/r4venw4rd/calem/issues)
+- 🐛 **Issues** — Found a bug? Open an issue on the repository
 
 ---
 

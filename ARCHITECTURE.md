@@ -31,12 +31,12 @@ Critical paths **never paint synchronously** (pan included). When in doubt, chec
 
 External services sit behind interfaces; there is no network code — the real provider plugs in with the same signature:
 
-| Seam | Interface | Default | Real |
-|---|---|---|---|
-| Auth | `AuthProvider` (`lib/auth`) | `LocalAuthProvider` (anonymous) | email/OAuth later |
-| Storage | `DocStorage` (`lib/idb`) | IDB adapter | user-namespaced |
-| Sync | pure rules (`lib/sync`) | outbox + page LWW | transport later |
-| Billing | `BillingProvider` (`lib/billing`) | `NoopBillingProvider` | Polar/Stripe later |
+| Seam    | Interface                         | Default                         | Real               |
+| ------- | --------------------------------- | ------------------------------- | ------------------ |
+| Auth    | `AuthProvider` (`lib/auth`)       | `LocalAuthProvider` (anonymous) | email/OAuth later  |
+| Storage | `DocStorage` (`lib/idb`)          | IDB adapter                     | user-namespaced    |
+| Sync    | pure rules (`lib/sync`)           | outbox + page LWW               | transport later    |
+| Billing | `BillingProvider` (`lib/billing`) | `NoopBillingProvider`           | Polar/Stripe later |
 
 Adding a new tool: a type in the `Tool` union + metadata in `config/tools` + logic in `lib/` — it should land without touching the core (if it can't, that's architectural debt; open an issue).
 
@@ -45,4 +45,8 @@ Adding a new tool: a type in the `Tool` union + metadata in `config/tools` + log
 - Settings: `v1 → v4` (presence-check, no version inflation).
 - Document: `v2 → v5` (`PersistedDoc.v`). Rule: an old record opens as one page / one layer / blank paper, and **ink is never lost**.
 
-Detailed cloud plan: `BACKEND.md`. Xournal parity plan: `plan.md`.
+Rules:
+
+- Don't drop unknown fields; keep the `cleanStrokes`/`pageSizeOf` pattern.
+- On every migration an old record opens as one page / one layer / blank paper; ink is never lost.
+- `checkSavedSession` recognises the new versions.
