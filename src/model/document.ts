@@ -96,6 +96,8 @@ export interface AppSettings {
   smoothing?: number
   rejectTouch?: boolean
   touchPan?: boolean
+  twoFingerTap?: boolean
+  threeFingerTap?: boolean
   palettes?: ColorPalette[]
   activePaletteId?: string
   customColors?: string[]

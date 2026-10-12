@@ -350,6 +350,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       smoothing: smoothing.value,
       rejectTouch: rejectTouch.value,
       touchPan: touchPan.value,
+      twoFingerTap: twoFingerTap.value,
+      threeFingerTap: threeFingerTap.value,
       palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors], customs: [...x.customs] })),
       activePaletteId: activePaletteId.value,
       format: pageFormat.value,
@@ -376,6 +378,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       smoothing: smoothing.value,
       rejectTouch: rejectTouch.value,
       touchPan: touchPan.value,
+      twoFingerTap: twoFingerTap.value,
+      threeFingerTap: threeFingerTap.value,
       palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors], customs: [...x.customs] })),
       activePaletteId: activePaletteId.value,
       format: pageFormat.value,
@@ -426,6 +430,14 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     if (typeof r.rejectTouch === 'boolean') {
       rejectTouch.value = r.rejectTouch
+      applied = true
+    }
+    if (typeof r.twoFingerTap === 'boolean') {
+      twoFingerTap.value = r.twoFingerTap
+      applied = true
+    }
+    if (typeof r.threeFingerTap === 'boolean') {
+      threeFingerTap.value = r.threeFingerTap
       applied = true
     }
     if ('palettes' in r && r.palettes !== undefined) {
@@ -539,6 +551,12 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       if (typeof raw.rejectTouch === 'boolean') {
         rejectTouch.value = raw.rejectTouch
+      }
+      if (typeof raw.twoFingerTap === 'boolean') {
+        twoFingerTap.value = raw.twoFingerTap
+      }
+      if (typeof raw.threeFingerTap === 'boolean') {
+        threeFingerTap.value = raw.threeFingerTap
       }
       if (raw.palettes !== undefined) {
         const clean = cleanPalettes(raw.palettes)
@@ -1780,6 +1798,19 @@ export const useDrawingStore = defineStore('drawing', () => {
   const touchPan = ref(false)
   const setTouchPan = (v: boolean) => {
     touchPan.value = v
+    void persistSettings()
+  }
+
+  // Çok-parmak tap jestleri (opsiyonel): iki parmak = geri al, üç parmak = ileri al.
+  // Varsayılan açık; kapatınca yanlışlıkla tetiklenen undo/redo'yu engeller.
+  const twoFingerTap = ref(true)
+  const setTwoFingerTap = (v: boolean) => {
+    twoFingerTap.value = v
+    void persistSettings()
+  }
+  const threeFingerTap = ref(true)
+  const setThreeFingerTap = (v: boolean) => {
+    threeFingerTap.value = v
     void persistSettings()
   }
 
@@ -3338,6 +3369,8 @@ export const useDrawingStore = defineStore('drawing', () => {
         smoothing: smoothing.value,
         rejectTouch: rejectTouch.value,
         touchPan: touchPan.value,
+        twoFingerTap: twoFingerTap.value,
+        threeFingerTap: threeFingerTap.value,
         palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors], customs: [...x.customs] })),
         activePaletteId: activePaletteId.value,
         format: pageFormat.value,
@@ -4198,6 +4231,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     setRejectTouch,
     touchPan,
     setTouchPan,
+    twoFingerTap,
+    setTwoFingerTap,
+    threeFingerTap,
+    setThreeFingerTap,
     autoShapeSnap,
     setAutoShapeSnap,
     activeShapeSnap,

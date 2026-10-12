@@ -1148,10 +1148,10 @@ const draw = (e: PointerEvent) => {
 const endDraw = (e?: PointerEvent) => {
   // Gesture bitene (tüm parmaklar kalkana) kadar çizim kapalı — arta kalan parmak çizmesin.
   const rel = ps.releasePointer(e?.pointerId)
-  if (rel.tapAction === 'undo') {
+  if (rel.tapAction === 'undo' && store.twoFingerTap) {
     undo()
     return
-  } else if (rel.tapAction === 'redo') {
+  } else if (rel.tapAction === 'redo' && store.threeFingerTap) {
     redo()
     return
   }

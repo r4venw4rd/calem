@@ -45,6 +45,24 @@
         />
         {{ t('touchPan') }}
       </label>
+      <label class="flex items-center gap-2 mt-2 cursor-pointer" :title="t('twoFingerTapTitle')">
+        <input
+          type="checkbox"
+          :checked="store.twoFingerTap"
+          @change="store.setTwoFingerTap(($event.target as HTMLInputElement).checked)"
+          class="accent-indigo-600"
+        />
+        {{ t('twoFingerTap') }}
+      </label>
+      <label class="flex items-center gap-2 mt-2 cursor-pointer" :title="t('threeFingerTapTitle')">
+        <input
+          type="checkbox"
+          :checked="store.threeFingerTap"
+          @change="store.setThreeFingerTap(($event.target as HTMLInputElement).checked)"
+          class="accent-indigo-600"
+        />
+        {{ t('threeFingerTap') }}
+      </label>
       <label class="flex items-center gap-2 mt-2 cursor-pointer" :title="t('autoShapeSnapTitle')">
         <input
           type="checkbox"
