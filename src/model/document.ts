@@ -94,6 +94,7 @@ export interface AppSettings {
   eraserMode?: EraserMode
   toolbar?: ToolbarConfig
   smoothing?: number
+  rejectTouch?: boolean
   touchPan?: boolean
   palettes?: ColorPalette[]
   activePaletteId?: string

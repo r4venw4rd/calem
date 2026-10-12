@@ -348,6 +348,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       eraserMode: eraserMode.value,
       toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
       smoothing: smoothing.value,
+      rejectTouch: rejectTouch.value,
       touchPan: touchPan.value,
       palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors], customs: [...x.customs] })),
       activePaletteId: activePaletteId.value,
@@ -373,6 +374,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       eraserMode: eraserMode.value,
       toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
       smoothing: smoothing.value,
+      rejectTouch: rejectTouch.value,
       touchPan: touchPan.value,
       palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors], customs: [...x.customs] })),
       activePaletteId: activePaletteId.value,
@@ -420,6 +422,10 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     if (typeof r.touchPan === 'boolean') {
       touchPan.value = r.touchPan
+      applied = true
+    }
+    if (typeof r.rejectTouch === 'boolean') {
+      rejectTouch.value = r.rejectTouch
       applied = true
     }
     if ('palettes' in r && r.palettes !== undefined) {
@@ -530,6 +536,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       if (typeof raw.touchPan === 'boolean') {
         touchPan.value = raw.touchPan
+      }
+      if (typeof raw.rejectTouch === 'boolean') {
+        rejectTouch.value = raw.rejectTouch
       }
       if (raw.palettes !== undefined) {
         const clean = cleanPalettes(raw.palettes)
@@ -1763,6 +1772,7 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   const setRejectTouch = (v: boolean) => {
     rejectTouch.value = v
+    void persistSettings()
   }
 
   // Dokunmayla kaydır (opsiyonel): açıkken PARMAK her araçta kaydırır, kalem/fare çizer.
@@ -3326,6 +3336,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         eraserMode: eraserMode.value,
         toolbar: { order: [...toolbarOrder.value], hidden: [...hiddenTools.value] },
         smoothing: smoothing.value,
+        rejectTouch: rejectTouch.value,
         touchPan: touchPan.value,
         palettes: palettes.value.map((x) => ({ ...x, colors: [...x.colors], customs: [...x.customs] })),
         activePaletteId: activePaletteId.value,
