@@ -1815,10 +1815,13 @@ export const useDrawingStore = defineStore('drawing', () => {
     overlayRef.value = canvas
   }
 
-  // Düşük gecikme: Chrome'da kompozitör senkronizasyonu atlanır (desteklemeyen görmezden gelir).
+  // DİKKAT: desynchronized:true KULLANMA. Bu ipucu uygulamayı tek-tampon yoluna
+  // sokar; sayfa tamamen temizlenip yeniden boyandığı için (repaintBase/clearLayer)
+  // ara karelerde ekran siyaha düşebiliyordu. Normal (senkron) 2D context siyah
+  // ekranı kökten keser; kaybedilen ~1 kare gecikme, aralıklı siyah ekrandan iyidir.
   const getCtx = (canvas: HTMLCanvasElement | null): CanvasRenderingContext2D | null => {
     if (!canvas) return null
-    return canvas.getContext('2d', { desynchronized: true }) as CanvasRenderingContext2D | null
+    return canvas.getContext('2d') as CanvasRenderingContext2D | null
   }
 
   // Sayfa-uzayı transform'u: DPR × efektif view-fit. Tüm boyama bu çatı altında yapılır.
