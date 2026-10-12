@@ -12,7 +12,9 @@
     >
       <div class="flex items-center justify-between mb-2">
         <span class="font-medium text-[var(--chrome-title)]">{{ t('palette') }}</span>
-        <button @click="emit('close')" class="px-2 py-1 rounded hover:bg-[var(--chrome-bg-soft)]">{{ t('done') }}</button>
+        <button @click="emit('close')" class="px-2 py-1 rounded hover:bg-[var(--chrome-bg-soft)]">
+          {{ t('done') }}
+        </button>
       </div>
 
       <template v-if="store.currentTool !== 'select' && store.currentTool !== 'hand' && store.currentTool !== 'eraser'">
@@ -29,7 +31,11 @@
             :key="hex"
             @click="store.setColor(hex)"
             class="w-9 h-9 rounded-full border-2"
-            :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-105' : 'border-[var(--chrome-border-strong)]'"
+            :class="
+              store.color.toLowerCase() === hex
+                ? 'border-[var(--chrome-title)] scale-105'
+                : 'border-[var(--chrome-border-strong)]'
+            "
             :style="{ background: hex }"
           ></button>
         </div>
@@ -44,18 +50,16 @@
             class="w-9 h-9 rounded-full appearance-none bg-transparent border-2 border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0 shrink-0"
             :title="t('customColor')"
           />
-          <span
-            v-for="i in CUSTOM_SLOT_COUNT"
-            :key="'c' + i"
-            class="relative shrink-0"
-          >
+          <span v-for="i in CUSTOM_SLOT_COUNT" :key="'c' + i" class="relative shrink-0">
             <button
               v-if="store.customColors[i - 1]"
-              @click="store.setColor(store.customColors[i - 1]!); editingCustom = null"
+              @click="(store.setColor(store.customColors[i - 1]!), (editingCustom = null))"
               :title="`${store.customColors[i - 1]} ${t('editCustomSuffix')}`"
               class="w-9 h-9 rounded-full border-2 transition block"
               :class="[
-                store.color.toLowerCase() === store.customColors[i - 1] ? 'border-[var(--chrome-title)] scale-105 ring-2 ring-indigo-500/60' : 'border-[var(--chrome-border-strong)]',
+                store.color.toLowerCase() === store.customColors[i - 1]
+                  ? 'border-[var(--chrome-title)] scale-105 ring-2 ring-indigo-500/60'
+                  : 'border-[var(--chrome-border-strong)]',
                 editingCustom === i - 1 ? 'ring-2 ring-indigo-500' : '',
               ]"
               :style="{ background: store.customColors[i - 1] }"
@@ -92,7 +96,9 @@
         v-if="['pen', 'highlighter', 'eraser', 'line', 'rect', 'ellipse', 'arrow'].includes(store.currentTool)"
         class="mt-3"
       >
-        <div class="mb-1 text-[var(--chrome-muted)]">{{ t('width') }} <span class="font-mono">{{ store.strokeWidth }}</span></div>
+        <div class="mb-1 text-[var(--chrome-muted)]">
+          {{ t('width') }} <span class="font-mono">{{ store.strokeWidth }}</span>
+        </div>
         <input
           type="range"
           :min="store.widthMin"
@@ -103,7 +109,10 @@
         />
       </div>
 
-      <div v-if="['pen', 'line', 'rect', 'ellipse', 'arrow'].includes(store.currentTool)" class="mt-3 flex items-center gap-2">
+      <div
+        v-if="['pen', 'line', 'rect', 'ellipse', 'arrow'].includes(store.currentTool)"
+        class="mt-3 flex items-center gap-2"
+      >
         <select
           :value="store.strokeDash"
           @change="store.setStrokeDash(($event.target as HTMLSelectElement).value)"
@@ -143,7 +152,9 @@
       </div>
 
       <div v-if="store.currentTool === 'text'" class="mt-3">
-        <div class="mb-1 text-[var(--chrome-muted)]">{{ t('textSizeShort') }} <span class="font-mono">{{ store.textSize }}</span></div>
+        <div class="mb-1 text-[var(--chrome-muted)]">
+          {{ t('textSizeShort') }} <span class="font-mono">{{ store.textSize }}</span>
+        </div>
         <input
           type="range"
           :min="SLIDERS.textSize.min"
@@ -156,17 +167,56 @@
       </div>
 
       <div v-if="store.currentTool === 'select'" class="flex flex-wrap gap-1">
-        <button @click="store.setSelectMode('rect')" :class="store.selectMode === 'rect' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)]'" class="px-3 py-1.5 rounded font-medium transition">{{ t('rectSel') }}</button>
-        <button @click="store.setSelectMode('lasso')" :class="store.selectMode === 'lasso' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)]'" class="px-3 py-1.5 rounded font-medium transition">{{ t('lassoSel') }}</button>
-        <button @click="emit('select-all')" class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)]">{{ t('selectAll') }}</button>
-        <button @click="emit('select-copy')" :disabled="store.selectionCount === 0" class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)] disabled:opacity-30">{{ t('copy') }}</button>
-        <button @click="emit('select-paste')" :disabled="store.clipboardCount === 0" class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)] disabled:opacity-30">{{ t('paste') }}</button>
-        <button @click="emit('select-delete')" :disabled="store.selectionCount === 0" class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)] disabled:opacity-30">{{ t('delSel') }}</button>
+        <button
+          @click="store.setSelectMode('rect')"
+          :class="store.selectMode === 'rect' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)]'"
+          class="px-3 py-1.5 rounded font-medium transition"
+        >
+          {{ t('rectSel') }}
+        </button>
+        <button
+          @click="store.setSelectMode('lasso')"
+          :class="store.selectMode === 'lasso' ? 'bg-indigo-600 text-white' : 'bg-[var(--chrome-bg-soft)]'"
+          class="px-3 py-1.5 rounded font-medium transition"
+        >
+          {{ t('lassoSel') }}
+        </button>
+        <button @click="emit('select-all')" class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)]">
+          {{ t('selectAll') }}
+        </button>
+        <button
+          @click="emit('select-copy')"
+          :disabled="store.selectionCount === 0"
+          class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)] disabled:opacity-30"
+        >
+          {{ t('copy') }}
+        </button>
+        <button
+          @click="emit('select-paste')"
+          :disabled="store.clipboardCount === 0"
+          class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)] disabled:opacity-30"
+        >
+          {{ t('paste') }}
+        </button>
+        <button
+          @click="emit('select-delete')"
+          :disabled="store.selectionCount === 0"
+          class="px-3 py-1.5 rounded bg-[var(--chrome-bg-soft)] disabled:opacity-30"
+        >
+          {{ t('delSel') }}
+        </button>
       </div>
 
       <div class="mt-3 pt-2 border-t border-[var(--chrome-border)] flex gap-1">
-        <button @click="emit('clear')" class="flex-1 px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] text-red-400 transition">{{ t('clear') }}</button>
-        <button @click="emit('present')" class="flex-1 px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] transition">{{ t('present') }}</button>
+        <button
+          @click="emit('clear')"
+          class="flex-1 px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] text-red-400 transition"
+        >
+          {{ t('clear') }}
+        </button>
+        <button @click="emit('present')" class="flex-1 px-2 py-1.5 rounded bg-[var(--chrome-bg-soft)] transition">
+          {{ t('present') }}
+        </button>
       </div>
     </div>
   </div>

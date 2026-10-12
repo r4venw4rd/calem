@@ -9,7 +9,9 @@
     >
       <div class="flex items-center justify-between mb-2">
         <span class="font-medium text-[var(--chrome-title)]">{{ locTools[store.currentTool].label }}</span>
-        <button @click="$emit('close')" class="px-2 py-1 rounded hover:bg-[var(--chrome-bg-soft)]">{{ t('done') }}</button>
+        <button @click="$emit('close')" class="px-2 py-1 rounded hover:bg-[var(--chrome-bg-soft)]">
+          {{ t('done') }}
+        </button>
       </div>
       <!-- Seçim İşlemleri (Select aktifken) -->
       <div
@@ -20,7 +22,11 @@
       >
         <button
           @click="store.setSelectMode('rect')"
-          :class="store.selectMode === 'rect' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          :class="
+            store.selectMode === 'rect'
+              ? 'bg-indigo-600 text-white'
+              : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'
+          "
           class="px-2 py-1 rounded text-xs font-medium transition"
           :title="t('rectSelTitle')"
         >
@@ -28,7 +34,11 @@
         </button>
         <button
           @click="store.setSelectMode('lasso')"
-          :class="store.selectMode === 'lasso' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          :class="
+            store.selectMode === 'lasso'
+              ? 'bg-indigo-600 text-white'
+              : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'
+          "
           class="px-2 py-1 rounded text-xs font-medium transition"
           :title="t('lassoSelTitle')"
         >
@@ -85,16 +95,16 @@
           <option v-for="p in store.palettes" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
         <div class="flex items-center gap-1 shrink-0">
-          <span
-            v-for="hex in store.activePalette.colors"
-            :key="hex"
-            class="relative group shrink-0"
-          >
+          <span v-for="hex in store.activePalette.colors" :key="hex" class="relative group shrink-0">
             <button
               @click="store.setColor(hex)"
               :title="hex"
               class="w-5 h-5 rounded-full border transition block"
-              :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110 ring-2 ring-indigo-500/60' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
+              :class="
+                store.color.toLowerCase() === hex
+                  ? 'border-[var(--chrome-title)] scale-110 ring-2 ring-indigo-500/60'
+                  : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'
+              "
               :style="{ background: hex }"
             ></button>
             <button
@@ -120,18 +130,16 @@
             class="w-5 h-5 rounded-full appearance-none bg-transparent border border-dashed border-[var(--chrome-border-strong)] cursor-pointer p-0 shrink-0"
             :title="t('customColor')"
           />
-          <span
-            v-for="i in CUSTOM_SLOT_COUNT"
-            :key="'c' + i"
-            class="relative group shrink-0"
-          >
+          <span v-for="i in CUSTOM_SLOT_COUNT" :key="'c' + i" class="relative group shrink-0">
             <button
               v-if="store.customColors[i - 1]"
-              @click="store.setColor(store.customColors[i - 1]!); editingCustom = null"
+              @click="(store.setColor(store.customColors[i - 1]!), (editingCustom = null))"
               :title="`${store.customColors[i - 1]} ${t('editCustomSuffix')}`"
               class="w-5 h-5 rounded-full border transition block"
               :class="[
-                store.color.toLowerCase() === store.customColors[i - 1] ? 'border-[var(--chrome-title)] scale-110 ring-2 ring-indigo-500/60' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]',
+                store.color.toLowerCase() === store.customColors[i - 1]
+                  ? 'border-[var(--chrome-title)] scale-110 ring-2 ring-indigo-500/60'
+                  : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]',
                 editingCustom === i - 1 ? 'ring-2 ring-indigo-500' : '',
               ]"
               :style="{ background: store.customColors[i - 1] }"
@@ -166,7 +174,12 @@
 
       <!-- Kalınlık, Çizgi Stili, Opaklık ve Silgi Modu -->
       <div
-        v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'"
+        v-if="
+          store.currentTool !== 'select' &&
+          store.currentTool !== 'text' &&
+          store.currentTool !== 'image' &&
+          store.currentTool !== 'hand'
+        "
         class="flex flex-wrap items-center gap-x-1.5 gap-y-2"
       >
         <span class="w-px h-4 bg-[var(--chrome-border)] mx-0.5"></span>
@@ -204,14 +217,20 @@
             class="w-14 accent-indigo-600 cursor-pointer"
             :title="t('opacity')"
           />
-          <span class="text-xs text-[var(--chrome-text)] w-7 text-right font-mono">{{ Math.round(store.strokeOpacity * 100) }}%</span>
+          <span class="text-xs text-[var(--chrome-text)] w-7 text-right font-mono"
+            >{{ Math.round(store.strokeOpacity * 100) }}%</span
+          >
         </template>
 
         <template v-if="store.currentTool === 'eraser'">
           <span class="w-px h-4 bg-[var(--chrome-border)] mx-0.5"></span>
           <button
             @click="store.setEraserMode('standard')"
-            :class="store.eraserMode === 'standard' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+            :class="
+              store.eraserMode === 'standard'
+                ? 'bg-indigo-600 text-white'
+                : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'
+            "
             class="px-2 py-1 rounded text-xs font-medium transition"
             :title="t('eraserStandardTitle')"
           >
@@ -219,7 +238,11 @@
           </button>
           <button
             @click="store.setEraserMode('stroke')"
-            :class="store.eraserMode === 'stroke' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+            :class="
+              store.eraserMode === 'stroke'
+                ? 'bg-indigo-600 text-white'
+                : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'
+            "
             class="px-2 py-1 rounded text-xs font-medium transition"
             :title="t('eraserStrokeTitle')"
           >

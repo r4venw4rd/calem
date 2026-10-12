@@ -5,337 +5,425 @@
   >
     <header
       v-if="!presenting"
-      :class="isMobile
-        ? 'relative z-10 flex h-13 w-full shrink-0 items-center justify-between gap-2 border-b border-[var(--chrome-border)] bg-[var(--chrome-bg)] px-3 select-none'
-        : 'absolute left-1/2 top-3 z-20 w-max max-w-[calc(100%-1rem)] -translate-x-1/2 select-none'"
+      :class="
+        isMobile
+          ? 'relative z-10 flex h-13 w-full shrink-0 items-center justify-between gap-2 border-b border-[var(--chrome-border)] bg-[var(--chrome-bg)] px-3 select-none'
+          : 'absolute left-1/2 top-3 z-20 w-max max-w-[calc(100%-1rem)] -translate-x-1/2 select-none'
+      "
     >
-      <div :class="isMobile ? 'contents' : 'flex max-w-full items-center gap-1 overflow-x-auto no-scrollbar whitespace-nowrap rounded-2xl border border-[var(--chrome-border-strong)] bg-[var(--float-bg)] px-2 py-1.5 shadow-xl backdrop-blur'">
-      <div class="flex items-center gap-1 shrink-0">
-        <img
-        v-if="isMobile"
-        src="/icon-192.png"
-        alt="Calem"
-        title="Calem"
-        class="h-7 w-7 rounded-md select-none"
-        draggable="false"
-      />
-      <div ref="fileMenu" class="relative shrink-0">
-        <button
-          @click="showFile = !showFile; showLayers = false; showStyle = false; showMore = false"
-          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
-          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showFile }"
-          :title="t('fileOps')"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-          </svg>
-        </button>
-        <FileMenuPanel
-          :open="showFile"
-          ref="filePanelRef"
-          @open-calem="openCalemDoc"
-          @save-calem="quickSaveDoc"
-          @open-xopp="openXoppDoc"
-          @export-xopp="exportXoppDoc"
-          @pdf-file="onPdfFile"
-          @export-pdf="exportPdfDoc"
-          @export-png="exportPng"
-          @dup-page="dupPage"
-          @move-page-l="movePageL"
-          @move-page-r="movePageR"
-          @close-pdf="askClosePdf"
-        />
-        <input
-          ref="calemInput"
-          type="file"
-          :accept="CALEM_ACCEPT"
-          class="hidden"
-          @change="onCalemFile"
-        />
-        <input
-          ref="xoppInput"
-          type="file"
-          :accept="XOPP_ACCEPT"
-          class="hidden"
-          @change="onXoppFile"
-        />
-      </div>
-
-      <div ref="settingsBtn" class="relative shrink-0">
-        <button
-          @click="showSettings = !showSettings; showLayers = false; showStyle = false; showMore = false"
-          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
-          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showSettings }"
-          :title="t('settings')"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
-            <path d="M4 8h10M18 8h2M4 16h4M12 16h8" />
-            <circle cx="16" cy="8" r="2.2" />
-            <circle cx="10" cy="16" r="2.2" />
-          </svg>
-        </button>
-      </div>
-
-      <div ref="layersBtn" class="relative shrink-0">
-        <button
-          @click="showLayers = !showLayers; showSettings = false; showStyle = false; showMore = false"
-          class="relative w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
-          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showLayers }"
-          :title="t('layersTitle')"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3l9 5-9 5-9-5 9-5z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 13l9 5 9-5" />
-          </svg>
-          <span class="absolute -top-1 -right-1 min-w-4 h-4 px-0.5 rounded-full bg-indigo-600 text-white text-[9px] leading-4 text-center font-mono">{{ store.activePage.layers.length }}</span>
-        </button>
-
-        <LayersPanel :open="showLayers" ref="layersPanelRef" @close="showLayers = false" @changed="onLayersChanged" />
-      </div>
-
-      <span v-if="store.pdfBusy" class="text-[10px] text-yellow-400/80 font-mono ml-1">{{ t('processing') }}</span>
-      <span v-if="pdfError" class="text-[10px] text-red-400 font-mono ml-1">{{ pdfError }}</span>
-    </div>
-
-    <span v-if="!isMobile" class="w-px h-5 bg-[var(--chrome-border)] shrink-0"></span>
-    <!-- ORTA: Desktop dock -->
-      <!-- Araç Dock'u -->
-      <div v-if="!isMobile" class="flex shrink-0 items-center gap-0.5" role="toolbar" :aria-label="t('tools')">
-        <button
-          v-for="tool in (isNarrow && !isMobile ? visibleTools.slice(0, 6) : visibleTools)"
-          :key="tool"
-          @click="store.setTool(tool)"
-          :class="store.currentTool === tool ? (TOOL_META[tool].active + ' shadow-xs') : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)]'"
-          class="w-7 h-7 rounded-md flex items-center justify-center transition-all"
-          :title="locTools[tool].title"
-          :aria-label="locTools[tool].label"
-        >
-          <ToolIcon :icon="TOOL_META[tool].icon" />
-        </button>
-      </div>
-      <span v-if="!isMobile" class="w-px h-5 bg-[var(--chrome-border)] shrink-0"></span>
-      <div v-if="!isMobile" ref="styleBtn" class="relative shrink-0 min-[1440px]:hidden">
-        <button
-          @click="showStyle = !showStyle; showFile = false; showLayers = false; showMore = false"
-          class="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
-          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showStyle }"
-          :title="t('palette')"
-        >
-          <span
-            v-if="store.currentTool !== 'select' && store.currentTool !== 'hand' && store.currentTool !== 'eraser'"
-            class="w-4 h-4 rounded-full border border-[var(--chrome-border-strong)]"
-            :style="{ background: store.color }"
-          ></span>
-          <span
-            v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'"
-            class="text-[11px] font-mono"
-          >{{ store.strokeWidth }}</span>
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
-            <path d="M4 8h10M18 8h2M4 16h4M12 16h8" />
-            <circle cx="16" cy="8" r="2.2" />
-            <circle cx="10" cy="16" r="2.2" />
-          </svg>
-        </button>
-      </div>
-      <!-- Geniş ekran satır-içi ayarları (renk + kalınlık + opaklık). Dar ekranda popover'da. -->
-      <div v-if="!isMobile" class="hidden min-[1440px]:flex shrink-0 items-center gap-1.5">
-        <div
-          v-if="store.currentTool !== 'select' && store.currentTool !== 'hand' && store.currentTool !== 'eraser'"
-          class="flex items-center gap-1 shrink-0"
-          role="toolbar"
-          :aria-label="t('palette')"
-        >
-          <button
-            v-for="hex in store.activePalette.colors"
-            :key="hex"
-            @click="store.setColor(hex)"
-            :title="hex"
-            class="w-5 h-5 rounded-full border transition block shrink-0"
-            :class="store.color.toLowerCase() === hex ? 'border-[var(--chrome-title)] scale-110 ring-2 ring-indigo-500/60' : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'"
-            :style="{ background: hex }"
-          ></button>
-        </div>
-        <span
-          v-if="store.currentTool !== 'select' && store.currentTool !== 'text' && store.currentTool !== 'image' && store.currentTool !== 'hand'"
-          class="flex items-center gap-1.5"
-        >
-          <span class="text-xs text-[var(--chrome-muted)] whitespace-nowrap">{{ t('width') }}</span>
-          <input
-            type="range"
-            :min="store.widthMin"
-            :max="store.widthMax"
-            :value="store.strokeWidth"
-            @input="store.setStrokeWidth(Number(($event.target as HTMLInputElement).value))"
-            class="w-18 accent-indigo-600 cursor-pointer"
+      <div
+        :class="
+          isMobile
+            ? 'contents'
+            : 'flex max-w-full items-center gap-1 overflow-x-auto no-scrollbar whitespace-nowrap rounded-2xl border border-[var(--chrome-border-strong)] bg-[var(--float-bg)] px-2 py-1.5 shadow-xl backdrop-blur'
+        "
+      >
+        <div class="flex items-center gap-1 shrink-0">
+          <img
+            v-if="isMobile"
+            src="/icon-192.png"
+            alt="Calem"
+            title="Calem"
+            class="h-7 w-7 rounded-md select-none"
+            draggable="false"
           />
-          <span class="text-xs text-[var(--chrome-text)] w-5 text-right font-mono">{{ store.strokeWidth }}</span>
-          <template v-if="['pen', 'line', 'rect', 'ellipse', 'arrow'].includes(store.currentTool)">
-            <select
-              :value="store.strokeDash"
-              @change="store.setStrokeDash(($event.target as HTMLSelectElement).value)"
-              class="px-1.5 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)] focus:outline-none"
-              :title="t('lineStyle')"
+          <div ref="fileMenu" class="relative shrink-0">
+            <button
+              @click="((showFile = !showFile), (showLayers = false), (showStyle = false), (showMore = false))"
+              class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
+              :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showFile }"
+              :title="t('fileOps')"
             >
-              <option value="solid">{{ t('solid') }}</option>
-              <option value="dash">{{ t('dashed') }}</option>
-              <option value="dot">{{ t('dotted') }}</option>
-            </select>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
+                />
+              </svg>
+            </button>
+            <FileMenuPanel
+              :open="showFile"
+              ref="filePanelRef"
+              @open-calem="openCalemDoc"
+              @save-calem="quickSaveDoc"
+              @open-xopp="openXoppDoc"
+              @export-xopp="exportXoppDoc"
+              @pdf-file="onPdfFile"
+              @export-pdf="exportPdfDoc"
+              @export-png="exportPng"
+              @dup-page="dupPage"
+              @move-page-l="movePageL"
+              @move-page-r="movePageR"
+              @close-pdf="askClosePdf"
+            />
+            <input ref="calemInput" type="file" :accept="CALEM_ACCEPT" class="hidden" @change="onCalemFile" />
+            <input ref="xoppInput" type="file" :accept="XOPP_ACCEPT" class="hidden" @change="onXoppFile" />
+          </div>
+
+          <div ref="settingsBtn" class="relative shrink-0">
+            <button
+              @click="((showSettings = !showSettings), (showLayers = false), (showStyle = false), (showMore = false))"
+              class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
+              :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showSettings }"
+              :title="t('settings')"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M4 8h10M18 8h2M4 16h4M12 16h8" />
+                <circle cx="16" cy="8" r="2.2" />
+                <circle cx="10" cy="16" r="2.2" />
+              </svg>
+            </button>
+          </div>
+
+          <div ref="layersBtn" class="relative shrink-0">
+            <button
+              @click="((showLayers = !showLayers), (showSettings = false), (showStyle = false), (showMore = false))"
+              class="relative w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
+              :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showLayers }"
+              :title="t('layersTitle')"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3l9 5-9 5-9-5 9-5z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 13l9 5 9-5" />
+              </svg>
+              <span
+                class="absolute -top-1 -right-1 min-w-4 h-4 px-0.5 rounded-full bg-indigo-600 text-white text-[9px] leading-4 text-center font-mono"
+                >{{ store.activePage.layers.length }}</span
+              >
+            </button>
+
+            <LayersPanel
+              :open="showLayers"
+              ref="layersPanelRef"
+              @close="showLayers = false"
+              @changed="onLayersChanged"
+            />
+          </div>
+
+          <span v-if="store.pdfBusy" class="text-[10px] text-yellow-400/80 font-mono ml-1">{{ t('processing') }}</span>
+          <span v-if="pdfError" class="text-[10px] text-red-400 font-mono ml-1">{{ pdfError }}</span>
+        </div>
+
+        <span v-if="!isMobile" class="w-px h-5 bg-[var(--chrome-border)] shrink-0"></span>
+        <!-- ORTA: Desktop dock -->
+        <!-- Araç Dock'u -->
+        <div v-if="!isMobile" class="flex shrink-0 items-center gap-0.5" role="toolbar" :aria-label="t('tools')">
+          <button
+            v-for="tool in isNarrow && !isMobile ? visibleTools.slice(0, 6) : visibleTools"
+            :key="tool"
+            @click="store.setTool(tool)"
+            :class="
+              store.currentTool === tool
+                ? TOOL_META[tool].active + ' shadow-xs'
+                : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)]'
+            "
+            class="w-7 h-7 rounded-md flex items-center justify-center transition-all"
+            :title="locTools[tool].title"
+            :aria-label="locTools[tool].label"
+          >
+            <ToolIcon :icon="TOOL_META[tool].icon" />
+          </button>
+        </div>
+        <span v-if="!isMobile" class="w-px h-5 bg-[var(--chrome-border)] shrink-0"></span>
+        <div v-if="!isMobile" ref="styleBtn" class="relative shrink-0 min-[1440px]:hidden">
+          <button
+            @click="((showStyle = !showStyle), (showFile = false), (showLayers = false), (showMore = false))"
+            class="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
+            :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showStyle }"
+            :title="t('palette')"
+          >
+            <span
+              v-if="store.currentTool !== 'select' && store.currentTool !== 'hand' && store.currentTool !== 'eraser'"
+              class="w-4 h-4 rounded-full border border-[var(--chrome-border-strong)]"
+              :style="{ background: store.color }"
+            ></span>
+            <span
+              v-if="
+                store.currentTool !== 'select' &&
+                store.currentTool !== 'text' &&
+                store.currentTool !== 'image' &&
+                store.currentTool !== 'hand'
+              "
+              class="text-[11px] font-mono"
+              >{{ store.strokeWidth }}</span
+            >
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M4 8h10M18 8h2M4 16h4M12 16h8" />
+              <circle cx="16" cy="8" r="2.2" />
+              <circle cx="10" cy="16" r="2.2" />
+            </svg>
+          </button>
+        </div>
+        <!-- Geniş ekran satır-içi ayarları (renk + kalınlık + opaklık). Dar ekranda popover'da. -->
+        <div v-if="!isMobile" class="hidden min-[1440px]:flex shrink-0 items-center gap-1.5">
+          <div
+            v-if="store.currentTool !== 'select' && store.currentTool !== 'hand' && store.currentTool !== 'eraser'"
+            class="flex items-center gap-1 shrink-0"
+            role="toolbar"
+            :aria-label="t('palette')"
+          >
+            <button
+              v-for="hex in store.activePalette.colors"
+              :key="hex"
+              @click="store.setColor(hex)"
+              :title="hex"
+              class="w-5 h-5 rounded-full border transition block shrink-0"
+              :class="
+                store.color.toLowerCase() === hex
+                  ? 'border-[var(--chrome-title)] scale-110 ring-2 ring-indigo-500/60'
+                  : 'border-[var(--chrome-border-strong)] hover:border-[var(--chrome-title)]'
+              "
+              :style="{ background: hex }"
+            ></button>
+          </div>
+          <span
+            v-if="
+              store.currentTool !== 'select' &&
+              store.currentTool !== 'text' &&
+              store.currentTool !== 'image' &&
+              store.currentTool !== 'hand'
+            "
+            class="flex items-center gap-1.5"
+          >
+            <span class="text-xs text-[var(--chrome-muted)] whitespace-nowrap">{{ t('width') }}</span>
             <input
               type="range"
-              :min="SLIDERS.opacity.min"
-              :max="SLIDERS.opacity.max"
-              :step="SLIDERS.opacity.step"
-              :value="store.strokeOpacity"
-              @input="store.setStrokeOpacity(Number(($event.target as HTMLInputElement).value))"
-              class="w-14 accent-indigo-600 cursor-pointer"
-              :title="t('opacity')"
+              :min="store.widthMin"
+              :max="store.widthMax"
+              :value="store.strokeWidth"
+              @input="store.setStrokeWidth(Number(($event.target as HTMLInputElement).value))"
+              class="w-18 accent-indigo-600 cursor-pointer"
             />
-            <span class="text-xs text-[var(--chrome-text)] w-7 text-right font-mono">{{ Math.round(store.strokeOpacity * 100) }}%</span>
-          </template>
-          <template v-if="store.currentTool === 'eraser'">
+            <span class="text-xs text-[var(--chrome-text)] w-5 text-right font-mono">{{ store.strokeWidth }}</span>
+            <template v-if="['pen', 'line', 'rect', 'ellipse', 'arrow'].includes(store.currentTool)">
+              <select
+                :value="store.strokeDash"
+                @change="store.setStrokeDash(($event.target as HTMLSelectElement).value)"
+                class="px-1.5 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-xs text-[var(--chrome-title)] focus:outline-none"
+                :title="t('lineStyle')"
+              >
+                <option value="solid">{{ t('solid') }}</option>
+                <option value="dash">{{ t('dashed') }}</option>
+                <option value="dot">{{ t('dotted') }}</option>
+              </select>
+              <input
+                type="range"
+                :min="SLIDERS.opacity.min"
+                :max="SLIDERS.opacity.max"
+                :step="SLIDERS.opacity.step"
+                :value="store.strokeOpacity"
+                @input="store.setStrokeOpacity(Number(($event.target as HTMLInputElement).value))"
+                class="w-14 accent-indigo-600 cursor-pointer"
+                :title="t('opacity')"
+              />
+              <span class="text-xs text-[var(--chrome-text)] w-7 text-right font-mono"
+                >{{ Math.round(store.strokeOpacity * 100) }}%</span
+              >
+            </template>
+            <template v-if="store.currentTool === 'eraser'">
+              <button
+                @click="store.setEraserMode('standard')"
+                :class="
+                  store.eraserMode === 'standard'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'
+                "
+                class="px-2 py-1 rounded text-xs font-medium transition"
+                :title="t('eraserStandardTitle')"
+              >
+                {{ t('eraserStandard') }}
+              </button>
+              <button
+                @click="store.setEraserMode('stroke')"
+                :class="
+                  store.eraserMode === 'stroke'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'
+                "
+                class="px-2 py-1 rounded text-xs font-medium transition"
+                :title="t('eraserStrokeTitle')"
+              >
+                {{ t('eraserStroke') }}
+              </button>
+            </template>
+          </span>
+        </div>
+        <span v-if="!isMobile" class="w-px h-5 bg-[var(--chrome-border)] shrink-0"></span>
+        <div v-if="!isMobile" class="flex shrink-0 items-center gap-0.5">
+          <button
+            @click="undo"
+            :disabled="store.undoStack.length === 0"
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-30 disabled:cursor-not-allowed"
+            :title="t('undoTitle')"
+            aria-label="Geri al"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M3 10h10a5 5 0 015 5v2M3 10l5-5M3 10l5 5"
+              />
+            </svg>
+          </button>
+          <button
+            @click="redo"
+            :disabled="store.redoStack.length === 0"
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-30 disabled:cursor-not-allowed"
+            :title="t('redoTitle')"
+            aria-label="Yinele"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 10H11a5 5 0 00-5 5v2M21 10l-5-5M21 10l-5 5"
+              />
+            </svg>
+          </button>
+          <button
+            @click="askClearCanvas"
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 transition"
+            :title="t('clearTitle')"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m5 0V4a1 1 0 011-1h6a1 1 0 011 1v3M9 11v6m6-6v6"
+              />
+            </svg>
+          </button>
+          <button
+            @click="togglePresent"
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
+            :title="t('presentTitle')"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <rect x="2" y="3" width="20" height="14" rx="2" stroke-width="2" stroke="currentColor" fill="none" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 21h8m-4-4v4" />
+            </svg>
+          </button>
+        </div>
+        <div v-if="!isMobile && isNarrow && visibleTools.length > 6" ref="moreBtn" class="relative shrink-0">
+          <button
+            @click="((showMore = !showMore), (showFile = false), (showLayers = false), (showStyle = false))"
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
+            :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showMore }"
+            :title="t('moreTitle')"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+        </div>
+
+        <StylePanel :open="showStyle" ref="stylePanelRef" @close="showStyle = false" @changed="onStyleChanged" />
+
+        <!-- Taşma menüsü (dar masaüstü): bara sığmayan son araçlar -->
+        <Teleport to="body">
+          <div
+            ref="morePanel"
+            v-if="showMore"
+            class="fixed left-1/2 top-[68px] z-30 w-56 max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-90px)] overflow-y-auto -translate-x-1/2 rounded-2xl border border-[var(--chrome-border-strong)] bg-[var(--float-bg)] p-1.5 text-xs shadow-xl backdrop-blur"
+            role="menu"
+            :aria-label="t('moreTitle')"
+          >
             <button
-              @click="store.setEraserMode('standard')"
-              :class="store.eraserMode === 'standard' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-              class="px-2 py-1 rounded text-xs font-medium transition"
-              :title="t('eraserStandardTitle')"
+              v-for="tool in visibleTools.slice(6)"
+              :key="tool"
+              @click="(store.setTool(tool), (showMore = false))"
+              class="flex w-full items-center gap-2 px-3 py-1.5 rounded text-left transition"
+              :class="
+                store.currentTool === tool
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)]'
+              "
+              :title="locTools[tool].title"
             >
-              {{ t('eraserStandard') }}
+              <span class="font-medium">{{ locTools[tool].label }}</span>
             </button>
-            <button
-              @click="store.setEraserMode('stroke')"
-              :class="store.eraserMode === 'stroke' ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
-              class="px-2 py-1 rounded text-xs font-medium transition"
-              :title="t('eraserStrokeTitle')"
-            >
-              {{ t('eraserStroke') }}
-            </button>
-          </template>
-        </span>
+          </div>
+        </Teleport>
+
+        <!-- SAĞ (yalnızca mobil üst şerit): Temizle / Sunum -->
+        <div v-if="isMobile" class="flex items-center gap-1 shrink-0 ml-auto">
+          <!-- Temizle (Clear Canvas) -->
+          <button
+            @click="askClearCanvas"
+            class="h-8 px-2.5 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition flex items-center gap-1.5"
+            :title="t('clearTitle')"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m5 0V4a1 1 0 011-1h6a1 1 0 011 1v3M9 11v6m6-6v6"
+              />
+            </svg>
+          </button>
+
+          <!-- Sunum (Present) -->
+          <button
+            @click="togglePresent"
+            class="h-8 px-2.5 rounded-lg text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition flex items-center gap-1.5"
+            :title="t('presentTitle')"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <rect x="2" y="3" width="20" height="14" rx="2" stroke-width="2" stroke="currentColor" fill="none" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 21h8m-4-4v4" />
+            </svg>
+          </button>
+        </div>
       </div>
-      <span v-if="!isMobile" class="w-px h-5 bg-[var(--chrome-border)] shrink-0"></span>
-      <div v-if="!isMobile" class="flex shrink-0 items-center gap-0.5">
-        <button
-          @click="undo"
-          :disabled="store.undoStack.length === 0"
-          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-30 disabled:cursor-not-allowed"
-          :title="t('undoTitle')"
-          aria-label="Geri al"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2M3 10l5-5M3 10l5 5" />
-          </svg>
-        </button>
-        <button
-          @click="redo"
-          :disabled="store.redoStack.length === 0"
-          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition disabled:opacity-30 disabled:cursor-not-allowed"
-          :title="t('redoTitle')"
-          aria-label="Yinele"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10H11a5 5 0 00-5 5v2M21 10l-5-5M21 10l-5 5" />
-          </svg>
-        </button>
-        <button
-          @click="askClearCanvas"
-          class="w-8 h-8 rounded-lg flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 transition"
-          :title="t('clearTitle')"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m5 0V4a1 1 0 011-1h6a1 1 0 011 1v3M9 11v6m6-6v6" />
-          </svg>
-        </button>
-        <button
-          @click="togglePresent"
-          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
-          :title="t('presentTitle')"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <rect x="2" y="3" width="20" height="14" rx="2" stroke-width="2" stroke="currentColor" fill="none" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 21h8m-4-4v4" />
-          </svg>
-        </button>
-      </div>
-      <div v-if="!isMobile && isNarrow && visibleTools.length > 6" ref="moreBtn" class="relative shrink-0">
-        <button
-          @click="showMore = !showMore; showFile = false; showLayers = false; showStyle = false"
-          class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition"
-          :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': showMore }"
-          :title="t('moreTitle')"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9l6 6 6-6" />
-          </svg>
-        </button>
-      </div>
+    </header>
 
-      <StylePanel :open="showStyle" ref="stylePanelRef" @close="showStyle = false" @changed="onStyleChanged" />
-
-      <!-- Taşma menüsü (dar masaüstü): bara sığmayan son araçlar -->
-      <Teleport to="body">
-      <div
-        ref="morePanel"
-        v-if="showMore"
-        class="fixed left-1/2 top-[68px] z-30 w-56 max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-90px)] overflow-y-auto -translate-x-1/2 rounded-2xl border border-[var(--chrome-border-strong)] bg-[var(--float-bg)] p-1.5 text-xs shadow-xl backdrop-blur"
-        role="menu"
-        :aria-label="t('moreTitle')"
-      >
-        <button
-          v-for="tool in visibleTools.slice(6)"
-          :key="tool"
-          @click="store.setTool(tool); showMore = false"
-          class="flex w-full items-center gap-2 px-3 py-1.5 rounded text-left transition"
-          :class="store.currentTool === tool ? 'bg-indigo-600 text-white' : 'text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)]'"
-          :title="locTools[tool].title"
-        >
-          <span class="font-medium">{{ locTools[tool].label }}</span>
-        </button>
-      </div>
-      </Teleport>
-
-    <!-- SAĞ (yalnızca mobil üst şerit): Temizle / Sunum -->
-    <div v-if="isMobile" class="flex items-center gap-1 shrink-0 ml-auto">
-
-      <!-- Temizle (Clear Canvas) -->
-      <button
-        @click="askClearCanvas"
-        class="h-8 px-2.5 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition flex items-center gap-1.5"
-        :title="t('clearTitle')"
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.832A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.832L3 7m5 0V4a1 1 0 011-1h6a1 1 0 011 1v3M9 11v6m6-6v6" />
-        </svg>
-      </button>
-
-      <!-- Sunum (Present) -->
-      <button
-        @click="togglePresent"
-        class="h-8 px-2.5 rounded-lg text-xs font-medium text-[var(--chrome-text)] hover:text-[var(--chrome-title)] hover:bg-[var(--chrome-bg-soft)] transition flex items-center gap-1.5"
-        :title="t('presentTitle')"
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <rect x="2" y="3" width="20" height="14" rx="2" stroke-width="2" stroke="currentColor" fill="none" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 21h8m-4-4v4" />
-        </svg>
-      </button>
-    </div>
-      </div>
-  </header>
-
-      <SettingsPanel :open="showSettings" ref="settingsPanelRef" @close="showSettings = false" @page-layout="onPageLayoutChange" @error="showPdfError" />
-
+    <SettingsPanel
+      :open="showSettings"
+      ref="settingsPanelRef"
+      @close="showSettings = false"
+      @page-layout="onPageLayoutChange"
+      @error="showPdfError"
+    />
 
     <div ref="canvasHost" class="relative flex-1 bg-[var(--page-bg)] min-h-0">
       <!-- Tekli mod: tam-alan canlı canvas. Kaydırmalı mod: statik bloklar + aktif slota yüzen canlı canvas. -->
       <template v-if="!scrollMode">
-        <canvas
-          ref="baseCanvas"
-          class="absolute inset-0 w-full h-full block"
-        ></canvas>
+        <canvas ref="baseCanvas" class="absolute inset-0 w-full h-full block"></canvas>
         <canvas
           ref="overlayCanvas"
           class="absolute inset-0 w-full h-full touch-none select-none block"
-          :style="{ cursor: store.currentTool === 'text' ? 'text' : store.currentTool === 'image' ? 'copy' : store.currentTool === 'hand' ? 'grab' : store.currentTool === 'select' ? 'default' : 'crosshair' }"
+          :style="{
+            cursor:
+              store.currentTool === 'text'
+                ? 'text'
+                : store.currentTool === 'image'
+                  ? 'copy'
+                  : store.currentTool === 'hand'
+                    ? 'grab'
+                    : store.currentTool === 'select'
+                      ? 'default'
+                      : 'crosshair',
+          }"
           @pointerdown.prevent="startDraw"
           @pointermove.prevent="draw"
           @pointerup="endDraw"
@@ -349,34 +437,50 @@
           @contextmenu.prevent
         ></canvas>
       </template>
-      <div v-else ref="scrollBox" class="absolute inset-0 overflow-y-auto overscroll-contain" @scroll.passive="onScrollBox"
-        @pointerdown="onScrollBoxPointerDown" @pointermove="onScrollBoxPointerMove"
-        @pointerup="onScrollBoxPointerUp" @pointercancel="onScrollBoxPointerCancel">
+      <div
+        v-else
+        ref="scrollBox"
+        class="absolute inset-0 overflow-y-auto overscroll-contain"
+        @scroll.passive="onScrollBox"
+        @pointerdown="onScrollBoxPointerDown"
+        @pointermove="onScrollBoxPointerMove"
+        @pointerup="onScrollBoxPointerUp"
+        @pointercancel="onScrollBoxPointerCancel"
+      >
         <div class="px-3 pt-3 pb-28 flex flex-col gap-4" :style="scrollContentStyle">
-          <div
-            v-for="(p, i) in store.pages"
-            :key="p.id"
-            class="w-full"
-          >
-          <div
-            :ref="(el) => setBlockRef(el, p.id)"
-            class="mx-auto rounded-sm overflow-hidden cursor-pointer scroll-mt-2 min-[640px]:scroll-mt-[72px]"
-            :style="{ width: `${scrollPageWidth}px`, aspectRatio: `${p.size.w} / ${p.size.h}`, visibility: i === store.activePageIndex ? 'hidden' : 'visible', touchAction: 'pan-x pan-y' }"
-            @pointerdown.prevent="onBlockDown"
-            @pointerup="onBlockUp($event, i)"
-            @pointercancel="resetBlockTap"
-          ></div>
+          <div v-for="(p, i) in store.pages" :key="p.id" class="w-full">
+            <div
+              :ref="(el) => setBlockRef(el, p.id)"
+              class="mx-auto rounded-sm overflow-hidden cursor-pointer scroll-mt-2 min-[640px]:scroll-mt-[72px]"
+              :style="{
+                width: `${scrollPageWidth}px`,
+                aspectRatio: `${p.size.w} / ${p.size.h}`,
+                visibility: i === store.activePageIndex ? 'hidden' : 'visible',
+                touchAction: 'pan-x pan-y',
+              }"
+              @pointerdown.prevent="onBlockDown"
+              @pointerup="onBlockUp($event, i)"
+              @pointercancel="resetBlockTap"
+            ></div>
           </div>
         </div>
         <div ref="activeSlot" class="absolute" style="display: none">
-          <canvas
-            ref="baseCanvas"
-            class="absolute inset-0 w-full h-full block"
-          ></canvas>
+          <canvas ref="baseCanvas" class="absolute inset-0 w-full h-full block"></canvas>
           <canvas
             ref="overlayCanvas"
             class="absolute inset-0 w-full h-full touch-none select-none block"
-            :style="{ cursor: store.currentTool === 'text' ? 'text' : store.currentTool === 'image' ? 'copy' : store.currentTool === 'hand' ? 'grab' : store.currentTool === 'select' ? 'default' : 'crosshair' }"
+            :style="{
+              cursor:
+                store.currentTool === 'text'
+                  ? 'text'
+                  : store.currentTool === 'image'
+                    ? 'copy'
+                    : store.currentTool === 'hand'
+                      ? 'grab'
+                      : store.currentTool === 'select'
+                        ? 'default'
+                        : 'crosshair',
+            }"
             @pointerdown.prevent="startDraw"
             @pointermove.prevent="draw"
             @pointerup="endDraw"
@@ -391,13 +495,7 @@
           ></canvas>
         </div>
       </div>
-      <input
-        ref="imgInput"
-        type="file"
-        :accept="IMAGE_ACCEPT"
-        class="hidden"
-        @change="onImageFile"
-      />
+      <input ref="imgInput" type="file" :accept="IMAGE_ACCEPT" class="hidden" @change="onImageFile" />
 
       <!-- Inline metin editörü ve altındaki kayan araç çubuğu -->
       <TextEditorOverlay
@@ -447,11 +545,17 @@
           :ref="(el) => setPageThumbRef(el, store.pages[i]?.id ?? String(i))"
           @click="goStrip(i)"
           class="shrink-0 rounded border overflow-hidden transition"
-          :class="i === store.activePageIndex ? 'border-indigo-500 ring-2 ring-indigo-500/60' : 'border-[var(--chrome-border)] opacity-70 hover:opacity-100'"
+          :class="
+            i === store.activePageIndex
+              ? 'border-indigo-500 ring-2 ring-indigo-500/60'
+              : 'border-[var(--chrome-border)] opacity-70 hover:opacity-100'
+          "
           :title="`${t('page')} ${i + 1}`"
         >
           <img :src="src" class="w-full block pointer-events-none" draggable="false" :alt="`${t('page')} ${i + 1}`" />
-          <span class="block text-[10px] font-mono text-center text-[var(--chrome-text)] bg-[var(--chrome-bg-soft)]">{{ i + 1 }}</span>
+          <span class="block text-[10px] font-mono text-center text-[var(--chrome-text)] bg-[var(--chrome-bg-soft)]">{{
+            i + 1
+          }}</span>
         </button>
       </div>
 
@@ -478,8 +582,8 @@
         :aria-label="t('prevSession')"
       >
         <span>
-          {{ t('prevSession') }} ({{ store.savedSession.when }}, {{ store.savedSession.pages }}
-          {{ t('pagesUnit') }}, {{ store.savedSession.strokes }} {{ t('lines') }})
+          {{ t('prevSession') }} ({{ store.savedSession.when }}, {{ store.savedSession.pages }} {{ t('pagesUnit') }},
+          {{ store.savedSession.strokes }} {{ t('lines') }})
         </span>
         <button
           @click="restoreSession"
@@ -508,7 +612,11 @@
           v-for="tool in visibleTools"
           :key="tool"
           @click="store.setTool(tool)"
-          :class="store.currentTool === tool ? (TOOL_META[tool].active + ' shadow-xs') : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'"
+          :class="
+            store.currentTool === tool
+              ? TOOL_META[tool].active + ' shadow-xs'
+              : 'text-[var(--chrome-text)] hover:text-[var(--chrome-title)]'
+          "
           class="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition"
           :title="locTools[tool].title"
           :aria-label="locTools[tool].label"
@@ -536,7 +644,12 @@
         aria-label="Geri al"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2M3 10l5-5M3 10l5 5" />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M3 10h10a5 5 0 015 5v2M3 10l5-5M3 10l5 5"
+          />
         </svg>
       </button>
       <button
@@ -547,7 +660,12 @@
         aria-label="Yinele"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10H11a5 5 0 00-5 5v2M21 10l-5-5M21 10l-5 5" />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M21 10H11a5 5 0 00-5 5v2M21 10l-5-5M21 10l-5 5"
+          />
         </svg>
       </button>
     </div>
@@ -736,21 +854,14 @@ const ptrPos = (e: PointerEvent) => {
 }
 
 // --- Seçim jesti (select aracı): sayfa-uzayında marquee/lasso/taşıma ---
-const {
-  isSelActive,
-  cancelSelGesture,
-  drawSelectionOverlay,
-  selInside,
-  selectDown,
-  selectMove,
-  selectUp,
-} = useSelectionGesture({
-  overlayCanvas,
-  store,
-  ps,
-  viewTransformTick,
-  updateHud: (force) => updateHud(force),
-})
+const { isSelActive, cancelSelGesture, drawSelectionOverlay, selInside, selectDown, selectMove, selectUp } =
+  useSelectionGesture({
+    overlayCanvas,
+    store,
+    ps,
+    viewTransformTick,
+    updateHud: (force) => updateHud(force),
+  })
 
 // --- Metin jesti (text aracı): tıkla-oluştur/düzenle, sürükle-taşı ---
 const {
@@ -892,7 +1003,10 @@ const startDraw = (e: PointerEvent) => {
   }
   // Space-kaydırma her aracı ezer (pinch sonrası değil); el aracı dokunmayla da kaydırır.
   // Kaydırmalı modda el/Space/orta-tuş NATIVE scroll sürer (boya-pan YOK).
-  if (scrollMode.value && (ps.spacePan() || store.currentTool === 'hand' || (e.pointerType === 'mouse' && e.button === 1))) {
+  if (
+    scrollMode.value &&
+    (ps.spacePan() || store.currentTool === 'hand' || (e.pointerType === 'mouse' && e.button === 1))
+  ) {
     if (e.pointerType === 'mouse' && e.button === 1) e.preventDefault()
     try {
       overlayCanvas.value?.setPointerCapture(e.pointerId)
@@ -1185,12 +1299,7 @@ const { onKeyDown, onKeyUp } = useCanvasShortcuts({
   dialogCancel,
   nextPage: () => nextPage(),
   prevPage: () => prevPage(),
-  isAnyPanelOpen: () =>
-    showFile.value ||
-    showSettings.value ||
-    showLayers.value ||
-    showStyle.value ||
-    showMore.value,
+  isAnyPanelOpen: () => showFile.value || showSettings.value || showLayers.value || showStyle.value || showMore.value,
   ps,
   store,
   drawSelectionOverlay: () => drawSelectionOverlay(),
@@ -1750,10 +1859,7 @@ onMounted(() => {
       if (id) nextTick(() => textOverlayRef.value?.focus())
     },
   )
-  stopThumbWatch = watch(
-    () => [store.thumbTick, store.pages, store.pageStripOpen] as const,
-    refreshThumbs,
-  )
+  stopThumbWatch = watch(() => [store.thumbTick, store.pages, store.pageStripOpen] as const, refreshThumbs)
   // ScrollBox wheel dinleyici yönetimi (v-else dalı toggle ile mount/unmount olur).
   bindScrollBoxWheel()
   stopScrollWheelWatch = watch(scrollMode, () => {
