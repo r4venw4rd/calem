@@ -1,7 +1,7 @@
 import type { Page } from '../model/document'
 import type { DocStorage } from './idb'
 import { IMAGE_MAX_DIM } from '../config/engine'
-import type { DocSnap } from '../persist/snapshot'
+import type { HistoryEntry } from '../persist/history'
 
 export const isImageFile = (file: File): boolean => {
   return file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name)
@@ -83,16 +83,22 @@ export const restoreBitmapsFromStorage = async (
 
 export const collectReferencedImageFileIds = (
   pages: Page[],
-  undoStack: DocSnap[],
-  redoStack: DocSnap[],
+  undoStack: HistoryEntry[],
+  redoStack: HistoryEntry[],
 ): Set<string> => {
   const ids = new Set<string>()
   const add = (list: Page[]) => {
     for (const p of list) for (const img of p.images ?? []) ids.add(img.fileId)
   }
   add(pages)
-  for (const s of undoStack) add(s.pages)
-  for (const s of redoStack) add(s.pages)
+  for (const entry of [...undoStack, ...redoStack]) {
+    if (entry.type === 'snapshot') add(entry.snapshot.pages)
+    else if (entry.type === 'erase') {
+      for (const patch of entry.patches) {
+        if (patch.collection === 'images') for (const img of [...patch.removed, ...patch.inserted]) ids.add(img.fileId)
+      }
+    }
+  }
   return ids
 }
 

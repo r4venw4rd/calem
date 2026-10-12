@@ -2,7 +2,7 @@ import type { Page, Stroke, Tool } from '../model/document'
 import type { PersistedDoc } from '../lib/idb'
 import { WIDTH_MAX, WIDTH_MIN } from '../config/tools'
 import { pageFromRaw, cleanStrokes, singleLayerPage, type RawPage } from './pageSanitizer'
-import { snapshotDoc } from './snapshot'
+import { snapshotDoc, type DocSnap } from './snapshot'
 
 export interface BuildPersistedDocOptions {
   pages: Page[]
@@ -10,10 +10,11 @@ export interface BuildPersistedDocOptions {
   activePageIndex: number
   pdfId?: string | null
   pdfName?: string
+  snapshot?: DocSnap
 }
 
 export const buildPersistedDoc = (options: BuildPersistedDocOptions): PersistedDoc => {
-  const snap = snapshotDoc(options.pages, options.activePageIndex)
+  const snap = options.snapshot ?? snapshotDoc(options.pages, options.activePageIndex)
   return {
     v: 5,
     savedAt: Date.now(),

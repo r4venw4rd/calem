@@ -1,9 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { deserializePersistedDoc, summarizePersistedDoc } from '../src/persist/docPersistence'
+import { buildPersistedDoc, deserializePersistedDoc, summarizePersistedDoc } from '../src/persist/docPersistence'
 import type { PersistedDoc } from '../src/lib/idb'
-import type { Stroke } from '../src/model/document'
+import type { Page, Stroke, Tool } from '../src/model/document'
+import { snapshotDoc } from '../src/persist/snapshot'
 
 describe('document persistence', () => {
+  const page = (): Page => ({
+    id: 'p', activeLayerId: 'l', size: { w: 100, h: 100 }, texts: [], images: [],
+    layers: [{ id: 'l', name: 'Layer', visible: true, strokes: [] }],
+  })
+
+  it('uses the cached snapshot passed by autosave without copying it again', () => {
+    const source = page()
+    const snapshot = snapshotDoc([source], 0)
+    const doc = buildPersistedDoc({
+      pages: [source], widths: {} as Record<Tool, number>, activePageIndex: 0, snapshot,
+    })
+    expect(doc.pages).toBe(snapshot.pages)
+  })
+
+  it('continues to snapshot input pages when no cached snapshot is supplied', () => {
+    const source = page()
+    const doc = buildPersistedDoc({
+      pages: [source], widths: {} as Record<Tool, number>, activePageIndex: 0,
+    })
+    expect(doc.pages[0]).not.toBe(source)
+  })
+
   it('migrates a v1 stroke document into one page and one layer without losing ink', () => {
     const result = deserializePersistedDoc({
       doc: {

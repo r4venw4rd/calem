@@ -53,6 +53,7 @@ import {
 } from '../persist/snapshot'
 import { takeObsoletePdfIds } from '../persist/pdfFileCleanup'
 import { isLatestSave } from '../persist/saveRevision'
+import { redoErase, redoStrokeAdd, undoErase, undoStrokeAdd, type ErasePatch, type HistoryEntry } from '../persist/history'
 import {
   buildPersistedDoc,
   summarizePersistedDoc,
@@ -827,8 +828,8 @@ export const useDrawingStore = defineStore('drawing', () => {
   // Store içi yazımlar activeLayer.value.strokes üzerindendir.
   const strokes = computed(() => activeLayer.value.strokes)
 
-  const undoStack = ref<DocSnap[]>([])
-  const redoStack = ref<DocSnap[]>([])
+  const undoStack = ref<HistoryEntry[]>([])
+  const redoStack = ref<HistoryEntry[]>([])
   const pageSnapshotCache = createPageSnapshotCache()
   // Derinlik: config/engine (HISTORY_CAP).
 
@@ -847,7 +848,7 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // Yapısal op öncesi çağrılır: redo ölür, derinlik cap'lenir.
   const pushHistory = () => {
-    undoStack.value.push(snapshotDoc())
+    undoStack.value.push({ type: 'snapshot', snapshot: snapshotDoc() })
     if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
     redoStack.value = []
     lastPushKey = ''
@@ -862,9 +863,18 @@ export const useDrawingStore = defineStore('drawing', () => {
   const pushHistoryKeyed = (key: string) => {
     if (lastPushKey === key) return
     lastPushKey = key
-    undoStack.value.push(snapshotDoc())
+    undoStack.value.push({ type: 'snapshot', snapshot: snapshotDoc() })
     if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
     redoStack.value = []
+    savedSession.value = null
+    flushFileDeletes()
+  }
+
+  const pushStrokeAddHistory = (pageId: string, layerId: string, strokeId: string, index: number) => {
+    undoStack.value.push({ type: 'stroke-add', pageId, layerId, strokeId, index })
+    if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
+    redoStack.value = []
+    lastPushKey = ''
     savedSession.value = null
     flushFileDeletes()
   }
@@ -1839,13 +1849,24 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   let eraseSession = 0
   let lastPushedSession = -1
+  let activeEraseDelta: Extract<HistoryEntry, { type: 'erase' }> | null = null
   // Oturumun ilk gerçek sökümünde tek kayıt açar (sürükleme tek undo olur).
   const noteEraseMutation = () => {
     if (lastPushedSession !== eraseSession) {
       lastPushedSession = eraseSession
-      pushHistory()
+      const entry: Extract<HistoryEntry, { type: 'erase' }> = {
+        type: 'erase', pageId: activePage.value.id, patches: [],
+      }
+      undoStack.value.push(entry)
+      if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
+      redoStack.value = []
+      lastPushKey = ''
+      savedSession.value = null
+      flushFileDeletes()
+      activeEraseDelta = entry
     }
   }
+  const recordErasePatch = (patch: ErasePatch) => activeEraseDelta?.patches.push(patch)
   // Metinler mürekkebin ÜSTÜNDE boyanır → vuruşta önce metne bakılır.
   const eraseStrokeAt = (x: number, y: number): boolean => {
     const hitText = textAt(x, y)
@@ -1856,6 +1877,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         noteEraseMutation()
         brushDirty(textBBoxOf(hitText))
         const [gone] = tarr.splice(idx, 1)
+        if (gone) recordErasePatch({ collection: 'texts', index: idx, removed: [gone], inserted: [] })
         if (activeTextId.value === gone!.id) activeTextId.value = null
         return true
       }
@@ -1878,9 +1900,12 @@ export const useDrawingStore = defineStore('drawing', () => {
     const imgBox = hitImage && { x0: hitImage.x, y0: hitImage.y, x1: hitImage.x + hitImage.w, y1: hitImage.y + hitImage.h }
     const imageHit = imgBox && x >= imgBox.x0 && x <= imgBox.x1 && y >= imgBox.y0 && y <= imgBox.y1
     if (hitImage && (imageHit || !hitStroke)) {
-      noteEraseMutation()
       const images = activePage.value.images
-      images.splice(images.findIndex((img) => img.id === hitImage.id), 1)
+      const index = images.findIndex((img) => img.id === hitImage.id)
+      if (index < 0) return false
+      noteEraseMutation()
+      const [gone] = images.splice(index, 1)
+      if (gone) recordErasePatch({ collection: 'images', index, removed: [gone], inserted: [] })
       queueFileDeletes([hitImage.fileId])
       if (activeImageId.value === hitImage.id) activeImageId.value = null
       brushDirty(imgBox!)
@@ -1889,7 +1914,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (hitStroke) {
       noteEraseMutation()
       brushDirty(cachedStrokeBBox(hitStroke.stroke)!)
-      hitStroke.layer.strokes.splice(hitStroke.layer.strokes.indexOf(hitStroke.stroke), 1)
+      const index = hitStroke.layer.strokes.indexOf(hitStroke.stroke)
+      const [gone] = hitStroke.layer.strokes.splice(index, 1)
+      if (gone) recordErasePatch({ collection: 'strokes', layerId: hitStroke.layer.id, index, removed: [gone], inserted: [] })
       selectedIds.value = selectedIds.value.filter((id) => id !== hitStroke!.stroke.id)
       return true
     }
@@ -2027,6 +2054,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       touch()
       brushDirty(bb)
       const [gone] = tarr.splice(i, 1)
+      if (gone) recordErasePatch({ collection: 'texts', index: i, removed: [gone], inserted: [] })
       if (activeTextId.value === gone!.id) activeTextId.value = null
     }
     const visibleLayerIds = new Set(layers.map((layer) => layer.id))
@@ -2041,7 +2069,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (dx * dx + dy * dy > radius * radius) continue
       touch()
       brushDirty({ x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h })
-      activePage.value.images.splice(i, 1)
+      const [gone] = activePage.value.images.splice(i, 1)
+      if (gone) recordErasePatch({ collection: 'images', index: i, removed: [gone], inserted: [] })
       queueFileDeletes([img.fileId])
       if (activeImageId.value === img.id) activeImageId.value = null
     }
@@ -2078,6 +2107,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       // Parçalar orijinal sıraya (z-düzeni korunur).
       layer.strokes.splice(i, 0, ...pieces)
+      recordErasePatch({ collection: 'strokes', layerId: layer.id, index: i, removed: [s], inserted: pieces })
       if (keptSel.delete(s.id)) {
         for (const p of pieces) keptSel.add(p.id)
         selChanged = true
@@ -2161,7 +2191,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (!imageIsHit(box)) continue
       touch()
       brushDirty(box)
-      activePage.value.images.splice(i, 1)
+      const [gone] = activePage.value.images.splice(i, 1)
+      if (gone) recordErasePatch({ collection: 'images', index: i, removed: [gone], inserted: [] })
       queueFileDeletes([img.fileId])
       if (activeImageId.value === img.id) activeImageId.value = null
     }
@@ -2187,6 +2218,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       touch()
       brushDirty(tbb)
       const [gone] = tarr.splice(i, 1)
+      if (gone) recordErasePatch({ collection: 'texts', index: i, removed: [gone], inserted: [] })
       if (activeTextId.value === gone!.id) activeTextId.value = null
     }
     const keptSel = new Set(selectedIds.value)
@@ -2216,6 +2248,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
       // Parçalar orijinal sıraya (z-düzeni korunur).
       layer.strokes.splice(i, 0, ...pieces)
+      recordErasePatch({ collection: 'strokes', layerId: layer.id, index: i, removed: [s], inserted: pieces })
       if (keptSel.delete(s.id)) {
         for (const p of pieces) keptSel.add(p.id)
         selChanged = true
@@ -2239,6 +2272,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (currentTool.value === 'eraser' && eraserMode.value === 'stroke') {
       isDrawing.value = true
       eraseSession += 1
+      activeEraseDelta = null
       const { x, y } = getPos(e)
       if (eraseStrokeAt(x, y)) {
         recountActive()
@@ -2252,6 +2286,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     if (currentTool.value === 'eraser') {
       isDrawing.value = true
       eraseSession += 1
+      activeEraseDelta = null
       const p0 = clampToPage(getPos(e))
       const r = eraseRadius()
       if (paperFor(activePage.value) !== null) {
@@ -2426,6 +2461,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       drawingPerf.cutMs = performance.now() - tCut
       erasePath = []
       eraseFastLast = null
+      activeEraseDelta = null
       isDrawing.value = false
       points.value = []
       bb = null
@@ -2466,9 +2502,10 @@ export const useDrawingStore = defineStore('drawing', () => {
           : [...points.value],
       }
       activeShapeSnap.value = null
-      // Yeni mürekkep: ÖNCE pre-state kaydı, sonra ekle (undo çizeri geri alır).
-      pushHistory()
-      activeLayer.value.strokes.push(stroke)
+      // Stroke ekleme delta'sı tüm belgenin nokta snapshot'ını üretmez.
+      const layer = activeLayer.value
+      pushStrokeAddHistory(activePage.value.id, layer.id, stroke.id, layer.strokes.length)
+      layer.strokes.push(stroke)
       selectedIds.value = []
       activeTextId.value = null
     activeImageId.value = null
@@ -2485,6 +2522,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     isDrawing.value = false
     points.value = []
     activeShapeSnap.value = null
+    activeEraseDelta = null
     clearOverlay()
     bb = null
   }
@@ -2797,47 +2835,58 @@ export const useDrawingStore = defineStore('drawing', () => {
       renderedActivePoints = 0
     } else {
       const paperHex = paperFor(activePage.value)
-      const strokeToPaint: Stroke = activeShapeSnap.value
-        ? {
-            id: 'preview-snap',
-            tool: activeShapeSnap.value.tool,
-            color: color.value,
-            width: strokeWidth.value,
-            dash: strokeDash.value,
-            opacity: strokeOpacity.value,
-            points: activeShapeSnap.value.points,
-          }
-        : {
-            id: 'preview-active',
-            tool: currentTool.value,
-            color: color.value,
-            width: strokeWidth.value,
-            dash: strokeDash.value,
-            opacity: strokeOpacity.value,
-            points: points.value,
-          }
       const styleKey = `${currentTool.value}:${color.value}:${strokeWidth.value}:${strokeDash.value}:${strokeOpacity.value}:${pressureSensitivity.value}:${paperHex}`
       // Pressure averaged over the whole stroke changes its width while drawing;
       // dashed strokes also need a continuous dash phase. Keep those on full redraw.
-      if (activeShapeSnap.value || pressureSensitivity.value > 0 || strokeDash.value !== 'solid' || renderedActiveStyle !== styleKey) {
+      if (activeShapeSnap.value || isShapeTool(currentTool.value) || currentTool.value === 'highlighter' || pressureSensitivity.value > 0 || strokeDash.value !== 'solid' || renderedActiveStyle !== styleKey) {
+        const strokeToPaint: Stroke = {
+          id: 'preview-active',
+          tool: activeShapeSnap.value?.tool ?? currentTool.value,
+          color: color.value,
+          width: strokeWidth.value,
+          dash: strokeDash.value,
+          opacity: strokeOpacity.value,
+          points: activeShapeSnap.value?.points ?? points.value,
+        }
         clearOverlay()
         applyView(ctx, () => paintStroke(ctx, strokeToPaint, paperHex, pressureSensitivity.value))
         renderedActivePoints = points.value.length
         renderedActiveStyle = styleKey
       } else if (points.value.length !== renderedActivePoints) {
-        const start = Math.max(0, renderedActivePoints - 2)
-        const tailBox: NormRect = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }
-        for (let i = Math.max(0, start - 1); i < points.value.length; i++) {
-          const p = points.value[i]!
-          tailBox.x0 = Math.min(tailBox.x0, p.x)
-          tailBox.y0 = Math.min(tailBox.y0, p.y)
-          tailBox.x1 = Math.max(tailBox.x1, p.x)
-          tailBox.y1 = Math.max(tailBox.y1, p.y)
+        if (renderedActivePoints === 0 && points.value.length === 1) {
+          const strokeToPaint: Stroke = {
+            id: 'preview-active', tool: currentTool.value, color: color.value,
+            width: strokeWidth.value, dash: strokeDash.value, opacity: strokeOpacity.value,
+            points: points.value,
+          }
+          applyView(ctx, () => paintStroke(ctx, strokeToPaint, paperHex, 0))
+          renderedActivePoints = 1
+          renderedActiveStyle = styleKey
+        } else if (points.value.length > renderedActivePoints) {
+          const start = Math.max(0, renderedActivePoints - 2)
+          const tailBox: NormRect = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }
+          for (let i = Math.max(0, start - 1); i < points.value.length; i++) {
+            const p = points.value[i]!
+            tailBox.x0 = Math.min(tailBox.x0, p.x)
+            tailBox.y0 = Math.min(tailBox.y0, p.y)
+            tailBox.x1 = Math.max(tailBox.x1, p.x)
+            tailBox.y1 = Math.max(tailBox.y1, p.y)
+          }
+          clearOverlayRect(ctx, tailBox, Math.max(strokeWidth.value * 2, DIRTY_PAD_SCREEN / (effScale() || 1)))
+          applyView(ctx, () => {
+            const end = points.value.length - 1
+            paintStrokeTail(ctx, {
+              tool: currentTool.value,
+              color: color.value,
+              width: strokeWidth.value,
+              dash: strokeDash.value,
+              opacity: strokeOpacity.value,
+              points: points.value,
+            }, paperHex, 0, start, 1, end)
+          })
+          renderedActivePoints = points.value.length
+          renderedActiveStyle = styleKey
         }
-        clearOverlayRect(ctx, tailBox, Math.max(strokeWidth.value * 2, DIRTY_PAD_SCREEN / (effScale() || 1)))
-        applyView(ctx, () => paintStrokeTail(ctx, strokeToPaint, paperHex, 0, start, 1))
-        renderedActivePoints = points.value.length
-        renderedActiveStyle = styleKey
       }
     }
     const dt = performance.now() - t0
@@ -3565,6 +3614,7 @@ export const useDrawingStore = defineStore('drawing', () => {
         activePageIndex: activePageIndex.value,
         pdfId: pdfId.value,
         pdfName: pdfName.value,
+        snapshot: snapshotDoc(),
       })
       await storage.setDoc(doc)
       lastSavedAt.value = fmtTime(now)
@@ -3668,15 +3718,34 @@ export const useDrawingStore = defineStore('drawing', () => {
     return true
   }
 
-  // ✅ Geri al — snapshot history'den (tüm yapısal op'lar: mürekkep/silgi/taşı/yapıştır/metin/resim/katman/sayfa).
+  // ✅ Geri al — stroke ekleme delta, diğer yapısal op'lar snapshot olarak tutulur.
   const undoLastStroke = () => {
-    const prev = undoStack.value.pop()
-    if (!prev) return
+    const entry = undoStack.value.pop()
+    if (!entry) return
     // Kullanıcının şu anki sayfasını koru: undo görünümü başka sayfaya atlatmasın.
     const keepPageId = activePage.value.id
-    redoStack.value.push(snapshotDoc())
+    if (entry.type === 'stroke-add') {
+      const stroke = undoStrokeAdd(pages.value, entry)
+      if (!stroke) {
+        undoStack.value.push(entry)
+        return
+      }
+      redoStack.value.push({ ...entry, stroke })
+      const page = pages.value.find((p) => p.id === entry.pageId)
+      if (page) pageSnapshotCache.invalidate(page)
+    } else if (entry.type === 'erase') {
+      if (!undoErase(pages.value, entry)) {
+        undoStack.value.push(entry)
+        return
+      }
+      redoStack.value.push(entry)
+      const page = pages.value.find((p) => p.id === entry.pageId)
+      if (page) pageSnapshotCache.invalidate(page)
+    } else {
+      redoStack.value.push({ type: 'snapshot', snapshot: snapshotDoc() })
+    }
     if (redoStack.value.length > HISTORY_CAP) redoStack.value.shift()
-    restoreDoc(prev)
+    if (entry.type === 'snapshot') restoreDoc(entry.snapshot)
     const kept = pages.value.findIndex((p) => p.id === keepPageId)
     activePageIndex.value = kept !== -1 ? kept : activePageIndex.value
     flushFileDeletes()
@@ -3692,14 +3761,53 @@ export const useDrawingStore = defineStore('drawing', () => {
     scheduleSave()
   }
 
-  // ✅ Yinele — ileri snapshot'a döner.
+  // ✅ Yinele — en son delta veya snapshot op'unu uygular.
   const redo = (): boolean => {
-    const next = redoStack.value.pop()
-    if (!next) return false
+    const entry = redoStack.value.pop()
+    if (!entry) return false
+    if (entry.type === 'stroke-add') {
+      if (!redoStrokeAdd(pages.value, entry)) {
+        redoStack.value.push(entry)
+        return false
+      }
+      const page = pages.value.find((p) => p.id === entry.pageId)
+      if (page) pageSnapshotCache.invalidate(page)
+      undoStack.value.push({
+        type: 'stroke-add', pageId: entry.pageId, layerId: entry.layerId,
+        strokeId: entry.strokeId, index: entry.index,
+      })
+      if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
+      flushFileDeletes()
+      selectedIds.value = []
+      activeTextId.value = null
+      activeImageId.value = null
+      recountActive()
+      repaintBase()
+      scheduleSave()
+      return true
+    }
+    if (entry.type === 'erase') {
+      if (!redoErase(pages.value, entry)) {
+        redoStack.value.push(entry)
+        return false
+      }
+      const page = pages.value.find((p) => p.id === entry.pageId)
+      if (page) pageSnapshotCache.invalidate(page)
+      undoStack.value.push(entry)
+      if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
+      flushFileDeletes()
+      selectedIds.value = []
+      activeTextId.value = null
+      activeImageId.value = null
+      recountActive()
+      repaintBase()
+      scheduleSave()
+      return true
+    }
     const keepPageId = activePage.value.id
-    undoStack.value.push(snapshotDoc())
+    undoStack.value.push({ type: 'snapshot', snapshot: snapshotDoc() })
     if (undoStack.value.length > HISTORY_CAP) undoStack.value.shift()
-    restoreDoc(next)
+    restoreDoc(entry.snapshot)
     const kept = pages.value.findIndex((p) => p.id === keepPageId)
     activePageIndex.value = kept !== -1 ? kept : activePageIndex.value
     flushFileDeletes()

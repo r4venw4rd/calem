@@ -98,7 +98,6 @@ export const strokePath = (ctx: CanvasRenderingContext2D, pts: Point[]) => {
     const cp1y = p1.y + ((p2.y - p0ref.y) / 6) * tension
     const cp2x = p2.x - ((p3.x - p1.x) / 6) * tension
     const cp2y = p2.y - ((p3.y - p1.y) / 6) * tension
-
     ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y)
   }
 }
@@ -203,6 +202,7 @@ export const paintStrokeTail = (
   sensitivity: number,
   startSegment: number,
   avgPressure: number,
+  endSegment = s.points.length - 1,
 ) => {
   if (s.points.length < 2) return paintStroke(ctx, s, paperHex, sensitivity)
   const w = s.tool === 'eraser' ? s.width : effectiveWidthFromAverage(s.width, sensitivity, avgPressure)
@@ -211,7 +211,7 @@ export const paintStrokeTail = (
   ctx.setLineDash(dashFor(s.tool, s.dash, w))
   ctx.beginPath()
   ctx.moveTo(s.points[startSegment]!.x, s.points[startSegment]!.y)
-  for (let i = startSegment; i < s.points.length - 1; i++) {
+  for (let i = startSegment; i < endSegment; i++) {
     const p0 = s.points[Math.max(0, i - 1)]!
     const p1 = s.points[i]!
     const p2 = s.points[i + 1]!

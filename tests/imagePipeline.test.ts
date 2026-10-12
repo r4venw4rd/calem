@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { deleteImageFilesOf } from '../src/lib/imagePipeline'
+import { collectReferencedImageFileIds, deleteImageFilesOf } from '../src/lib/imagePipeline'
 import type { Page } from '../src/model/document'
 import type { DocStorage } from '../src/lib/idb'
+import type { HistoryEntry } from '../src/persist/history'
 
 describe('deleteImageFilesOf', () => {
   it('preserves file ids reused by the replacement document', async () => {
@@ -21,5 +22,16 @@ describe('deleteImageFilesOf', () => {
     expect(deleted).toEqual(['old'])
     expect(bitmaps.has('shared')).toBe(true)
     expect(bitmaps.has('old')).toBe(false)
+  })
+
+  it('keeps an erased image file while its erase delta is in history', () => {
+    const image = { id: 'img', layerId: 'layer', x: 0, y: 0, w: 20, h: 20, fileId: 'file' }
+    const page: Page = { id: 'p', size: { w: 100, h: 100 }, layers: [], activeLayerId: '', texts: [], images: [] }
+    const entry: HistoryEntry = {
+      type: 'erase', pageId: 'p', patches: [{
+        collection: 'images', index: 0, removed: [image], inserted: [],
+      }],
+    }
+    expect(collectReferencedImageFileIds([page], [entry], [])).toContain('file')
   })
 })
