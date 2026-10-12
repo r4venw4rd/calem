@@ -738,6 +738,17 @@ export const useDrawingStore = defineStore('drawing', () => {
   // layout noktası + scroll kompanzasyonu). Burada yalnızca oran kurulur;
   // yerleşim+boya rAF watcher'ındır. viewPan scroll modda daima sıfırdır.
   // İmleç/pinch-merkezi sabitli zoom. Tek repaint.
+  // Burst boyası rAF'te birleşir: wheel/pinch patlamasında her event senkron
+  // full-repaint yapmıyor, frame başına en fazla 1 boya oluyor.
+  let viewRaf = 0
+  const scheduleViewRepaint = () => {
+    if (viewRaf !== 0) return
+    viewRaf = requestAnimationFrame(() => {
+      viewRaf = 0
+      repaintBase()
+      clearOverlay()
+    })
+  }
   const zoomBy = (factor: number, cx: number, cy: number) => {
     if (!(factor > 0) || !Number.isFinite(factor) || !Number.isFinite(cx) || !Number.isFinite(cy)) return
     const nz = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, viewZoom * factor))
@@ -751,8 +762,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     applyZoomAt(nz, cx, cy)
     clampPan()
     syncZoomLabel()
-    repaintBase()
-    clearOverlay()
+    scheduleViewRepaint()
     scheduleRerender()
   }
 
@@ -761,8 +771,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     viewPanX += dx
     viewPanY += dy
     clampPan()
-    repaintBase()
-    clearOverlay()
+    scheduleViewRepaint()
   }
 
   // Pinch gesture: tek repaint ile zoom + orta-nokta sürükleme.
@@ -787,8 +796,7 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     clampPan()
     syncZoomLabel()
-    repaintBase()
-    clearOverlay()
+    scheduleViewRepaint()
     scheduleRerender()
   }
 
