@@ -1073,6 +1073,76 @@ export const useDrawingStore = defineStore('drawing', () => {
     scheduleEraseRepaint()
     return true
   }
+  // Seçim ölçekleme: jest başında orijinal geometri saklanır, her adım bu
+  // snapshot'tan MUTLAK ölçek uygular (birikimli hata yok). Anchor = karşı köşe.
+  let scaleOrig: {
+    strokes: { s: Stroke; pts: { x: number; y: number }[]; w: number }[]
+    images: { img: ImageItem; x: number; y: number; w: number; h: number }[]
+  } | null = null
+  let scalePrev: NormRect | null = null
+  const beginSelectionScale = (): boolean => {
+    if (selectedIds.value.length === 0) return false
+    const set = new Set(selectedIds.value)
+    scaleOrig = {
+      strokes: activePage.value.layers
+        .flatMap((layer) => layer.strokes)
+        .filter((s) => set.has(s.id))
+        .map((s) => ({ s, pts: s.points.map((p) => ({ x: p.x, y: p.y })), w: s.width })),
+      images: visibleImages()
+        .filter((img) => set.has(img.id))
+        .map((img) => ({ img, x: img.x, y: img.y, w: img.w, h: img.h })),
+    }
+    scalePrev = null
+    return scaleOrig.strokes.length > 0 || scaleOrig.images.length > 0
+  }
+  const scaleSelection = (fx: number, fy: number, ax: number, ay: number): boolean => {
+    if (!scaleOrig) return false
+    if (![fx, fy, ax, ay].every(Number.isFinite) || fx <= 0 || fy <= 0) return false
+    let x0 = Infinity
+    let y0 = Infinity
+    let x1 = -Infinity
+    let y1 = -Infinity
+    const acc = (x: number, y: number) => {
+      if (x < x0) x0 = x
+      if (y < y0) y0 = y
+      if (x > x1) x1 = x
+      if (y > y1) y1 = y
+    }
+    const sw = Math.sqrt(fx * fy)
+    for (const o of scaleOrig.strokes) {
+      const s = o.s
+      for (let i = 0; i < s.points.length; i++) {
+        const nx = ax + (o.pts[i]!.x - ax) * fx
+        const ny = ay + (o.pts[i]!.y - ay) * fy
+        s.points[i]!.x = nx
+        s.points[i]!.y = ny
+        acc(nx, ny)
+      }
+      s.width = Math.max(0.1, o.w * sw)
+      invalidateStrokeBBox(s)
+      invalidateStrokeSpatialIndex(s)
+    }
+    for (const o of scaleOrig.images) {
+      o.img.x = ax + (o.x - ax) * fx
+      o.img.y = ay + (o.y - ay) * fy
+      o.img.w = Math.max(1, o.w * fx)
+      o.img.h = Math.max(1, o.h * fy)
+      acc(o.img.x, o.img.y)
+      acc(o.img.x + o.img.w, o.img.y + o.img.h)
+    }
+    if (!Number.isFinite(x0)) return false
+    const newBounds = { x0, y0, x1, y1 }
+    const dirty = scalePrev ? unionRect(scalePrev, newBounds) : newBounds
+    scalePrev = newBounds
+    recountActive()
+    brushDirty(dirty)
+    scheduleEraseRepaint()
+    return true
+  }
+  const endSelectionScale = () => {
+    scaleOrig = null
+    scalePrev = null
+  }
   // Pano: sayfalar-arası çalışır, içerik idsiz saklanır (yapıştırma yeni id verir).
   // Reaktivite dışı; buton durumu için sayacı ayrıca senkronlanır.
   let clipboard: { strokes: Omit<Stroke, 'id'>[]; images: Omit<ImageItem, 'id'>[] } = { strokes: [], images: [] }
@@ -4136,6 +4206,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     selectAll,
     deleteSelected,
     moveSelected,
+    beginSelectionScale,
+    scaleSelection,
+    endSelectionScale,
     activeLayer,
     addLayer,
     deleteLayer,

@@ -1,7 +1,7 @@
 import { ref, type Ref } from 'vue'
 import type { useDrawingStore } from '../stores/drawing'
 import type { usePointerState } from './usePointerState'
-import { coalescedOf, selectionBBox, strokeAtPoint } from '../lib/select'
+import { coalescedOf, selectionBBox, strokeAtPoint, type NormRect } from '../lib/select'
 
 export interface SelectionGestureOptions {
   overlayCanvas: Ref<HTMLCanvasElement | null>
@@ -21,18 +21,50 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
   let selMoving = false
   let selLast: { x: number; y: number } | null = null
   let selHistOpen = false
+  // Köşe tutamacıyla ölçekleme: anchor = karşı köşe (sayfa-uzayı).
+  let selScaling = false
+  let scaleCorner: { x: number; y: number } | null = null
+  let scaleAnchor: { x: number; y: number } | null = null
+  let scaleHistOpen = false
 
   const isSelActive = () => selActive
 
   const cancelSelGesture = () => {
     selActive = false
     selMoving = false
+    selScaling = false
     selLast = null
     selAnchor = null
     selCurrent = null
     selPoly = null
     selHistOpen = false
+    scaleCorner = null
+    scaleAnchor = null
+    scaleHistOpen = false
+    store.endSelectionScale()
     ps.clearActive()
+  }
+
+  // Seçili içeriğin sayfa-uzayı birleşik kutusu (stroke + resim). Overlay çizimi,
+  // tutamaç isabet testi ve "içine tıklandı" kontrolü ortak kullanır.
+  const selectionBounds = (): NormRect | null => {
+    let b = selectionBBox(
+      store.activePage.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes),
+      store.selectedIds,
+    )
+    b = b ? { ...b } : null
+    for (const img of store.visibleImages()) {
+      if (!store.selectedIds.includes(img.id)) continue
+      if (b) {
+        b.x0 = Math.min(b.x0, img.x)
+        b.y0 = Math.min(b.y0, img.y)
+        b.x1 = Math.max(b.x1, img.x + img.w)
+        b.y1 = Math.max(b.y1, img.y + img.h)
+      } else {
+        b = { x0: img.x, y0: img.y, x1: img.x + img.w, y1: img.y + img.h }
+      }
+    }
+    return b
   }
 
   const drawSelectionOverlay = () => {
@@ -77,20 +109,7 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
       ctx.stroke()
     }
     if (hasSel) {
-      const bb = selectionBBox(
-        store.activePage.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes),
-        store.selectedIds,
-      )
-      const imageBoxes = store.visibleImages().filter((img) => store.selectedIds.includes(img.id))
-      const bounds = imageBoxes.reduce(
-        (r, img) => ({
-          x0: Math.min(r?.x0 ?? Infinity, img.x),
-          y0: Math.min(r?.y0 ?? Infinity, img.y),
-          x1: Math.max(r?.x1 ?? -Infinity, img.x + img.w),
-          y1: Math.max(r?.y1 ?? -Infinity, img.y + img.h),
-        }),
-        bb,
-      )
+      const bounds = selectionBounds()
       if (bounds) {
         const x0 = sx(bounds.x0)
         const y0 = sy(bounds.y0)
@@ -118,20 +137,7 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
   }
 
   const selInside = (p: { x: number; y: number }): boolean => {
-    const raw = selectionBBox(
-      store.activePage.layers.filter((layer) => layer.visible).flatMap((layer) => layer.strokes),
-      store.selectedIds,
-    )
-    let bb = raw ? { ...raw } : null
-    for (const img of store.visibleImages()) {
-      if (!store.selectedIds.includes(img.id)) continue
-      if (bb) {
-        bb.x0 = Math.min(bb.x0, img.x)
-        bb.y0 = Math.min(bb.y0, img.y)
-        bb.x1 = Math.max(bb.x1, img.x + img.w)
-        bb.y1 = Math.max(bb.y1, img.y + img.h)
-      } else return p.x >= img.x && p.x <= img.x + img.w && p.y >= img.y && p.y <= img.y + img.h
-    }
+    const bb = selectionBounds()
     if (!bb) return false
     return p.x >= bb.x0 && p.x <= bb.x1 && p.y >= bb.y0 && p.y <= bb.y1
   }
@@ -145,6 +151,35 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
     }
     ps.setActive(e.pointerId)
     const p = store.eventToPage(e)
+
+    // 0. Köşe tutamacına basıldı mı? Ölçekleme jestini başlat (anchor = karşı köşe).
+    if (store.selectionCount > 0 && overlayCanvas.value) {
+      const bounds = selectionBounds()
+      if (bounds) {
+        const t = store.getViewTransform()
+        const rect = overlayCanvas.value.getBoundingClientRect()
+        const px = e.clientX - rect.left
+        const py = e.clientY - rect.top
+        const handles = [
+          { x: bounds.x0, y: bounds.y0, ax: bounds.x1, ay: bounds.y1 },
+          { x: bounds.x1, y: bounds.y0, ax: bounds.x0, ay: bounds.y1 },
+          { x: bounds.x0, y: bounds.y1, ax: bounds.x1, ay: bounds.y0 },
+          { x: bounds.x1, y: bounds.y1, ax: bounds.x0, ay: bounds.y0 },
+        ]
+        for (const h of handles) {
+          if (Math.hypot(h.x * t.scale + t.ox - px, h.y * t.scale + t.oy - py) <= 12) {
+            if (store.beginSelectionScale()) {
+              selScaling = true
+              scaleCorner = { x: h.x, y: h.y }
+              scaleAnchor = { x: h.ax, y: h.ay }
+              selActive = true
+              drawSelectionOverlay()
+              return
+            }
+          }
+        }
+      }
+    }
 
     // 1. Zaten seçili bir öğenin sınırları içine tıklandıysa: anında taşımaya başla
     if (store.selectionCount > 0 && selInside(p)) {
@@ -190,7 +225,17 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
     if (e.buttons === 0 && e.pointerType === 'mouse') return
     for (const ev of coalescedOf(e)) {
       const p = store.eventToPage(ev)
-      if (selMoving && selLast) {
+      if (selScaling && scaleAnchor && scaleCorner) {
+        const dxc = scaleCorner.x - scaleAnchor.x
+        const dyc = scaleCorner.y - scaleAnchor.y
+        const fx = Math.max(0.02, Math.abs(dxc) > 1e-3 ? (p.x - scaleAnchor.x) / dxc : 1)
+        const fy = Math.max(0.02, Math.abs(dyc) > 1e-3 ? (p.y - scaleAnchor.y) / dyc : 1)
+        if (!scaleHistOpen) {
+          scaleHistOpen = true
+          store.pushHistory()
+        }
+        store.scaleSelection(fx, fy, scaleAnchor.x, scaleAnchor.y)
+      } else if (selMoving && selLast) {
         if (!selHistOpen) {
           selHistOpen = true
           store.pushHistory()
@@ -218,6 +263,18 @@ export function useSelectionGesture(opts: SelectionGestureOptions) {
     selActive = false
     ps.clearActive()
     selHistOpen = false
+    if (selScaling) {
+      selScaling = false
+      scaleCorner = null
+      scaleAnchor = null
+      const changed = scaleHistOpen
+      scaleHistOpen = false
+      store.endSelectionScale()
+      if (changed) store.scheduleSave()
+      drawSelectionOverlay()
+      updateHud(true)
+      return
+    }
     if (selMoving) {
       selMoving = false
       selLast = null
