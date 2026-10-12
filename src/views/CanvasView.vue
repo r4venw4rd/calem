@@ -863,6 +863,19 @@ const { isSelActive, cancelSelGesture, drawSelectionOverlay, selInside, selectDo
     updateHud: (force) => updateHud(force),
   })
 
+// Görünüm dönüşümü (zoom/pan) sonrası seçim overlay'i, store'un rAF-birleşik
+// repaint'inden SONRA çizilsin: senkron çizmek ertelenen clearOverlay ile
+// siliniyordu (zoom'da seçim kutusu kayboluyordu). Aynı rAF kuyruğu → base+overlay
+// aynı karede tazelenir.
+let selOverlayRaf = 0
+const scheduleSelectionOverlay = () => {
+  if (selOverlayRaf !== 0) return
+  selOverlayRaf = requestAnimationFrame(() => {
+    selOverlayRaf = 0
+    drawSelectionOverlay()
+  })
+}
+
 // --- Metin jesti (text aracı): tıkla-oluştur/düzenle, sürükle-taşı ---
 const {
   textOverlayRef,
@@ -1069,7 +1082,7 @@ const applyPinchStep = (step: PinchStep) => {
     driveScroll(step.dx, step.dy)
   }
   updateHud()
-  drawSelectionOverlay()
+  scheduleSelectionOverlay()
 }
 
 const draw = (e: PointerEvent) => {
@@ -1453,7 +1466,7 @@ const onWheel = (e: WheelEvent) => {
   } else {
     store.panBy(-e.deltaX, -e.deltaY)
   }
-  drawSelectionOverlay()
+  scheduleSelectionOverlay()
   updateHud(true)
 }
 
@@ -1495,7 +1508,7 @@ const zoomIn = () => {
   } else {
     store.zoomStep(1.25)
   }
-  drawSelectionOverlay()
+  scheduleSelectionOverlay()
   updateHud(true)
 }
 
@@ -1505,7 +1518,7 @@ const zoomOut = () => {
   } else {
     store.zoomStep(1 / 1.25)
   }
-  drawSelectionOverlay()
+  scheduleSelectionOverlay()
   updateHud(true)
 }
 
@@ -1518,7 +1531,7 @@ const resetZoom = () => {
     }
   }
   store.resetView()
-  drawSelectionOverlay()
+  scheduleSelectionOverlay()
   updateHud(true)
 }
 
@@ -1914,6 +1927,8 @@ onUnmounted(() => {
   canvasResizeRaf = 0
   if (zoomRaf !== 0) cancelAnimationFrame(zoomRaf)
   zoomRaf = 0
+  if (selOverlayRaf !== 0) cancelAnimationFrame(selOverlayRaf)
+  selOverlayRaf = 0
   ps.clearActive()
   cancelSelGesture()
   cancelTextGesture()
