@@ -682,6 +682,30 @@
       @present="togglePresent"
     />
 
+    <!-- PWA kurulum bandı: kurulu değilken + 14 gün erteleme dolmuşsa -->
+    <div
+      v-if="showPwaBanner && !presenting"
+      class="absolute bottom-20 left-1/2 z-30 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-2 rounded-xl border border-[var(--chrome-border-strong)] bg-[var(--float-bg)] px-3 py-2 text-xs shadow-xl backdrop-blur"
+      role="dialog"
+      aria-live="polite"
+    >
+      <img src="/icon-192.png" alt="" class="h-7 w-7 rounded-md select-none" draggable="false" />
+      <span class="text-[var(--chrome-title)] whitespace-nowrap font-medium">{{ t('pwaTitle') }}</span>
+      <span class="hidden min-[640px]:inline text-[var(--chrome-text)] whitespace-nowrap">{{ t('pwaDesc') }}</span>
+      <button
+        @click="installPwa"
+        class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
+      >
+        {{ t('pwaInstall') }}
+      </button>
+      <button
+        @click="dismissPwa"
+        class="px-2 py-1 rounded-lg hover:bg-[var(--chrome-bg-soft)] text-[var(--chrome-text)] transition"
+      >
+        {{ t('pwaLater') }}
+      </button>
+    </div>
+
     <!-- Uygulama-içi onay / ad-sor diyaloğu -->
     <AppDialog />
   </div>
@@ -702,6 +726,7 @@ import { useScrollMode } from '@/composables/useScrollMode'
 import { usePanGesture } from '@/composables/usePanGesture'
 import { useTextGesture } from '@/composables/useTextGesture'
 import { useImageGesture } from '@/composables/useImageGesture'
+import { usePwaInstall } from '@/composables/usePwaInstall'
 import AppDialog from '@/components/AppDialog.vue'
 import FileMenuPanel from '@/components/FileMenuPanel.vue'
 import ImageEditorOverlay from '@/components/ImageEditorOverlay.vue'
@@ -790,6 +815,8 @@ const {
 } = useDialogs()
 // l10n + araç etiketleri (tekil useLocale'ten; paneller de aynısını kullanır).
 const { t, tf, locTools } = useLocale()
+// PWA kurulu değilse kurulum bandı (tekil state; banner şablonda).
+const { showBanner: showPwaBanner, install: installPwa, dismiss: dismissPwa } = usePwaInstall()
 
 // Araç düğme metadatası: config/tools (TOOL_META).
 // Hepsi gizlenirse kilitlenmemek için tam listeye düşer.
