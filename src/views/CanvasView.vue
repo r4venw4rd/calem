@@ -689,10 +689,13 @@
     <!-- PWA kurulum bandı: kurulu değilken her açılışta tekrar çıkar.
          "Sonra" yalnızca bu oturumu kapatır; sayfa yenilenince geri gelir.
          Kurulabilir tarayıcıda "Kur" (prompt yoksa manuel yol); Firefox/Safari gibi
-         kurulumu desteklemeyen tarayıcılarda ise Chrome/Edge önerisi gösterilir. -->
+         kurulumu desteklemeyen tarayıcılarda ise Chrome/Edge önerisi gösterilir.
+         Konum: masaüstünde `bottom-20`; mobilde (<640px) alt araç çubuğu geldiği için
+         gezinme çubuğu (PageNavBar) yukarı kayar ve bant onu örterdi — bu yüzden
+         mobilde daha yukarı alınıp `bottom-28` ile temiz boşluk bırakılır. -->
     <div
       v-if="showPwaBanner && !presenting"
-      class="absolute bottom-20 left-1/2 z-30 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-2 rounded-xl border border-[var(--chrome-border-strong)] bg-[var(--float-bg)] px-3 py-2 text-xs shadow-xl backdrop-blur"
+      class="absolute bottom-20 max-sm:bottom-28 left-1/2 z-30 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-2 rounded-xl border border-[var(--chrome-border-strong)] bg-[var(--float-bg)] px-3 py-2 text-xs shadow-xl backdrop-blur"
       role="dialog"
       aria-live="polite"
     >
