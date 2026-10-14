@@ -2,7 +2,10 @@
 // - Navigasyonlar: network-first (güncel index.html), çevrimdışıyken cache'teki kabuk.
 // - /assets/* (hash'li, immutable) + ikonlar: cache-first, ilk ziyarette dolar.
 // - Aynı-origin GET dışındakilere dokunulmaz.
-const CACHE_VERSION = 'calem-v3'
+// Cache sürümü, kayıt URL'indeki ?v=<build> ile gelir → her build yeni cache açar
+// (elle sürüm bump'ına gerek yok). Damga yoksa (ör. düz erişim) 'dev'e düşer.
+const SW_VERSION = new URL(self.location.href).searchParams.get('v') || 'dev'
+const CACHE_VERSION = `calem-${SW_VERSION}`
 const APP_SHELL = [
   '/',
   '/index.html',

@@ -19,7 +19,9 @@ app.mount('#app')
 // PWA offline: sadece production'da register et, mount'u bloklama
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(SERVICE_WORKER_PATH).catch(() => {
+    // Build damgasını query'ye koy: her yeni build farklı SW URL'i → tarayıcı güncellemeyi
+    // otomatik alır (elle CACHE_VERSION bump'ına gerek kalmaz).
+    navigator.serviceWorker.register(`${SERVICE_WORKER_PATH}?v=${__CALEM_BUILD__}`).catch(() => {
       /* offline desteği opsiyonel */
     })
   })

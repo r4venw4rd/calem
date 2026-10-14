@@ -30,7 +30,8 @@ test('keeps autosaved work through a service worker update and offline restart',
 
   const swPath = resolve(process.cwd(), 'dist/service-worker.js')
   const originalScript = await readFile(swPath, 'utf8')
-  const updatedScript = originalScript.replace('calem-v3', 'calem-v4')
+  // Herhangi bir bayt değişikliği tarayıcıya "yeni SW" dedirtir; sürüm bump'ını böyle simüle et.
+  const updatedScript = `${originalScript}\n// e2e update marker\n`
   expect(updatedScript).not.toBe(originalScript)
   try {
     await writeFile(swPath, updatedScript)

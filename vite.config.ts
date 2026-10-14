@@ -9,6 +9,8 @@ import tailwindcssVite from '@tailwindcss/vite'
 const useDevTools = process.env.CALEM_DEVTOOLS !== '0'
 export default defineConfig({
   plugins: [vue(), ...(useDevTools ? [vueDevTools()] : []), tailwindcssVite()],
+  // PWA: her build benzersiz sürüm damgası taşır → SW cache'i otomatik tazelenir (elle bump yok).
+  define: { __CALEM_BUILD__: JSON.stringify(String(Date.now())) },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
