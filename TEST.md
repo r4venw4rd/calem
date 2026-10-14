@@ -6,7 +6,7 @@ Everything below is a manual/E2E checklist. Each row states the **expected resul
 
 ## 0. Setup
 
-- `npm install`, `npm run dev` → http://127.0.0.1:5174 (clean profile, empty IndexedDB).
+- `npm install`, `npm run dev` → http://127.0.0.1:5173 (clean profile, empty IndexedDB).
 - Reload the page before each section (fresh state); a single page unless stated otherwise.
 
 ## 1. Drawing
