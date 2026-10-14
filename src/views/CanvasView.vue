@@ -531,6 +531,10 @@
         @zoom-out="zoomOut"
         @reset-zoom="resetZoom"
       />
+      <!-- Diagnostik sayaçlar (perf ms + çizgi/aktif nokta): reaktivite dışı DOM'a yazılır
+           (updateHud). Görünmez tutulur — UI sade kalır, ama sayaçlar DOM'da kalır ki
+           e2e sözleşmeleri (repaint atlama, çizgi sayısı) okunabilsin. -->
+      <div v-if="!presenting" ref="hud" hidden></div>
       <div
         v-if="store.pages.length > 1 && !presenting && store.pageStripOpen"
         ref="pageStrip"
