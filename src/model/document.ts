@@ -87,6 +87,9 @@ export interface Page {
 // v1: kâğıt rengi + biçim; v2: + kâğıt deseni; v3: + silgi modu; v4: + toolbar; v5: + locale + el silginin sağında; v6: + silgi vurgunun solunda.
 export type UiTheme = 'koyu' | 'acik'
 export type EraserMode = 'standard' | 'stroke'
+// Onboarding'de seçilen cihaz profili: girdi varsayılanlarını (avuç reddi, dokunma,
+// parmak jestleri) belirler. Kalıcıdır; ayarlardan yeniden uygulanabilir.
+export type DeviceProfile = 'stylus' | 'touch' | 'mouse'
 export interface AppSettings {
   v: 1 | 2 | 3 | 4 | 5 | 6
   paper: string
@@ -110,6 +113,8 @@ export interface AppSettings {
   uiScale?: number
   pageStripOpen?: boolean
   autoShapeSnap?: boolean
+  // Onboarding'de seçilen cihaz profili (presence-check; v1-v6 kayıtlarında yok).
+  deviceProfile?: DeviceProfile
 }
 
 // .calem aktarım dosyası: vektör belge + ayar + gömülü bytes (base64).

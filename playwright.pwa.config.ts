@@ -15,6 +15,11 @@ export default defineConfig({
     channel: 'chrome',
     headless: true,
     viewport: { width: 1280, height: 900 },
+    // İlk açılış onboarding'i testlerde atlanır: dönen kullanıcı gibi davran.
+    storageState: {
+      cookies: [],
+      origins: [{ origin: `http://127.0.0.1:${PORT}`, localStorage: [{ name: 'calem-onboarded', value: '1' }] }],
+    },
   },
   webServer: {
     command: `npm run build && npm run preview -- --host 127.0.0.1 --port ${PORT} --strictPort`,

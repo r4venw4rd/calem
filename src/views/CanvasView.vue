@@ -521,12 +521,10 @@
       />
 
       <PageNavBar
-        :scroll-mode="scrollMode"
         @prev-page="prevPage"
         @next-page="nextPage"
         @add-page="addPage"
         @delete-page="askDeletePage"
-        @toggle-scroll="toggleScroll"
         @zoom-in="zoomIn"
         @zoom-out="zoomOut"
         @reset-zoom="resetZoom"
@@ -694,7 +692,7 @@
          gezinme çubuğu (PageNavBar) yukarı kayar ve bant onu örterdi — bu yüzden
          mobilde daha yukarı alınıp `bottom-28` ile temiz boşluk bırakılır. -->
     <div
-      v-if="showPwaBanner && !presenting"
+      v-if="showPwaBanner && !presenting && !showWelcome"
       class="absolute bottom-20 max-sm:bottom-28 left-1/2 z-30 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-2 rounded-xl border border-[var(--chrome-border-strong)] bg-[var(--float-bg)] px-3 py-2 text-xs shadow-xl backdrop-blur"
       role="dialog"
       aria-live="polite"
@@ -726,6 +724,9 @@
       </button>
     </div>
 
+    <!-- İlk açılış onboarding'i (welcome → cihaz profili → kurulum) -->
+    <WelcomeOverlay v-if="showWelcome" @done="onWelcomeDone" />
+
     <!-- Uygulama-içi onay / ad-sor diyaloğu -->
     <AppDialog />
   </div>
@@ -733,9 +734,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
-import { drawingPerf } from '@/model/document'
+import { drawingPerf, type DeviceProfile } from '@/model/document'
 import { useDrawingStore } from '@/stores/drawing'
 import { useDialogs } from '@/composables/useDialogs'
+import { useOnboarding } from '@/composables/useOnboarding'
 import { useLocale } from '@/composables/useLocale'
 import { usePointerState, type PinchStep } from '@/composables/usePointerState'
 import { useSelectionOps } from '@/composables/useSelectionOps'
@@ -757,6 +759,7 @@ import SettingsPanel from '@/components/SettingsPanel.vue'
 import StylePanel from '@/components/StylePanel.vue'
 import TextEditorOverlay from '@/components/TextEditorOverlay.vue'
 import ToolIcon from '@/components/ToolIcon.vue'
+import WelcomeOverlay from '@/components/WelcomeOverlay.vue'
 import { TOOL_META } from '@/config/tools'
 import { SLIDERS } from '@/config/ui'
 import { CALEM_ACCEPT, IMAGE_ACCEPT, XOPP_ACCEPT } from '@/config/files'
@@ -816,6 +819,16 @@ const filePanelRef = ref<InstanceType<typeof FileMenuPanel> | null>(null)
 const moreBtn = ref<HTMLElement | null>(null)
 const morePanel = ref<HTMLElement | null>(null)
 const store = useDrawingStore()
+// İlk açılış onboarding'i (tekil durum; overlay şablonda).
+const { showWelcome, maybeShow, complete: completeOnboarding } = useOnboarding()
+
+// Onboarding tamamlandı: seçilen profilin girdi varsayılanlarını uygula + kapat.
+const onWelcomeDone = (profile: DeviceProfile | null) => {
+  if (profile) store.applyDevicePreset(profile)
+  completeOnboarding()
+  updateHud(true)
+  nextTick(() => sizeCanvas())
+}
 
 // --- Uygulama-içi onay/soru diyaloğu (tekil durum useDialogs'ta;
 // şablon burada, soru soran paneller aynı tekil diyaloğu kullanır) ---
@@ -1835,7 +1848,7 @@ onMounted(() => {
   bindCanvases()
   // Önce ayarlar (kâğıt rengi), sonra ilk boya — yanlış renk flaşı yok.
   // Otomatik oturum yükleme YOK: kayıt varsa banner çıkar, seçim kullanıcıda.
-  store
+  const settingsReady = store
     .loadSettings()
     .then(() => {
       // Boyut hazır olana kadar bekleyen kurulum (mobil açılışta 0px yarışı).
@@ -1843,9 +1856,14 @@ onMounted(() => {
       return store.checkSavedSession()
     })
     .then(() => {
-      updateHud(true)
-      refreshThumbs()
+      // Onboarding ancak ayarlar hazır olunca açılır: kullanıcının seçtiği profil
+      // geç gelen kayıtla ezilmesin.
+      maybeShow()
     })
+  void settingsReady.then(() => {
+    updateHud(true)
+    refreshThumbs()
+  })
   updateHud(true)
 
   mobileMq = window.matchMedia('(max-width: 639px)')
@@ -1944,6 +1962,9 @@ onMounted(() => {
   drainLaunchSlot()
   offLaunch = onLaunchHandle(drainLaunchSlot)
   refreshThumbs()
+  // Kaydırma modu menüden kaldırıldı (devre dışı, üzerinde sonra çalışılacak).
+  // Gizli `?scroll=1` query param'ı ile açılır; e2e testleri bunu kullanır.
+  if (new URLSearchParams(window.location.search).get('scroll') === '1') void toggleScroll()
   stopPageWatch = watch(
     () => store.activePageIndex,
     () => {

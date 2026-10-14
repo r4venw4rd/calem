@@ -2,10 +2,8 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Kaydırmalı görünüm (Scroll Mode)', () => {
   test('hızlı sayfa ekleme + hemen yukarı: programatik kayış kullanıcı girdisini yenemez', async ({ page }) => {
-    await page.goto('/')
-
-    // Kaydırmalı modu aç
-    await page.locator('button[title*="scroll view"], button[title*="kaydırma"]').first().click()
+    // Kaydırmalı mod menüden kaldırıldı; gizli ?scroll=1 ile açılır.
+    await page.goto('/?scroll=1')
     await page.waitForTimeout(800)
 
     // Art arda sayfa ekle (4 sayfa, aktif en altta)
@@ -48,8 +46,8 @@ test.describe('Kaydırmalı görünüm (Scroll Mode)', () => {
   })
 
   test('scroll modda zoom içeriği kaybetmez (canvas ortası opak kalır)', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('button[title*="scroll view"], button[title*="kaydırma"]').first().click()
+    // Kaydırmalı mod menüden kaldırıldı; gizli ?scroll=1 ile açılır.
+    await page.goto('/?scroll=1')
     await page.waitForTimeout(800)
 
     // Canlı slotun base canvas'ında merkez piksel opaklığı (0 = içerik ekran dışına boyanmış)
@@ -86,8 +84,8 @@ test.describe('Kaydırmalı görünüm (Scroll Mode)', () => {
   })
 
   test('scroll modda el-sürükleme native scroll yapar, boya-pan yapmaz', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('button[title*="scroll view"], button[title*="kaydırma"]').first().click()
+    // Kaydırmalı mod menüden kaldırıldı; gizli ?scroll=1 ile açılır.
+    await page.goto('/?scroll=1')
     await page.waitForTimeout(800)
     await page.locator('button[title*="New page"], button[title*="Yeni sayfa"]').first().click()
     await page.waitForTimeout(1000)
@@ -125,8 +123,8 @@ test.describe('Kaydırmalı görünüm (Scroll Mode)', () => {
   })
 
   test('pasif blok üzerinde ctrl+tekerlek app zoom yapar (tarayıcı-zoom yok)', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('button[title*="scroll view"], button[title*="kaydırma"]').first().click()
+    // Kaydırmalı mod menüden kaldırıldı; gizli ?scroll=1 ile açılır.
+    await page.goto('/?scroll=1')
     await page.waitForTimeout(800)
     await page.locator('button[title*="New page"], button[title*="Yeni sayfa"]').first().click()
     await page.waitForTimeout(1000)
@@ -166,8 +164,8 @@ test.describe('Kaydırmalı görünüm (Scroll Mode)', () => {
   })
 
   test('sayfa-arası zoomda imleç altındaki nokta sabit kalır', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('button[title*="scroll view"], button[title*="kaydırma"]').first().click()
+    // Kaydırmalı mod menüden kaldırıldı; gizli ?scroll=1 ile açılır.
+    await page.goto('/?scroll=1')
     await page.waitForTimeout(800)
     await page.locator('button[title*="New page"], button[title*="Yeni sayfa"]').first().click()
     await page.waitForTimeout(1000)
@@ -207,8 +205,8 @@ test.describe('Kaydırmalı görünüm (Scroll Mode)', () => {
 
   test('dar ekranda zoom merkezli kalır ve sağ/sol yatay kaydırılabilir', async ({ page }) => {
     await page.setViewportSize({ width: 600, height: 900 })
-    await page.goto('/')
-    await page.locator('button[title*="scroll view"], button[title*="kaydırma"]').first().click()
+    // Kaydırmalı mod menüden kaldırıldı; gizli ?scroll=1 ile açılır.
+    await page.goto('/?scroll=1')
     await page.waitForTimeout(800)
 
     const anchor = { x: 300, y: 450 }

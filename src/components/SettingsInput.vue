@@ -1,5 +1,26 @@
 <template>
   <SettingsSection :title="t('secInput')">
+    <!-- Cihaz profili: girdi varsayılanlarını tek tıkla uygular (onboarding'deki seçim).
+         Tüm ayarlar görünür kalır; profil yalnızca ön tanımlı değerleri yazar. -->
+    <div class="mb-1 text-[var(--chrome-muted)]">{{ t('deviceProfile') }}</div>
+    <div class="flex gap-1 mb-1">
+      <button
+        v-for="p in DEVICE_PROFILE_IDS"
+        :key="p"
+        @click="store.applyDevicePreset(p)"
+        class="flex-1 px-1.5 py-1 rounded text-[11px] leading-tight transition"
+        :class="
+          store.deviceProfile === p
+            ? 'bg-indigo-600 text-white'
+            : 'bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)]'
+        "
+        :title="t(DEVICE_PROFILE_META[p].descKey)"
+      >
+        {{ t(DEVICE_PROFILE_META[p].labelKey) }}
+      </button>
+    </div>
+    <div class="text-[10px] leading-relaxed text-[var(--chrome-faint)]">{{ t('deviceProfileHint') }}</div>
+
     <div class="mt-3 pt-2 border-t border-[var(--chrome-border)]">
       <div class="mb-1 text-[var(--chrome-muted)]">
         {{ t('pressure') }} <span class="text-[var(--chrome-faint)]">{{ t('pressureOff') }}</span>
@@ -80,6 +101,7 @@
 import { useDrawingStore } from '@/stores/drawing'
 import { useLocale } from '@/composables/useLocale'
 import { SLIDERS } from '@/config/ui'
+import { DEVICE_PROFILE_IDS, DEVICE_PROFILE_META } from '@/config/device'
 import SettingsSection from '@/components/SettingsSection.vue'
 
 const store = useDrawingStore()

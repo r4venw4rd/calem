@@ -21,6 +21,16 @@
     </div>
 
     <div class="mt-3 pt-2 border-t border-[var(--chrome-border)]">
+      <button
+        @click="reopenWelcome"
+        class="w-full px-2 py-1 rounded bg-[var(--chrome-bg-soft)] hover:bg-[var(--chrome-bg-soft)] transition"
+        :title="t('welcomeDeviceHint')"
+      >
+        {{ t('replayWelcome') }}
+      </button>
+    </div>
+
+    <div class="mt-3 pt-2 border-t border-[var(--chrome-border)]">
       <div class="mb-1 text-[var(--chrome-muted)]">{{ t('shortcuts') }}</div>
       <div class="font-mono text-[10px] leading-relaxed text-[var(--chrome-faint)]">
         <div>{{ t('sc1') }}</div>
@@ -40,11 +50,13 @@
 <script setup lang="ts">
 import { useDrawingStore } from '@/stores/drawing'
 import { useLocale } from '@/composables/useLocale'
+import { useOnboarding } from '@/composables/useOnboarding'
 import { SETTINGS_ACCEPT, settingsBackupName } from '@/config/files'
 import SettingsSection from '@/components/SettingsSection.vue'
 
 const store = useDrawingStore()
 const { t } = useLocale()
+const { reopen: reopenWelcome } = useOnboarding()
 
 const emit = defineEmits<{ (e: 'error', message: string): void }>()
 

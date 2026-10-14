@@ -52,14 +52,6 @@
     >
       {{ t('delete') }}
     </button>
-    <button
-      @click="emit('toggle-scroll')"
-      class="px-2 py-0.5 rounded hover:bg-[var(--chrome-bg-soft)] font-mono"
-      :class="{ 'bg-[var(--chrome-bg-soft)] text-[var(--chrome-title)]': scrollMode }"
-      :title="t('scrollViewTitle')"
-    >
-      {{ t('scrollView') }}
-    </button>
     <span class="w-px h-4 bg-[var(--chrome-border)]"></span>
     <button
       @click="emit('zoom-out')"
@@ -89,16 +81,11 @@
 import { useDrawingStore } from '@/stores/drawing'
 import { useLocale } from '@/composables/useLocale'
 
-defineProps<{
-  scrollMode: boolean
-}>()
-
 const emit = defineEmits<{
   (e: 'prev-page'): void
   (e: 'next-page'): void
   (e: 'add-page'): void
   (e: 'delete-page'): void
-  (e: 'toggle-scroll'): void
   (e: 'zoom-in'): void
   (e: 'zoom-out'): void
   (e: 'reset-zoom'): void

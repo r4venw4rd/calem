@@ -101,6 +101,7 @@ import {
   ZOOM_MIN,
 } from '../config/engine'
 import { CUSTOM_SLOT_COUNT, DEFAULT_PALETTES, PALETTE_MAX_COLORS, PALETTE_MAX_COUNT } from '../config/palettes'
+import { DEVICE_PRESETS, isDeviceProfile } from '../config/device'
 import { DEFAULT_LOCALE, isLocale, tr as trFn, type Locale, type UIKey } from '../config/locale'
 
 import type {
@@ -108,6 +109,7 @@ import type {
   CalemFile,
   ColorPalette,
   DashStyle,
+  DeviceProfile,
   EraserMode,
   ImageItem,
   Layer,
@@ -342,6 +344,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       uiScale: uiScale.value,
       pageStripOpen: pageStripOpen.value,
       autoShapeSnap: autoShapeSnap.value,
+      deviceProfile: deviceProfile.value ?? undefined,
     }
     await saveStoredSettings(doc)
   }
@@ -370,6 +373,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       uiScale: uiScale.value,
       pageStripOpen: pageStripOpen.value,
       autoShapeSnap: autoShapeSnap.value,
+      deviceProfile: deviceProfile.value ?? undefined,
     }
     return JSON.stringify(doc)
   }
@@ -484,6 +488,10 @@ export const useDrawingStore = defineStore('drawing', () => {
       pageStripOpen.value = r.pageStripOpen
       applied = true
     }
+    if (isDeviceProfile(r.deviceProfile)) {
+      deviceProfile.value = r.deviceProfile
+      applied = true
+    }
     if (!applied) return false
     applyUiTheme()
     applyLocale()
@@ -590,6 +598,9 @@ export const useDrawingStore = defineStore('drawing', () => {
       if (typeof raw.autoShapeSnap === 'boolean') {
         autoShapeSnap.value = raw.autoShapeSnap
       }
+      if (isDeviceProfile(raw.deviceProfile)) {
+        deviceProfile.value = raw.deviceProfile
+      }
       applyUiTheme()
       applyLocale()
       applyUiScale()
@@ -636,6 +647,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     smoothing.value = Math.min(0.9, Math.max(0, Math.round(n * 100) / 100))
     void persistSettings()
   }
+  // Onboarding/ayarlarda seçilen cihaz profili. Kalıcıdır; girdi varsayılanlarını
+  // (avuç reddi, dokunmayla kaydırma, parmak jestleri, basınç) ön tanımlar.
+  const deviceProfile = ref<DeviceProfile | null>(null)
   // Açıkken touch ile çizim engellenir (stylus + mouse serbest) — Chromebook avuç reddi.
   const rejectTouch = ref(false)
   // Backing-store ölçeği — noktalar SAYFA uzayında saklanır, render DPR × view-fit ile ölçeklenir.
@@ -1781,13 +1795,13 @@ export const useDrawingStore = defineStore('drawing', () => {
   }
 
   // Çok-parmak tap jestleri (opsiyonel): iki parmak = geri al, üç parmak = ileri al.
-  // Varsayılan açık; kapatınca yanlışlıkla tetiklenen undo/redo'yu engeller.
-  const twoFingerTap = ref(true)
+  // Varsayılan KAPALI: yanlışlıkla tetiklenen undo/redo'yu engeller; isteyen ayarlardan açar.
+  const twoFingerTap = ref(false)
   const setTwoFingerTap = (v: boolean) => {
     twoFingerTap.value = v
     void persistSettings()
   }
-  const threeFingerTap = ref(true)
+  const threeFingerTap = ref(false)
   const setThreeFingerTap = (v: boolean) => {
     threeFingerTap.value = v
     void persistSettings()
@@ -1797,6 +1811,25 @@ export const useDrawingStore = defineStore('drawing', () => {
   const autoShapeSnap = ref(true)
   const setAutoShapeSnap = (v: boolean) => {
     autoShapeSnap.value = v
+    void persistSettings()
+  }
+
+  // Cihaz profili: onboarding ve ayarlardan çağrılır. Yalnızca GİRDİ ayarlarını
+  // (avuç reddi, dokunmayla kaydırma, parmak jestleri, basınç, şekil tanıma)
+  // ön tanımlı değerlerle ezer; kullanıcı sonrasında tek tek değiştirebilir.
+  const setDeviceProfile = (p: DeviceProfile) => {
+    deviceProfile.value = p
+    void persistSettings()
+  }
+  const applyDevicePreset = (p: DeviceProfile) => {
+    const preset = DEVICE_PRESETS[p]
+    rejectTouch.value = preset.rejectTouch
+    touchPan.value = preset.touchPan
+    twoFingerTap.value = preset.twoFingerTap
+    threeFingerTap.value = preset.threeFingerTap
+    autoShapeSnap.value = preset.autoShapeSnap
+    pressureSensitivity.value = preset.pressureSensitivity
+    deviceProfile.value = p
     void persistSettings()
   }
 
@@ -4208,6 +4241,9 @@ export const useDrawingStore = defineStore('drawing', () => {
     setThreeFingerTap,
     autoShapeSnap,
     setAutoShapeSnap,
+    deviceProfile,
+    setDeviceProfile,
+    applyDevicePreset,
     activeShapeSnap,
     smoothing,
     setSmoothing,

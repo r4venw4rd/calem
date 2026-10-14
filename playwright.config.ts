@@ -25,6 +25,11 @@ export default defineConfig({
     viewport: { width: 1280, height: 900 },
     // Piksel matematiği sade olsun: 1 CSS px = 1 canvas px.
     deviceScaleFactor: 1,
+    // İlk açılış onboarding'i testlerde atlanır: dönen kullanıcı gibi davran.
+    storageState: {
+      cookies: [],
+      origins: [{ origin: `http://127.0.0.1:${PORT}`, localStorage: [{ name: 'calem-onboarded', value: '1' }] }],
+    },
   },
   webServer: {
     command: `npm run dev:fast -- --host 127.0.0.1 --port ${PORT} --strictPort`,
