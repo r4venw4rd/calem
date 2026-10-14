@@ -259,6 +259,10 @@ const TR = {
   secPage: 'Sayfa',
   secInput: 'Kalem ve dokunma',
   secData: 'Yedek ve kısayollar',
+  pwaTitle: 'Uygulama olarak kur',
+  pwaDesc: 'Tam ekranda, çevrimdışı ve daha hızlı açılır.',
+  pwaInstall: 'Kur',
+  pwaLater: 'Sonra',
 } as const
 
 export type UIKey = keyof typeof TR
@@ -474,6 +478,10 @@ const EN: UIDict = {
   secPage: 'Page',
   secInput: 'Pen & touch',
   secData: 'Backup & shortcuts',
+  pwaTitle: 'Install as app',
+  pwaDesc: 'Fullscreen, offline, launches faster.',
+  pwaInstall: 'Install',
+  pwaLater: 'Later',
 }
 
 export const UI_STRINGS: Record<Locale, UIDict> = { tr: { ...TR }, en: EN }
