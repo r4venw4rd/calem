@@ -16,7 +16,7 @@ test.describe('İlk açılış onboarding', () => {
     // Adım 1: cihaz profili
     await dialog.getByRole('button', { name: 'Get started' }).click()
     await expect(dialog.getByText('How will you use Calem?')).toBeVisible()
-    await dialog.getByRole('radio', { name: /Stylus \+ touchscreen PC/ }).click()
+    await dialog.getByRole('radio', { name: /Tablet or Chromebook with a pen/ }).click()
 
     // Adım 2: kurulum teşviği
     await dialog.getByRole('button', { name: 'Next' }).click()
