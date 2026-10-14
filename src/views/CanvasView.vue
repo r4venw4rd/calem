@@ -682,7 +682,10 @@
       @present="togglePresent"
     />
 
-    <!-- PWA kurulum bandı: kurulu değilken + 14 gün erteleme dolmuşsa -->
+    <!-- PWA kurulum bandı: kurulu değilken her açılışta tekrar çıkar.
+         "Sonra" yalnızca bu oturumu kapatır; sayfa yenilenince geri gelir.
+         Kurulabilir tarayıcıda "Kur" (prompt yoksa manuel yol); Firefox/Safari gibi
+         kurulumu desteklemeyen tarayıcılarda ise Chrome/Edge önerisi gösterilir. -->
     <div
       v-if="showPwaBanner && !presenting"
       class="absolute bottom-20 left-1/2 z-30 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-2 rounded-xl border border-[var(--chrome-border-strong)] bg-[var(--float-bg)] px-3 py-2 text-xs shadow-xl backdrop-blur"
@@ -690,14 +693,24 @@
       aria-live="polite"
     >
       <img src="/icon-192.png" alt="" class="h-7 w-7 rounded-md select-none" draggable="false" />
-      <span class="text-[var(--chrome-title)] whitespace-nowrap font-medium">{{ t('pwaTitle') }}</span>
-      <span class="hidden min-[640px]:inline text-[var(--chrome-text)] whitespace-nowrap">{{ t('pwaDesc') }}</span>
-      <button
-        @click="installPwa"
-        class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
-      >
-        {{ t('pwaInstall') }}
-      </button>
+      <!-- Kurulabilir tarayıcı: kurulum teşviği; prompt henüz yoksa manuel yol -->
+      <template v-if="pwaInstallSupported">
+        <span class="text-[var(--chrome-title)] whitespace-nowrap font-medium">{{ t('pwaTitle') }}</span>
+        <span class="hidden min-[640px]:inline text-[var(--chrome-text)] whitespace-nowrap">{{ t('pwaDesc') }}</span>
+        <span v-if="!canPwaInstall" class="text-[var(--chrome-text)]">{{ t('pwaManual') }}</span>
+        <button
+          v-if="canPwaInstall"
+          @click="installPwa"
+          class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
+        >
+          {{ t('pwaInstall') }}
+        </button>
+      </template>
+      <!-- Kurulumu desteklemeyen tarayıcı (Firefox/Safari): Chrome/Edge önerisi -->
+      <div v-else class="flex min-w-0 flex-col">
+        <span class="text-[var(--chrome-title)] font-medium">{{ t('pwaRecTitle') }}</span>
+        <span class="text-[var(--chrome-text)]">{{ t('pwaRec') }}</span>
+      </div>
       <button
         @click="dismissPwa"
         class="px-2 py-1 rounded-lg hover:bg-[var(--chrome-bg-soft)] text-[var(--chrome-text)] transition"
@@ -816,7 +829,13 @@ const {
 // l10n + araç etiketleri (tekil useLocale'ten; paneller de aynısını kullanır).
 const { t, tf, locTools } = useLocale()
 // PWA kurulu değilse kurulum bandı (tekil state; banner şablonda).
-const { showBanner: showPwaBanner, install: installPwa, dismiss: dismissPwa } = usePwaInstall()
+const {
+  showBanner: showPwaBanner,
+  canInstall: canPwaInstall,
+  installSupported: pwaInstallSupported,
+  install: installPwa,
+  dismiss: dismissPwa,
+} = usePwaInstall()
 
 // Araç düğme metadatası: config/tools (TOOL_META).
 // Hepsi gizlenirse kilitlenmemek için tam listeye düşer.

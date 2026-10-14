@@ -263,6 +263,9 @@ const TR = {
   pwaDesc: 'Tam ekranda, çevrimdışı ve daha hızlı açılır.',
   pwaInstall: 'Kur',
   pwaLater: 'Sonra',
+  pwaManual: 'Menü ⋮ > Uygulamayı yükle',
+  pwaRecTitle: 'Daha akıcı deneyim',
+  pwaRec: "En iyi deneyim için Chrome veya Edge'de uygulama olarak çalıştır. Böyle kullanmaya da devam edebilirsin.",
 } as const
 
 export type UIKey = keyof typeof TR
@@ -482,6 +485,9 @@ const EN: UIDict = {
   pwaDesc: 'Fullscreen, offline, launches faster.',
   pwaInstall: 'Install',
   pwaLater: 'Later',
+  pwaManual: 'Menu ⋮ > Install app',
+  pwaRecTitle: 'Smoother as an app',
+  pwaRec: 'Run it as an app in Chrome or Edge for the best experience. You can keep using it like this too.',
 }
 
 export const UI_STRINGS: Record<Locale, UIDict> = { tr: { ...TR }, en: EN }
