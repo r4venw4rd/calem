@@ -16,7 +16,7 @@
       <div v-if="dialogMessage" class="text-[var(--chrome-muted)] mb-2">{{ dialogMessage }}</div>
       <input
         v-if="dialogKind === 'prompt'"
-        ref="dialogInput"
+        :ref="elRefs.dialogInput"
         v-model="dialogText"
         class="w-full mb-2 px-2 py-1 rounded bg-[var(--chrome-bg-soft)] border border-[var(--chrome-border-strong)] text-[var(--chrome-title)]"
         @keydown.enter.prevent="dialogOk"
@@ -37,8 +37,21 @@
 import { useDialogs } from '@/composables/useDialogs'
 import { useLocale } from '@/composables/useLocale'
 
-const { dialogOpen, dialogKind, dialogTitle, dialogMessage, dialogText, dialogPanel, dialogOk, dialogCancel, trapIn } =
-  useDialogs()
+const {
+  dialogOpen,
+  dialogKind,
+  dialogTitle,
+  dialogMessage,
+  dialogText,
+  dialogPanel,
+  dialogInput,
+  dialogOk,
+  dialogCancel,
+  trapIn,
+} = useDialogs()
+
+// vue-tsc string-ref'leri kullanım saymaz; düz nesne binding'i canlı tutar (:ref ile bağlanır).
+const elRefs = { dialogInput }
 
 const { t } = useLocale()
 

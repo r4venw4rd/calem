@@ -58,8 +58,8 @@
               @move-page-r="movePageR"
               @close-pdf="askClosePdf"
             />
-            <input ref="calemInput" type="file" :accept="CALEM_ACCEPT" class="hidden" @change="onCalemFile" />
-            <input ref="xoppInput" type="file" :accept="XOPP_ACCEPT" class="hidden" @change="onXoppFile" />
+            <input :ref="elRefs.calemInput" type="file" :accept="CALEM_ACCEPT" class="hidden" @change="onCalemFile" />
+            <input :ref="elRefs.xoppInput" type="file" :accept="XOPP_ACCEPT" class="hidden" @change="onXoppFile" />
           </div>
 
           <div ref="settingsBtn" class="relative shrink-0">
@@ -464,7 +464,7 @@
             ></div>
           </div>
         </div>
-        <div ref="activeSlot" class="absolute" style="display: none">
+        <div :ref="elRefs.activeSlot" class="absolute" style="display: none">
           <canvas ref="baseCanvas" class="absolute inset-0 w-full h-full block"></canvas>
           <canvas
             ref="overlayCanvas"
@@ -495,7 +495,7 @@
           ></canvas>
         </div>
       </div>
-      <input ref="imgInput" type="file" :accept="IMAGE_ACCEPT" class="hidden" @change="onImageFile" />
+      <input :ref="elRefs.imgInput" type="file" :accept="IMAGE_ACCEPT" class="hidden" @change="onImageFile" />
 
       <!-- Inline metin editörü ve altındaki kayan araç çubuğu -->
       <TextEditorOverlay
@@ -933,6 +933,7 @@ const {
 
 // --- Resim jesti (image aracı): boşa tıkla-ekle, resme tıkla-seç, sürükle-taşı ---
 const {
+  imgInput,
   hasImgDown,
   activeImageScreenRect,
   imageEditorContainerStyle,
@@ -1357,6 +1358,8 @@ const { onKeyDown, onKeyUp } = useCanvasShortcuts({
 const {
   actionError,
   showActionError,
+  calemInput,
+  xoppInput,
   exportPng,
   onPdfFile,
   exportPdfDoc,
@@ -1613,6 +1616,7 @@ const restoreSession = async () => {
 const {
   scrollMode,
   scrollBox,
+  activeSlot,
   setBlockRef,
   positionSlot,
   scrollActiveIntoView,
@@ -1638,6 +1642,10 @@ const {
   drawSelectionOverlay: () => drawSelectionOverlay(),
   updateHud: (force) => updateHud(force),
 })
+
+// vue-tsc, template'teki string-ref'leri (ref="x") kullanım saymaz; bu düz nesne
+// binding'leri canlı tutar ve :ref ile ref nesnesini doğrudan bağlar (davranış aynı).
+const elRefs = { imgInput, calemInput, xoppInput, activeSlot }
 
 const sizeCanvas = () => {
   if (!baseCanvas.value || !overlayCanvas.value) return
