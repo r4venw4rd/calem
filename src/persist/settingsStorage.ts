@@ -1,13 +1,9 @@
 import { ALL_TOOLS } from '../config/tools'
 import { CUSTOM_SLOT_COUNT, PALETTE_MAX_COLORS, PALETTE_MAX_COUNT } from '../config/palettes'
-import { PAGE_FORMATS, type PageFormat, type PageOrientation } from '../config/paper'
-import { cleanPaperBackground, type PaperBackground } from '../lib/paper'
-import { PAGE_MAX, PAGE_MIN } from '../config/engine'
-import { isLocale, type Locale } from '../config/locale'
 import { SLIDERS } from '../config/ui'
 import { storage } from '../lib/idb'
 import { newStrokeId } from './snapshot'
-import type { AppSettings, ColorPalette, EraserMode, Tool, ToolbarConfig, UiTheme } from '../model/document'
+import type { AppSettings, ColorPalette, Tool, ToolbarConfig } from '../model/document'
 
 export const SETTINGS_KEY = 'calem-app-settings'
 export type { AppSettings }

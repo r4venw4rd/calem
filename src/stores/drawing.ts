@@ -23,7 +23,6 @@ import {
   ruledLineYs,
   staffLineYs,
   type PaperBackground,
-  type PaperBackgroundType,
 } from '../lib/paper'
 import {
   coalescedOf,
@@ -42,7 +41,6 @@ import { indexedSubRunsInRect, invalidateStrokeSpatialIndex } from '../lib/strok
 import { capBackingScale } from '../lib/canvasLimits'
 import {
   newStrokeId,
-  newPageId,
   snapshotImage,
   snapshotLayer,
   snapshotStroke,
@@ -71,35 +69,20 @@ import {
   deleteImageFilesOf as removeImageFiles,
   isImageFile,
 } from '../lib/imagePipeline'
-import {
-  cleanImages,
-  cleanLayers,
-  cleanStrokes,
-  cleanTexts,
-  pageFromRaw as sanitizePageFromRaw,
-  pageSizeOf,
-  type RawPage,
-} from '../persist/pageSanitizer'
-import { dashFor, effectiveWidth, paintStroke, paintStrokeTail } from '../render/strokes'
+import { pageFromRaw as sanitizePageFromRaw, type RawPage } from '../persist/pageSanitizer'
+import { effectiveWidth, paintStroke, paintStrokeTail } from '../render/strokes'
 import { wrapTextToWidth } from '../lib/text'
-import { estimateLines, textBBoxOf } from '../lib/text'
+import { textBBoxOf } from '../lib/text'
 import { fitContain, needsPdfRerender, shapeEndpoints } from '../lib/geometry'
 import { recognizeShape } from '../lib/shapeRecognition'
 import { exportXoppBytes, importXoppBytes } from '../lib/xopp'
-import { renderPdfPages, renderPdfPageAt, type RenderedPdfPage } from '../lib/pdf'
-import { bufToB64, b64ToBuf, writeCalemToHandle, type CalemFileHandle } from '../lib/calemFile'
-import {
-  hexToRgb,
-  paintStrokeVector,
-  paintStrokesVector,
-  paintPatternVector,
-  paintTextsVector,
-  type PdfDoc,
-} from '../render/pdfExport'
+import { renderPdfPages, renderPdfPageAt } from '../lib/pdf'
+import { writeCalemToHandle, type CalemFileHandle } from '../lib/calemFile'
+import { hexToRgb, paintStrokesVector, paintPatternVector, paintTextsVector } from '../render/pdfExport'
 import { calemFileName, pdfFileName, xoppFileName } from '../config/files'
 import { ALL_TOOLS, DEFAULT_WIDTHS, WIDTH_MAX, WIDTH_MIN } from '../config/tools'
 import { A4, DEFAULT_PAPER_BACKGROUND, PAGE_FORMATS, PAPER_THEMES } from '../config/paper'
-import type { PageFormat, PageOrientation, PaperTheme } from '../config/paper'
+import type { PageFormat, PageOrientation } from '../config/paper'
 import {
   B64_CHUNK,
   DIRTY_PAD_SCREEN,
@@ -107,14 +90,10 @@ import {
   EXPORT_SCALE,
   FALLBACK_VIEWPORT,
   HISTORY_CAP,
-  IMAGE_MAX_DIM,
   JPEG_QUALITY,
   MIN_DIST_SCREEN,
   PAGE_MAX,
   PAGE_MIN,
-  PDF_MANY_THRESHOLD,
-  PDF_RENDER_BASE,
-  PDF_RENDER_MANY,
   PDF_RENDER_MAX,
   RERENDER_DELAY,
   SAVE_DELAY,
@@ -123,7 +102,6 @@ import {
 } from '../config/engine'
 import { CUSTOM_SLOT_COUNT, DEFAULT_PALETTES, PALETTE_MAX_COLORS, PALETTE_MAX_COUNT } from '../config/palettes'
 import { DEFAULT_LOCALE, isLocale, type Locale } from '../config/locale'
-import { SLIDERS } from '../config/ui'
 
 import type {
   AppSettings,
@@ -140,7 +118,6 @@ import type {
   Stroke,
   TextItem,
   Tool,
-  ToolbarConfig,
   UiTheme,
 } from '../model/document'
 import { drawingPerf, isShapeTool, TEXT_SIZE_MAX, TEXT_SIZE_MIN } from '../model/document'
@@ -167,7 +144,6 @@ export const useDrawingStore = defineStore('drawing', () => {
   const points = shallowRef<Point[]>([])
   // Hot-path state bilerek NON-reactive: her pointermove alt-event'inde yazılır, template okumaz.
   // Reactive olsaydı her yazım Pinia/devtools'a mutation olarak düşer → oturum uzadıkça kasar.
-  let lastPressure = 1
   let cachedRect: DOMRect | null = null
   // Yumuşatma durumu (SAYFA uzayı): startDrawing'de başa alınır.
   let smoothPt: { x: number; y: number } | null = null
@@ -2503,7 +2479,6 @@ export const useDrawingStore = defineStore('drawing', () => {
       }
     }
     const lastSeed = seedPts[seedPts.length - 1]!
-    lastPressure = lastSeed.pressure
     smoothPt = { x: lastSeed.x, y: lastSeed.y }
     points.value = seedPts
     bb = { x0: cx, y0: cy, x1: cx, y1: cy }
@@ -2579,7 +2554,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     }
     smoothPt = { x, y }
     const pressureVal = readPressure(e)
-    lastPressure = pressureVal
 
     const pts = points.value
     const last = pts[pts.length - 1]
@@ -2941,11 +2915,6 @@ export const useDrawingStore = defineStore('drawing', () => {
     paintTexts(ctx, page, dirty)
   }
 
-  // Export sayfa boyutu = sayfanın kendi boyutu (bg'li: orijinal punto, boş: A4).
-  // Ekran px'ini punto saymak 19 inçlik sayfalar üretirdi — jsPDF'e yön de şart
-  // (belirtilmezse landscape içeriğe portrait MediaBox açıyor).
-  const exportPageSize = (page: Page) => ({ w: page.size.w, h: page.size.h })
-
   // Export raster (varsayılan ölçek: config/engine EXPORT_SCALE).
   // Remap YOK — mürekkep zaten sayfa uzayında, arkaplan tam kanama.
   const exportPageToCanvas = (page: Page, scale = EXPORT_SCALE): HTMLCanvasElement | null => {
@@ -3139,7 +3108,6 @@ export const useDrawingStore = defineStore('drawing', () => {
   const pdfBusy = ref(false)
   const pdfId = ref<string | null>(null)
   const pdfName = ref('')
-  let workerReady = false
 
   // PDF kalite politikası: config/engine (PDF_RENDER_*, RERENDER_DELAY).
   // Açık PDF'in bytes'ları (yeniden render için bellekte; kapatınca silinir).

@@ -109,19 +109,6 @@ export class TextInputManager {
   }
 
   /**
-   * Metni ölç (width hesabı için)
-   */
-  private measureTextWidth(ctx: CanvasRenderingContext2D, text: string): number {
-    const lines = text.split('\n')
-    let maxWidth = 0
-    for (const line of lines) {
-      const metrics = ctx.measureText(line)
-      maxWidth = Math.max(maxWidth, metrics.width)
-    }
-    return maxWidth
-  }
-
-  /**
    * Canvas'a text box'ı çiz (sabit boyut + dashed border)
    */
   drawTextBox(ctx: CanvasRenderingContext2D, pageScale: number) {

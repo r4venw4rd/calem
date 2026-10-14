@@ -37,18 +37,8 @@
 import { useDialogs } from '@/composables/useDialogs'
 import { useLocale } from '@/composables/useLocale'
 
-const {
-  dialogOpen,
-  dialogKind,
-  dialogTitle,
-  dialogMessage,
-  dialogText,
-  dialogPanel,
-  dialogInput,
-  dialogOk,
-  dialogCancel,
-  trapIn,
-} = useDialogs()
+const { dialogOpen, dialogKind, dialogTitle, dialogMessage, dialogText, dialogPanel, dialogOk, dialogCancel, trapIn } =
+  useDialogs()
 
 const { t } = useLocale()
 

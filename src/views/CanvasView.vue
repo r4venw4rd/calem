@@ -752,9 +752,9 @@ import TextEditorOverlay from '@/components/TextEditorOverlay.vue'
 import ToolIcon from '@/components/ToolIcon.vue'
 import { TOOL_META } from '@/config/tools'
 import { SLIDERS } from '@/config/ui'
-import { CALEM_ACCEPT, IMAGE_ACCEPT, PDF_ACCEPT, XOPP_ACCEPT, pngFileName } from '@/config/files'
+import { CALEM_ACCEPT, IMAGE_ACCEPT, XOPP_ACCEPT } from '@/config/files'
 import { coalescedOf } from '@/lib/select'
-import { takeLaunchHandle, onLaunchHandle, type LaunchHandle } from '@/lib/launchFile'
+import { onLaunchHandle } from '@/lib/launchFile'
 
 const baseCanvas = ref<HTMLCanvasElement | null>(null)
 const overlayCanvas = ref<HTMLCanvasElement | null>(null)
@@ -812,20 +812,7 @@ const store = useDrawingStore()
 
 // --- Uygulama-içi onay/soru diyaloğu (tekil durum useDialogs'ta;
 // şablon burada, soru soran paneller aynı tekil diyaloğu kullanır) ---
-const {
-  dialogOpen,
-  dialogKind,
-  dialogTitle,
-  dialogMessage,
-  dialogText,
-  dialogPanel,
-  dialogInput,
-  askConfirm,
-  askPrompt,
-  dialogOk,
-  dialogCancel,
-  trapIn,
-} = useDialogs()
+const { dialogOpen, askConfirm, dialogCancel } = useDialogs()
 // l10n + araç etiketleri (tekil useLocale'ten; paneller de aynısını kullanır).
 const { t, tf, locTools } = useLocale()
 // PWA kurulu değilse kurulum bandı (tekil state; banner şablonda).
@@ -900,14 +887,13 @@ const ptrPos = (e: PointerEvent) => {
 }
 
 // --- Seçim jesti (select aracı): sayfa-uzayında marquee/lasso/taşıma ---
-const { isSelActive, cancelSelGesture, drawSelectionOverlay, selInside, selectDown, selectMove, selectUp } =
-  useSelectionGesture({
-    overlayCanvas,
-    store,
-    ps,
-    viewTransformTick,
-    updateHud: (force) => updateHud(force),
-  })
+const { isSelActive, cancelSelGesture, drawSelectionOverlay, selectDown, selectMove, selectUp } = useSelectionGesture({
+  overlayCanvas,
+  store,
+  ps,
+  viewTransformTick,
+  updateHud: (force) => updateHud(force),
+})
 
 // Görünüm dönüşümü (zoom/pan) sonrası seçim overlay'i, store'un rAF-birleşik
 // repaint'inden SONRA çizilsin: senkron çizmek ertelenen clearOverlay ile
@@ -927,7 +913,6 @@ const {
   textOverlayRef,
   hasTextDown,
   cancelTextGesture,
-  drawTextBoxOverlay,
   textDown,
   textMove,
   textUp,
@@ -948,7 +933,6 @@ const {
 
 // --- Resim jesti (image aracı): boşa tıkla-ekle, resme tıkla-seç, sürükle-taşı ---
 const {
-  imgInput,
   hasImgDown,
   activeImageScreenRect,
   imageEditorContainerStyle,
@@ -1373,14 +1357,11 @@ const { onKeyDown, onKeyUp } = useCanvasShortcuts({
 const {
   pdfError,
   showPdfError,
-  calemInput,
-  xoppInput,
   exportPng,
   onPdfFile,
   exportPdfDoc,
   quickSaveDoc,
   openCalemDoc,
-  openLaunchedFile,
   drainLaunchSlot,
   onCalemFile,
   openXoppDoc,
@@ -1632,12 +1613,9 @@ const restoreSession = async () => {
 const {
   scrollMode,
   scrollBox,
-  activeSlot,
-  blockEls,
   setBlockRef,
   positionSlot,
   scrollActiveIntoView,
-  activatePageInPlace,
   onScrollBox,
   onBlockDown,
   onBlockUp,

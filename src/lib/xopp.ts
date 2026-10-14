@@ -7,7 +7,6 @@ import { newLayerId, newPageId, newStrokeId, newTextId } from '../persist/snapsh
 
 /** Gzip sıkıştırma */
 export const compressGzip = async (data: string): Promise<Uint8Array> => {
-  const encoder = new TextEncoder()
   const stream = new Response(data).body!.pipeThrough(new CompressionStream('gzip'))
   const buffer = await new Response(stream).arrayBuffer()
   return new Uint8Array(buffer)

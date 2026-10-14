@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue'
+import type { Ref } from 'vue'
 import type { useDrawingStore } from '../stores/drawing'
 import type { usePointerState } from './usePointerState'
 import { coalescedOf, selectionBBox, strokeAtPoint, type NormRect } from '../lib/select'

@@ -6,6 +6,10 @@
     // Extra safety for array and object lookups, but may have false positives.
     "noUncheckedIndexedAccess": true,
 
+    // Dead-code guard: unused locals/imports fail the build instead of silently rotting.
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
     // Path mapping for cleaner imports.
     "paths": {
       "@/*": ["./src/*"]
