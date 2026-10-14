@@ -266,6 +266,13 @@ const TR = {
   pwaManual: 'Menü ⋮ > Uygulamayı yükle',
   pwaRecTitle: 'Daha akıcı deneyim',
   pwaRec: "En iyi deneyim için Chrome veya Edge'de uygulama olarak çalıştır. Böyle kullanmaya da devam edebilirsin.",
+  errImageAdd: 'Resim eklenemedi',
+  errPdfOpen: 'PDF açılamadı',
+  errPdfWrite: 'PDF yazılamadı',
+  errFileBuild: 'Dosya kurulamadı',
+  errFileWrite: 'Dosya yazılamadı',
+  errFileRead: 'Dosya okunamadı',
+  errFileOpen: 'Dosya açılamadı',
 } as const
 
 export type UIKey = keyof typeof TR
@@ -488,6 +495,13 @@ const EN: UIDict = {
   pwaManual: 'Menu ⋮ > Install app',
   pwaRecTitle: 'Smoother as an app',
   pwaRec: 'Run it as an app in Chrome or Edge for the best experience. You can keep using it like this too.',
+  errImageAdd: 'Image could not be added',
+  errPdfOpen: 'PDF could not be opened',
+  errPdfWrite: 'PDF could not be written',
+  errFileBuild: 'File could not be built',
+  errFileWrite: 'File could not be written',
+  errFileRead: 'File could not be read',
+  errFileOpen: 'File could not be opened',
 }
 
 export const UI_STRINGS: Record<Locale, UIDict> = { tr: { ...TR }, en: EN }

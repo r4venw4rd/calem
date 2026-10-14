@@ -9,11 +9,11 @@ export interface UseImageGestureOptions {
   overlayCanvas: Ref<HTMLCanvasElement | null>
   viewTransformTick: Ref<number>
   updateHud: (force?: boolean) => void
-  showPdfError: (err: string) => void
+  showActionError: (err: string) => void
 }
 
 export function useImageGesture(options: UseImageGestureOptions) {
-  const { store, ps, overlayCanvas, viewTransformTick, updateHud, showPdfError } = options
+  const { store, ps, overlayCanvas, viewTransformTick, updateHud, showActionError } = options
 
   const imgInput = ref<HTMLInputElement | null>(null)
   let imgPending: { x: number; y: number } | null = null
@@ -136,7 +136,7 @@ export function useImageGesture(options: UseImageGestureOptions) {
     imgPending = null
     if (!f || !at) return
     const res = await store.addImage(f, at.x, at.y)
-    if ('error' in res) showPdfError(res.error)
+    if ('error' in res) showActionError(res.error)
     updateHud(true)
   }
 

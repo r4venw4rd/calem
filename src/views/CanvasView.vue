@@ -110,7 +110,7 @@
           </div>
 
           <span v-if="store.pdfBusy" class="text-[10px] text-yellow-400/80 font-mono ml-1">{{ t('processing') }}</span>
-          <span v-if="pdfError" class="text-[10px] text-red-400 font-mono ml-1">{{ pdfError }}</span>
+          <span v-if="actionError" class="text-[10px] text-red-400 font-mono ml-1">{{ actionError }}</span>
         </div>
 
         <span v-if="!isMobile" class="w-px h-5 bg-[var(--chrome-border)] shrink-0"></span>
@@ -402,7 +402,7 @@
       ref="settingsPanelRef"
       @close="showSettings = false"
       @page-layout="onPageLayoutChange"
-      @error="showPdfError"
+      @error="showActionError"
     />
 
     <div ref="canvasHost" class="relative flex-1 bg-[var(--page-bg)] min-h-0">
@@ -949,7 +949,7 @@ const {
   overlayCanvas,
   viewTransformTick,
   updateHud: (force) => updateHud(force),
-  showPdfError: (err) => showPdfError(err),
+  showActionError: (err) => showActionError(err),
 })
 
 // --- El/Space kaydırma: ekran-px delta ile pan (her araçta Space ile) ---
@@ -1355,8 +1355,8 @@ const { onKeyDown, onKeyUp } = useCanvasShortcuts({
 })
 
 const {
-  pdfError,
-  showPdfError,
+  actionError,
+  showActionError,
   exportPng,
   onPdfFile,
   exportPdfDoc,
@@ -1605,7 +1605,7 @@ const movePageR = () => {
 const restoreSession = async () => {
   if (store.hasInk && !(await askConfirm(t('restoreReplace')))) return
   const ok = await store.loadPersisted()
-  if (!ok) showPdfError(t('loadFailed'))
+  if (!ok) showActionError(t('loadFailed'))
   updateHud(true)
   refreshThumbs()
 }

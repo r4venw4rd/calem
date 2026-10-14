@@ -16,14 +16,14 @@ export interface CanvasFileActionsOptions {
 export function useCanvasFileActions(opts: CanvasFileActionsOptions) {
   const { store, showFile, t, askConfirm, updateHud, refreshThumbs } = opts
 
-  const pdfError = ref('')
+  const actionError = ref('')
   const calemInput = ref<HTMLInputElement | null>(null)
   const xoppInput = ref<HTMLInputElement | null>(null)
 
-  const showPdfError = (msg: string) => {
-    pdfError.value = msg
+  const showActionError = (msg: string) => {
+    actionError.value = msg
     window.setTimeout(() => {
-      if (pdfError.value === msg) pdfError.value = ''
+      if (actionError.value === msg) actionError.value = ''
     }, 4000)
   }
 
@@ -46,7 +46,7 @@ export function useCanvasFileActions(opts: CanvasFileActionsOptions) {
     const hasInk = store.hasInk
     if (hasInk && !(await askConfirm(t('pdfReplace')))) return
     const res = await store.importPdf(f)
-    if ('error' in res) showPdfError(res.error)
+    if ('error' in res) showActionError(res.error)
     updateHud(true)
   }
 
@@ -54,13 +54,13 @@ export function useCanvasFileActions(opts: CanvasFileActionsOptions) {
     showFile.value = false
     const res = await store.exportPdf()
     // cancelled = kullanıcı picker'da vazgeçti → hata değil, sessizlik
-    if ('error' in res) showPdfError(res.error)
+    if ('error' in res) showActionError(res.error)
   }
 
   const quickSaveDoc = async () => {
     showFile.value = false
     const res = await store.quickSaveCalem()
-    if ('error' in res) showPdfError(res.error)
+    if ('error' in res) showActionError(res.error)
   }
 
   const openCalemDoc = async () => {
@@ -86,13 +86,13 @@ export function useCanvasFileActions(opts: CanvasFileActionsOptions) {
         if (!handle) return
         const res = await store.importCalem(await handle.getFile())
         if ('error' in res) {
-          showPdfError(res.error)
+          showActionError(res.error)
           return
         }
         await store.setCalemHandle(handle)
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return
-        showPdfError(`açılamadı (${err instanceof Error ? err.message : 'bilinmiyor'})`)
+        showActionError(err instanceof Error ? `${t('errFileOpen')} (${err.message})` : t('errFileOpen'))
         return
       }
     } else {
@@ -114,7 +114,7 @@ export function useCanvasFileActions(opts: CanvasFileActionsOptions) {
     }
     const res = await store.importCalem(file)
     if ('error' in res) {
-      showPdfError(res.error)
+      showActionError(res.error)
       return
     }
     await store.setCalemHandle(handle)
@@ -136,7 +136,7 @@ export function useCanvasFileActions(opts: CanvasFileActionsOptions) {
     if (!f) return
     if (store.hasInk && !(await askConfirm(t('calemReplace')))) return
     const res = await store.importCalem(f)
-    if ('error' in res) showPdfError(res.error)
+    if ('error' in res) showActionError(res.error)
     else await store.setCalemHandle(null)
     updateHud(true)
     refreshThumbs()
@@ -159,12 +159,12 @@ export function useCanvasFileActions(opts: CanvasFileActionsOptions) {
         })
         if (!handle) return
         const res = await store.importXopp(await handle.getFile())
-        if ('error' in res) showPdfError(res.error)
+        if ('error' in res) showActionError(res.error)
         updateHud(true)
         refreshThumbs()
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return
-        showPdfError(`açılamadı (${err instanceof Error ? err.message : 'bilinmiyor'})`)
+        showActionError(err instanceof Error ? `${t('errFileOpen')} (${err.message})` : t('errFileOpen'))
       }
     } else {
       xoppInput.value?.click()
@@ -179,7 +179,7 @@ export function useCanvasFileActions(opts: CanvasFileActionsOptions) {
     if (!f) return
     if (store.hasInk && !(await askConfirm(t('calemReplace')))) return
     const res = await store.importXopp(f)
-    if ('error' in res) showPdfError(res.error)
+    if ('error' in res) showActionError(res.error)
     updateHud(true)
     refreshThumbs()
   }
@@ -187,7 +187,7 @@ export function useCanvasFileActions(opts: CanvasFileActionsOptions) {
   const exportXoppDoc = async () => {
     showFile.value = false
     const res = await store.exportXopp()
-    if ('error' in res) showPdfError(res.error)
+    if ('error' in res) showActionError(res.error)
   }
 
   const askClosePdf = async () => {
@@ -199,8 +199,8 @@ export function useCanvasFileActions(opts: CanvasFileActionsOptions) {
   }
 
   return {
-    pdfError,
-    showPdfError,
+    actionError,
+    showActionError,
     calemInput,
     xoppInput,
     exportPng,

@@ -101,7 +101,7 @@ import {
   ZOOM_MIN,
 } from '../config/engine'
 import { CUSTOM_SLOT_COUNT, DEFAULT_PALETTES, PALETTE_MAX_COLORS, PALETTE_MAX_COUNT } from '../config/palettes'
-import { DEFAULT_LOCALE, isLocale, type Locale } from '../config/locale'
+import { DEFAULT_LOCALE, isLocale, tr as trFn, type Locale, type UIKey } from '../config/locale'
 
 import type {
   AppSettings,
@@ -276,6 +276,9 @@ export const useDrawingStore = defineStore('drawing', () => {
 
   // Arayüz dili (l10n). Varsayılan Türkçe; <html lang> üzerinden beslenir.
   const locale = ref<Locale>(DEFAULT_LOCALE)
+  // Kullanıcıya gösterilen hata metni: aktif dile çevrilir, teknik detay opsiyonel eklenir.
+  const tErr = (key: UIKey, e?: unknown): string =>
+    `${trFn(locale.value, key)}${e instanceof Error && e.message ? ` (${e.message})` : ''}`
   const applyLocale = () => {
     if (typeof document === 'undefined' || !document.documentElement) return
     document.documentElement.lang = locale.value
@@ -1453,7 +1456,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       return { id: item.id }
     } catch (e) {
       console.error('[calem] resim import hatası:', e)
-      return { error: `resim eklenemedi (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+      return { error: tErr('errImageAdd', e) }
     } finally {
       imgBusy.value = false
     }
@@ -3175,7 +3178,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       return { pages: rendered.length }
     } catch (e) {
       console.error('[calem] PDF import hatası:', e)
-      return { error: `PDF açılamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+      return { error: tErr('errPdfOpen', e) }
     } finally {
       pdfBusy.value = false
     }
@@ -3288,7 +3291,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       return { pages: built.pages }
     } catch (e) {
       console.error('[calem] PDF export hatası:', e)
-      return { error: `PDF yazılamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+      return { error: tErr('errPdfWrite', e) }
     } finally {
       pdfBusy.value = false
     }
@@ -3374,7 +3377,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       return { json: JSON.stringify(out) }
     } catch (e) {
       console.error('[calem] calem build hatası:', e)
-      return { error: `dosya kurulamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+      return { error: tErr('errFileBuild', e) }
     }
   }
 
@@ -3456,7 +3459,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       return { pages: pages.value.length }
     } catch (e) {
       console.error('[calem] hızlı kayıt hatası:', e)
-      return { error: `yazılamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+      return { error: tErr('errFileWrite', e) }
     } finally {
       pdfBusy.value = false
     }
@@ -3484,7 +3487,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       return { pages: pages.value.length }
     } catch (e) {
       console.error('[calem] calem export hatası:', e)
-      return { error: `yazılamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+      return { error: tErr('errFileWrite', e) }
     } finally {
       pdfBusy.value = false
     }
@@ -3506,7 +3509,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       return { pages: pages.value.length }
     } catch (e) {
       console.error('[calem] xopp export hatası:', e)
-      return { error: `yazılamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+      return { error: tErr('errFileWrite', e) }
     } finally {
       pdfBusy.value = false
     }
@@ -3544,7 +3547,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       return { pages: importedPages.length }
     } catch (e) {
       console.error('[calem] xopp import hatası:', e)
-      return { error: `okunamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+      return { error: tErr('errFileRead', e) }
     } finally {
       pdfBusy.value = false
     }
@@ -3673,7 +3676,7 @@ export const useDrawingStore = defineStore('drawing', () => {
       return { pages: clean.length }
     } catch (e) {
       console.error('[calem] calem import hatası:', e)
-      return { error: `açılamadı (${e instanceof Error ? e.message : 'bilinmiyor'})` }
+      return { error: tErr('errFileOpen', e) }
     } finally {
       pdfBusy.value = false
     }
