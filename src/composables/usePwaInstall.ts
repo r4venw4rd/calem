@@ -1,7 +1,8 @@
 // PWA kurulum teşviği: kurulu değilse her açılışta tek bant gösterir.
 // - Kurulu sayılır: display-mode standalone / window-controls-overlay, iOS standalone.
 // - Chrome/Edge/ChromeOS: beforeinstallprompt yakalanır, "Kur" doğrudan prompt açar.
-// - Prompt desteklenmeyen yerde (Firefox/iOS): bant, manuel yolu anlatır (menü > yükle).
+// - Prompt destekleyen ama şu an hazır olmayan tarayıcı: manuel yol anlatılır (menü > yükle).
+// - Kurulumu hiç desteklemeyen tarayıcı (Firefox/Safari): Chrome/Edge önerilir.
 // - "Sonra" sadece o açılışı kapatır; yenileyince tekrar çıkar. appinstalled olursa
 //   kurulu sayılır, bir daha gösterilmez.
 import { computed, onMounted, onUnmounted, ref } from 'vue'
@@ -9,6 +10,25 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
+
+declare global {
+  interface Window {
+    __calemBIP?: InstallPromptEvent
+  }
+}
+
+/** index.html'deki erken dinleyicinin yakaladığı olay (mount'tan önce ateşlenmiş olabilir). */
+const takeStashedPrompt = (): InstallPromptEvent | null => {
+  const ev = typeof window === 'undefined' ? null : (window.__calemBIP ?? null)
+  if (ev) window.__calemBIP = undefined
+  return ev
+}
+
+/** Kurulum prompt'unu destekleyen tarayıcı mı? Chromium tabanlılar `window.chrome` taşır; Firefox/Safari taşımaz. */
+export const isInstallSupported = (): boolean => {
+  if (typeof window === 'undefined') return false
+  return typeof (window as { chrome?: unknown }).chrome === 'object'
 }
 
 export const isStandaloneMode = (): boolean => {
@@ -20,10 +40,12 @@ export const isStandaloneMode = (): boolean => {
 
 export function usePwaInstall() {
   const installed = ref(isStandaloneMode())
-  const deferred = ref<InstallPromptEvent | null>(null)
+  const deferred = ref<InstallPromptEvent | null>(takeStashedPrompt())
   const hidden = ref(false)
 
   const canInstall = computed(() => deferred.value !== null)
+  // Kurulum desteği açılış boyunca sabit; template bunu "manuel yol mu, Chrome önerisi mi" için kullanır.
+  const installSupported = isInstallSupported()
   // Kurulu değilse + bu açılışta kapatılmadıysa göster.
   const showBanner = computed(() => !installed.value && !hidden.value)
 
@@ -41,6 +63,8 @@ export function usePwaInstall() {
   let modeMq: MediaQueryList | null = null
 
   onMounted(() => {
+    // Erken yakalanan olay mount sonrası da slota düşmüş olabilir.
+    if (!deferred.value) deferred.value = takeStashedPrompt()
     window.addEventListener('beforeinstallprompt', onBeforeInstall)
     window.addEventListener('appinstalled', onInstalled)
     modeMq = window.matchMedia('(display-mode: standalone)')
@@ -75,5 +99,5 @@ export function usePwaInstall() {
     }
   }
 
-  return { showBanner, canInstall, install, dismiss }
+  return { showBanner, canInstall, installSupported, install, dismiss }
 }
