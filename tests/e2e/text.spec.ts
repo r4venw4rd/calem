@@ -69,4 +69,32 @@ test.describe('Metin Aracı (Text Tool)', () => {
     await expect(textarea).toBeVisible()
     expect(await textarea.inputValue()).toBe('')
   })
+
+  test('Editör yazı boyutu 12px tabanına basılmaz — canvas ölçeğini birebir izler', async ({ page }) => {
+    await page.goto('/')
+
+    const textToolBtn = page.locator('button[title*="Metin"], button[title*="Text"]').first()
+    await textToolBtn.click()
+    const overlay = page.locator('canvas').nth(1)
+    const box = await overlay.boundingBox()
+    expect(box).not.toBeNull()
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2)
+
+    const textarea = page.locator('textarea')
+    await expect(textarea).toBeVisible()
+
+    // Boyutu slaytın tabanına çek (SLIDERS.textSize.min = 8): eski kod
+    // max(12, round(size×zoom)) yüzünden küçük yazıyı 12px'e şişirip commit'te
+    // küçültüyordu. Artık görünen = canvas'taki işlenmiş boyut.
+    const slider = page
+      .locator('input[type="range"][title*="Yazı boyu"], input[type="range"][title*="Font size"]')
+      .first()
+    await slider.evaluate((el, v) => {
+      el.value = String(v)
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, 8)
+
+    const px = await textarea.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))
+    expect(px).toBeLessThan(12)
+  })
 })
