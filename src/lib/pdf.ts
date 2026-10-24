@@ -22,7 +22,8 @@ export const ensurePdfWorker = async () => {
 
 export const renderPdfPages = async (bytes: Uint8Array): Promise<{ rendered: RenderedPdfPage[]; scale: number }> => {
   const pdfjs = await ensurePdfWorker()
-  const pdf = await pdfjs.getDocument({ data: bytes }).promise
+  // pdf.js transfers the given buffer to the worker (detaches it), so hand it a copy.
+  const pdf = await pdfjs.getDocument({ data: bytes.slice() }).promise
   try {
     const preferredScale = pdf.numPages > PDF_MANY_THRESHOLD ? PDF_RENDER_MANY : PDF_RENDER_BASE
     const pages = []
