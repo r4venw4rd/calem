@@ -183,7 +183,9 @@ export function useTextGesture(options: UseTextGestureOptions) {
     const vt = store.getViewTransform()
     const sx = item.x * vt.scale + vt.ox
     const sy = item.y * vt.scale + vt.oy
-    const fontPx = Math.max(12, Math.round(item.size * vt.scale))
+    // Kesin değer, yuvarlama/tabansız: canvas'taki işlenmiş metinle birebir aynı
+    // boyut (12px tabanı + Math.round küçük zoomlarda metni büyütüp küçültüyordu).
+    const fontPx = item.size * vt.scale
     const w = item.w ?? 0
     const boxW = Math.max(180, w > 0 ? w * vt.scale : 260)
     return {

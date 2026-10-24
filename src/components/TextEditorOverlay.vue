@@ -13,9 +13,12 @@
       @input="emit('input', $event)"
       @keydown.escape="emit('close')"
       :placeholder="t('textPlaceholder')"
-      class="w-full min-h-[44px] px-2.5 py-1.5 rounded-lg border-2 border-dashed border-indigo-500 bg-[var(--chrome-bg)]/90 text-[var(--chrome-title)] shadow-xl focus:outline-none focus:border-indigo-400 resize-y backdrop-blur-sm"
+      class="w-full min-h-[44px] p-0 rounded-lg border-2 border-dashed border-indigo-500 bg-[var(--chrome-bg)]/90 text-[var(--chrome-title)] shadow-xl focus:outline-none focus:border-indigo-400 resize-y backdrop-blur-sm"
       :style="{
         color: store.activeText()?.color ?? store.color,
+        // Canvas (paintTexts) 'sans-serif' ile çiziyor — editör aynı aile ve
+        // kesin aynı font-size kullanmalı, yoksa commit'te boyut zıplar.
+        fontFamily: 'sans-serif',
         fontSize: `${activeTextScreenRect.fontPx}px`,
         lineHeight: 1.25,
       }"
