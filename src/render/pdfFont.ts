@@ -29,10 +29,12 @@ const bytesToBase64 = (bytes: Uint8Array): string => {
 export const ensurePdfTextFont = async (doc: PdfDoc): Promise<void> => {
   try {
     if (!fontBytes) {
-      fontBytes = fetch(PDF_TEXT_FONT_URL).then((res) => {
-        if (!res.ok) throw new Error(`font HTTP ${res.status}`)
-        return res.arrayBuffer()
-      }).then((buf) => new Uint8Array(buf))
+      fontBytes = fetch(PDF_TEXT_FONT_URL)
+        .then((res) => {
+          if (!res.ok) throw new Error(`font HTTP ${res.status}`)
+          return res.arrayBuffer()
+        })
+        .then((buf) => new Uint8Array(buf))
     }
     const bytes = await fontBytes
     const b64 = bytesToBase64(bytes)
