@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import fontUrl from '../src/assets/NotoSans-Regular-subset.ttf'
 
 // ensurePdfTextFont: sahte doc + stub fetch ile kablolama testi.
-// - doğru dosya adı/base64 ile VFS'e eklenmeli (32K+ dizi parça yolunu da zorlar),
+// - font asset'inin import URL'i VFS anahtarı olmalı (bundle'dan gelen URL),
+// - doğru base64 ile eklenmeli (32K+ dizi parça yolunu da zorlar),
 // - font family aktifleştirilmeli,
 // - fetch hatası export'u öldürmemeli ve sonraki export yeniden denemeli.
 
@@ -30,7 +32,7 @@ describe('ensurePdfTextFont', () => {
     const { ensurePdfTextFont } = await import('../src/render/pdfFont')
     await ensurePdfTextFont(doc as never)
     const [file, b64] = doc.addFileToVFS.mock.calls[0]! as [string, string]
-    expect(file).toBe('fonts/NotoSans-Regular-subset.ttf')
+    expect(file).toBe(fontUrl)
     expect(b64).toBe(Buffer.from(bytes).toString('base64'))
     expect(doc.addFont).toHaveBeenCalledWith(file, 'NotoSans', 'normal')
     expect(doc.setFont).toHaveBeenCalledWith('NotoSans', 'normal')

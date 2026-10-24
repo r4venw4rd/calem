@@ -1,14 +1,16 @@
-// jsPDF'in standart 14 fontu WinAnsi kodludur: ı İ ğ Ğ ş Ş gibi Türkçe harfler
-// export'ta bozulur. public/fonts'taki subset TTF gömülerek (Identity-H kodlama)
-// hepsi kurtarılır. Font yalnız export sırasında, ağdan çekilerek yüklenir.
+// jsPDF'in standart 14 fontu WinAnsi kodludur: ı İ ğ ş gibi harfler export'ta
+// bozulur (ör. ı, kalın görünümlü '1' rakamına düşer — ç/ö/ü ise WinAnsi'de
+// vardır, kullanıcı yalnız ı'nın bozulduğunu görür). Noto Sans subset bu yüzden
+// BUILD'İN PARÇASI olarak gömülür: ayrı bir public fetch'i 404verse sessiz
+// WinAnsi fallback'i tetiklenirdi. Hash'li asset olduğu için URL her ortamda
+// doğrudur ve SW runtime-cache'ine düşer.
 
+import notoSansSubsetUrl from '../assets/NotoSans-Regular-subset.ttf'
 import type { PdfDoc } from './pdfExport'
 
-// Göreli yol: uygulama hangi alt dizinde sunulursa oradan çözülür.
-export const PDF_TEXT_FONT_URL = 'fonts/NotoSans-Regular-subset.ttf'
 const PDF_TEXT_FONT_FAMILY = 'NotoSans'
 
-// Export başına bir fetch; session boyunca bir kez indirilir (SW cache-first'e düşer).
+// Export başına bir fetch; session boyunca bir kez indirilir.
 let fontBytes: Promise<Uint8Array> | null = null
 
 const bytesToBase64 = (bytes: Uint8Array): string => {
@@ -29,7 +31,7 @@ const bytesToBase64 = (bytes: Uint8Array): string => {
 export const ensurePdfTextFont = async (doc: PdfDoc): Promise<void> => {
   try {
     if (!fontBytes) {
-      fontBytes = fetch(PDF_TEXT_FONT_URL)
+      fontBytes = fetch(notoSansSubsetUrl)
         .then((res) => {
           if (!res.ok) throw new Error(`font HTTP ${res.status}`)
           return res.arrayBuffer()
@@ -38,8 +40,8 @@ export const ensurePdfTextFont = async (doc: PdfDoc): Promise<void> => {
     }
     const bytes = await fontBytes
     const b64 = bytesToBase64(bytes)
-    doc.addFileToVFS(PDF_TEXT_FONT_URL, b64)
-    doc.addFont(PDF_TEXT_FONT_URL, PDF_TEXT_FONT_FAMILY, 'normal')
+    doc.addFileToVFS(notoSansSubsetUrl, b64)
+    doc.addFont(notoSansSubsetUrl, PDF_TEXT_FONT_FAMILY, 'normal')
     doc.setFont(PDF_TEXT_FONT_FAMILY, 'normal')
   } catch (e) {
     fontBytes = null // sonraki export tekrar denesin
