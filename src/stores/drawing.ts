@@ -79,6 +79,7 @@ import { exportXoppBytes, importXoppBytes } from '../lib/xopp'
 import { renderPdfPages, renderPdfPageAt } from '../lib/pdf'
 import { writeCalemToHandle, type CalemFileHandle } from '../lib/calemFile'
 import { hexToRgb, paintStrokesVector, paintPatternVector, paintTextsVector } from '../render/pdfExport'
+import { ensurePdfTextFont } from '../render/pdfFont'
 import { calemFileName, pdfFileName, xoppFileName } from '../config/files'
 import { ALL_TOOLS, DEFAULT_WIDTHS, WIDTH_MAX, WIDTH_MIN } from '../config/tools'
 import { A4, DEFAULT_PAPER_BACKGROUND, PAGE_FORMATS, PAPER_THEMES } from '../config/paper'
@@ -3249,6 +3250,8 @@ export const useDrawingStore = defineStore('drawing', () => {
       const orientation = w >= h ? 'landscape' : 'portrait'
       if (!doc) {
         doc = new jsPDF({ unit: 'pt', format: [w, h], orientation, compress: true })
+        // Türkçe glifler için Unicode font gömülür (yoksa WinAnsi'ye sessiz düşülür).
+        await ensurePdfTextFont(doc)
       } else {
         doc.addPage([w, h], orientation)
       }
